@@ -1,0 +1,17 @@
+# ADR 0001: V1 Scope Guardrails
+
+## Status
+
+Accepted
+
+## Context
+
+The rebuild plan defines SEAM V2 as portfolio-first, evidence-driven, and intentionally narrower than the previous implementation. The first stable version must prioritize boot reliability, transparent source evidence, and a coherent demo path.
+
+## Decision
+
+V1 will exclude authentication, AI, numeric risk scoring, TimescaleDB, and background scheduling. Runtime services are limited to frontend, backend, and PostgreSQL/PostGIS until the core data contracts and ingestion surfaces are stable.
+
+## Consequences
+
+This keeps the initial rebuild understandable and testable. Features that need scheduled work, AI explanations, or commercial-grade account boundaries must wait until the evidence layer and core UI are working.

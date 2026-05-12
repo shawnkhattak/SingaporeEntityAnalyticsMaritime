@@ -1,0 +1,59 @@
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db import get_session
+from app.schemas.entities import EntityRead, EntityRelationshipRead
+from app.schemas.risk import RiskFlagRead
+from app.schemas.vessels import VesselSummary
+from app.services.entities import EntityService
+from app.services.risk import RiskService
+
+router = APIRouter(prefix="/api/entities", tags=["entities"])
+
+
+@router.get("/search", response_model=list[EntityRead])
+async def search_entities(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    q: Annotated[str, Query(min_length=1)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> list[EntityRead]:
+    return await EntityService(session).search(query=q, limit=limit)
+
+
+@router.get("/{entity_id}", response_model=EntityRead)
+async def get_entity(session: Annotated[AsyncSession, Depends(get_session)], entity_id: int) -> EntityRead:
+    entity = await EntityService(session).get(entity_id)
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    return entity
+
+
+@router.get("/{entity_id}/vessels", response_model=list[VesselSummary])
+async def get_entity_vessels(
+    session: Annotated[AsyncSession, Depends(get_session)], entity_id: int
+) -> list[VesselSummary]:
+    vessels = await EntityService(session).vessels(entity_id)
+    if vessels is None:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    return vessels
+
+
+@router.get("/{entity_id}/relationships", response_model=list[EntityRelationshipRead])
+async def get_entity_relationships(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    entity_id: int,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> list[EntityRelationshipRead]:
+    relationships = await EntityService(session).relationships(entity_id, limit=limit)
+    if relationships is None:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    return relationships
+
+
+@router.get("/{entity_id}/risk-flags", response_model=list[RiskFlagRead])
+async def get_entity_risk_flags(
+    session: Annotated[AsyncSession, Depends(get_session)], entity_id: int
+) -> list[RiskFlagRead]:
+    return await RiskService(session).for_entity(entity_id)
