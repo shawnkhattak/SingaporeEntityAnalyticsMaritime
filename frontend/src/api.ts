@@ -1,4 +1,32 @@
-import type { DevState, DevVesselBrowseRow, Entity, EntityRelationship, GraphRead, IngestionJob, RiskFlag, SchemaGraph, VesselDetail, VesselEvent, VesselMapFeature, VesselObservation, VesselSearchResult, VesselSummary } from "./types";
+import type {
+  DevState,
+  DevVesselBrowseRow,
+  Entity,
+  EntityRelationship,
+  GraphRead,
+  IngestionJob,
+  RiskFlag,
+  SchemaGraph,
+  VesselDetail,
+  VesselEvent,
+  VesselMapFeature,
+  VesselObservation,
+  VesselSearchResult,
+  VesselSummary,
+} from "./types";
+
+export type EvidenceDetail = {
+  id: number;
+  source: string;
+  observation_type: string;
+  observed_at: string | null;
+  fetched_at: string;
+  source_record_id: string | null;
+  payload_hash: string;
+  raw_payload: Record<string, unknown>;
+};
+
+export type ReferenceItem = { code: string; label: string };
 
 export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -158,4 +186,42 @@ export function getDevTableCounts() {
 
 export function getRecentObservations() {
   return getJson<VesselObservation[]>("/api/dev/observations?limit=20");
+}
+
+// ===== New helpers (design/wiring.md §7.2) =====
+
+export function getHealth() {
+  return getJson<{ status: string; database: boolean }>("/api/health");
+}
+
+export function getPortActivity(kind: "due-arrive" | "due-depart", limit = 100) {
+  return getJson<VesselEvent[]>(`/api/ports/activity?kind=${kind}&limit=${limit}`);
+}
+
+export function getReferenceDomain(domain: string) {
+  return getJson<ReferenceItem[]>(`/api/reference/${domain}`);
+}
+
+export function getReferenceSummary() {
+  return getJson<Record<string, number>>("/api/dev/reference/summary");
+}
+
+export function getEvidence(id: number) {
+  return getJson<EvidenceDetail>(`/api/evidence/${id}`);
+}
+
+export async function runSanctionsCsv(csv: string): Promise<Record<string, unknown>> {
+  const response = await fetch(`${apiBaseUrl}/api/dev/ingestion/sanctions-csv`, {
+    method: "POST",
+    headers: { "Content-Type": "text/csv" },
+    body: csv,
+  });
+  if (!response.ok) {
+    throw new Error(await errorMessage(response, "/api/dev/ingestion/sanctions-csv"));
+  }
+  return (await response.json()) as Record<string, unknown>;
+}
+
+export function runSanctionsCsvUrl() {
+  return postJson<Record<string, unknown>>("/api/dev/ingestion/sanctions-csv-url");
 }

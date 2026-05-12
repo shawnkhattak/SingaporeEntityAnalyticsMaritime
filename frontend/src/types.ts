@@ -153,3 +153,92 @@ export type SchemaGraph = {
   nodes: { id: string; label: string; domain: string; columns: string[] }[];
   edges: { source: string; target: string; label: string }[];
 };
+
+// ===== UI types (added per design/wiring.md §6) =====
+
+export type RiskSeverity = "critical" | "high" | "medium" | "low" | "none";
+export type HealthStatus = "ok" | "stale" | "fail";
+export type JobStatusUi = "queued" | "running" | "success" | "failure";
+export type TimeWindow = "live" | "1h" | "6h" | "24h" | "7d";
+
+export type MapFilters = {
+  riskSeverities: Set<RiskSeverity>;
+  vesselTypes: Set<string>;
+  flagStates: Set<string>;
+  hasSanctions: boolean;
+  hasOpenRiskFlag: boolean;
+  portActivityKind: null | "due-arrive" | "due-depart";
+  timeWindow: TimeWindow;
+  enabledGeoLayers: Set<string>;
+};
+
+export const DEFAULT_FILTERS: MapFilters = {
+  riskSeverities: new Set<RiskSeverity>(),
+  vesselTypes: new Set<string>(),
+  flagStates: new Set<string>(),
+  hasSanctions: false,
+  hasOpenRiskFlag: false,
+  portActivityKind: null,
+  timeWindow: "live",
+  enabledGeoLayers: new Set<string>(["ports_p", "coastline_l"]),
+};
+
+export type ToastVariant = "success" | "info" | "warning" | "error";
+export type Toast = {
+  id: string;
+  variant: ToastVariant;
+  title: string;
+  body?: string;
+  tag?: string;
+  ttl?: number;
+};
+export const TOAST_TTL: Record<ToastVariant, number | null> = {
+  success: 4000,
+  info: 4000,
+  warning: 6000,
+  error: null,
+};
+
+export type SelectedSubject =
+  | { kind: "vessel"; id: number }
+  | { kind: "entity"; id: number }
+  | { kind: "port"; code: string }
+  | { kind: "evidence"; id: number }
+  | null;
+
+export type RouteState =
+  | { name: "map" }
+  | { name: "vessels-list" }
+  | { name: "vessel-detail"; id: number }
+  | { name: "entities-list" }
+  | { name: "entity-detail"; id: number }
+  | { name: "ports" }
+  | { name: "risk" }
+  | { name: "news" }
+  | { name: "sanctions" }
+  | { name: "evidence"; id: number }
+  | { name: "graph"; subject?: { type: "vessel" | "entity"; id: number } }
+  | { name: "schema" }
+  | { name: "ops" }
+  | { name: "roadmap" };
+
+export function isFullCanvas(route: RouteState): boolean {
+  return route.name === "graph" || route.name === "schema" || route.name === "ops" || route.name === "roadmap";
+}
+
+export function isInspectorRoute(route: RouteState): boolean {
+  switch (route.name) {
+    case "vessels-list":
+    case "vessel-detail":
+    case "entities-list":
+    case "entity-detail":
+    case "ports":
+    case "risk":
+    case "news":
+    case "sanctions":
+    case "evidence":
+      return true;
+    default:
+      return false;
+  }
+}
