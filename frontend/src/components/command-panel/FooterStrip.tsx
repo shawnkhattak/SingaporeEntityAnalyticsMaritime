@@ -12,7 +12,7 @@ export function FooterStrip() {
     <button
       type="button"
       className="row"
-      onClick={() => navigateTo("/ops")}
+      onClick={() => navigateTo("/operations")}
       style={{
         width: "100%",
         padding: "10px 12px",

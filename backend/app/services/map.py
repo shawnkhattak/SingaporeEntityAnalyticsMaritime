@@ -1,8 +1,12 @@
-from sqlalchemy import desc, select
+from sqlalchemy import desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.maritime import Vessel, VesselPositionLatest
 from app.schemas.map import VesselMapFeature
+
+# Vessels matching these IMOs are placeholders from upstream feeds and
+# must never surface in the UI.
+INVALID_IMO_VALUES = ("0", "00", "000", "0000")
 
 
 class MapService:
@@ -13,6 +17,7 @@ class MapService:
         rows = await self.session.execute(
             select(Vessel, VesselPositionLatest)
             .join(VesselPositionLatest, VesselPositionLatest.vessel_id == Vessel.id)
+            .where(or_(Vessel.imo.is_(None), Vessel.imo.notin_(INVALID_IMO_VALUES)))
             .order_by(desc(VesselPositionLatest.position_timestamp))
             .limit(limit)
         )

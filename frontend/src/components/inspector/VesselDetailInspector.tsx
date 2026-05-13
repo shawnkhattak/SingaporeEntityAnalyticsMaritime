@@ -7,10 +7,12 @@ import { recordRecentVessel, useApp, useJobRunner, useSelection } from "../../st
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { ErrorState } from "../primitives/ErrorState";
-import { RiskPill } from "../primitives/Pill";
 import { Skeleton } from "../primitives/Skeleton";
 import type { GraphRead, RiskFlag, VesselDetail, VesselEvent, VesselObservation } from "../../types";
-import { formatDate } from "../../format";
+import { formatDate, formatRelative } from "../../format";
+import { countryName, flagEmoji, vesselTypeLabel } from "../../labels";
+import { EvidenceLink } from "../primitives/EvidenceLink";
+import { RiskCard } from "./RiskCard";
 import { InspectorShell } from "./InspectorShell";
 
 type Loaded = {
@@ -158,7 +160,24 @@ export function VesselDetailInspector({ id }: { id: number }) {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Metric label="Latest position" value={latest ? `${latest.latitude.toFixed(3)}, ${latest.longitude.toFixed(3)}` : "—"} sub={latest ? formatDate(latest.position_timestamp) : "No position yet"} icon={<Ship size={14} />} />
-            <Metric label="Identity" value={v.flag_country_code ?? "No flag"} sub={`Type ${v.vessel_type_code ?? "—"}`} icon={<Database size={14} />} />
+            <Metric
+              label="Identity"
+              value={
+                v.flag_country_code ? (
+                  <span
+                    title={countryName(v.flag_country_code) || v.flag_country_code}
+                    aria-label={countryName(v.flag_country_code) || v.flag_country_code}
+                    style={{ cursor: "help" }}
+                  >
+                    {flagEmoji(v.flag_country_code) || v.flag_country_code}
+                  </span>
+                ) : (
+                  "No flag"
+                )
+              }
+              sub={`Type ${vesselTypeLabel(v.vessel_type_code)}`}
+              icon={<Database size={14} />}
+            />
             <Metric label="Evidence" value={data.detail.evidence_ids.length} sub="linked observations" icon={<FileText size={14} />} />
             <Metric label="Open risk" value={data.risk.filter((f) => f.status !== "resolved").length} sub="active flags" icon={<RefreshCw size={14} />} />
           </div>
@@ -167,7 +186,26 @@ export function VesselDetailInspector({ id }: { id: number }) {
               <div className="t-caption" style={{ paddingBottom: 6 }}>Top risk flags</div>
               <div className="col" style={{ gap: 4 }}>
                 {data.risk.slice(0, 3).map((flag) => (
-                  <RiskRow key={flag.id} flag={flag} />
+                  <RiskCard key={flag.id} flag={flag} subject={v.name} vesselId={id} onOpenSubject={() => undefined} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          <SourceConfidence observations={data.observations} events={data.events} risk={data.risk} />
+
+          {data.events.length > 0 && (
+            <div>
+              <div className="t-caption" style={{ paddingBottom: 6 }}>Recent movement</div>
+              <div className="col" style={{ gap: 4 }}>
+                {data.events.slice(0, 4).map((e) => (
+                  <div key={e.id} className="card" style={{ padding: "8px 10px" }}>
+                    <div className="row" style={{ gap: 6 }}>
+                      <span className="pill info" style={{ fontSize: 10 }}>{e.event_type}</span>
+                      <span style={{ flex: 1, fontSize: 12 }}>{e.port_name ?? e.port_code ?? "Unknown port"}</span>
+                      <span className="t-faded" style={{ fontSize: 11 }}>{formatRelative(e.event_time ?? e.created_at)}</span>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -187,9 +225,7 @@ export function VesselDetailInspector({ id }: { id: number }) {
                   <span style={{ flex: 1 }}>{e.port_name ?? e.port_code ?? "Unknown port"}</span>
                   <span className="t-faded" style={{ fontSize: 11 }}>{formatDate(e.event_time ?? e.created_at)}</span>
                 </div>
-                {e.evidence_id != null && (
-                  <a href={`/evidence/${e.evidence_id}`} className="mono" style={{ fontSize: 11 }}>Evidence #{e.evidence_id}</a>
-                )}
+                <EvidenceLink id={e.evidence_id} variant="chip" />
               </div>
             ))
           )}
@@ -219,9 +255,9 @@ export function VesselDetailInspector({ id }: { id: number }) {
       {tab === 3 && (
         <div className="col" style={{ gap: 6 }}>
           {data.risk.length === 0 ? (
-            <EmptyState title="No risk flags" body="This vessel currently has no risk signals." />
+            <EmptyState compact title="No risk flags" body="This vessel currently has no risk signals." />
           ) : (
-            data.risk.map((flag) => <RiskRow key={flag.id} flag={flag} />)
+            data.risk.map((flag) => <RiskCard key={flag.id} flag={flag} subject={v.name} vesselId={id} onOpenSubject={() => undefined} />)
           )}
         </div>
       )}
@@ -241,19 +277,42 @@ function Metric({ label, value, sub, icon }: { label: string; value: React.React
   );
 }
 
-function RiskRow({ flag }: { flag: RiskFlag }) {
-  const tone = flag.severity === "critical" ? "stripe-crit" : flag.severity === "high" ? "stripe-high" : flag.severity === "medium" ? "stripe-med" : flag.severity === "low" ? "stripe-low" : "";
+function SourceConfidence({ observations, events, risk }: { observations: VesselObservation[]; events: VesselEvent[]; risk: RiskFlag[] }) {
+  // Roll up distinct sources per data dimension. Empty cells render a
+  // subtle "—" so the matrix still communicates "we have nothing on
+  // this dimension yet".
+  const bySource = useMemo(() => {
+    const sources = new Set<string>();
+    observations.forEach((o) => sources.add(o.source));
+    return Array.from(sources);
+  }, [observations]);
+  const positionSources = useMemo(
+    () => new Set(observations.filter((o) => o.observation_type === "positions" || o.observation_type === "position").map((o) => o.source)).size,
+    [observations],
+  );
+  const movementsCount = events.length;
+  const riskCount = risk.length;
+
   return (
-    <div className={`card ${tone}`.trim()} style={{ padding: "10px 12px 10px 14px" }}>
-      <div className="row">
-        <RiskPill severity={flag.severity as never} />
-        <strong style={{ flex: 1, marginLeft: 6 }}>{flag.flag_type}</strong>
-        <span className="t-faded" style={{ fontSize: 11 }}>{formatDate(flag.created_at)}</span>
+    <div>
+      <div className="t-caption" style={{ paddingBottom: 6 }}>Source confidence</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+        <ConfidenceCell label="Identity" value={bySource.length || "—"} hint={bySource.join(", ") || "no sources"} />
+        <ConfidenceCell label="Position" value={positionSources || "—"} hint={`${positionSources} reporting sources`} />
+        <ConfidenceCell label="Movements" value={movementsCount || "—"} hint={`${movementsCount} port events`} />
+        <ConfidenceCell label="Risk" value={riskCount || "—"} hint={`${riskCount} flags`} />
       </div>
-      <div className="t-sm" style={{ marginTop: 4 }}>{flag.summary}</div>
-      {flag.evidence_id != null && (
-        <a href={`/evidence/${flag.evidence_id}`} className="mono" style={{ fontSize: 11 }}>Evidence #{flag.evidence_id}</a>
-      )}
+    </div>
+  );
+}
+
+function ConfidenceCell({ label, value, hint }: { label: string; value: number | string; hint: string }) {
+  return (
+    <div className="card" style={{ padding: "6px 8px" }} title={hint}>
+      <div className="t-caption" style={{ fontSize: 9 }}>{label}</div>
+      <div className="mono" style={{ fontSize: 14, fontWeight: 700, color: typeof value === "number" && value > 0 ? "var(--ocean-500)" : "var(--slate-400)" }}>
+        {value}
+      </div>
     </div>
   );
 }

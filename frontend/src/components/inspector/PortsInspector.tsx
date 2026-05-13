@@ -7,6 +7,7 @@ import { EmptyState } from "../primitives/EmptyState";
 import { Skeleton } from "../primitives/Skeleton";
 import type { VesselEvent } from "../../types";
 import { formatDate } from "../../format";
+import { EvidenceLink } from "../primitives/EvidenceLink";
 import { InspectorShell } from "./InspectorShell";
 
 const TABS = [
@@ -85,7 +86,17 @@ export function PortsInspector() {
     >
       {loading && <Skeleton height={48} />}
       {!loading && grouped.length === 0 && (
-        <EmptyState icon={<MapPin size={22} />} title="No port activity" body="Pull due arrivals or departures to populate this view." />
+        <EmptyState
+          compact
+          icon={<MapPin size={18} />}
+          title="No port activity yet"
+          body="OCEANS-X due-arrive / due-depart endpoints currently return scope-limited responses. Pull manually or check the Operations console for status."
+          action={
+            <Button size="sm" variant="primary" leadingIcon={<RefreshCw size={11} />} onClick={() => refreshKind("due-arrive")}>
+              Pull arrivals now
+            </Button>
+          }
+        />
       )}
       <div className="col" style={{ gap: 6 }}>
         {grouped.map(([code, evts]) => {
@@ -106,7 +117,7 @@ export function PortsInspector() {
                       <span className="pill info" style={{ fontSize: 10 }}>{e.event_type}</span>
                       <span style={{ flex: 1 }}>Vessel #{e.vessel_id ?? "?"}</span>
                       <span className="t-faded" style={{ fontSize: 11 }}>{formatDate(e.event_time ?? e.created_at)}</span>
-                      {e.evidence_id != null && <a href={`/evidence/${e.evidence_id}`} className="mono" style={{ fontSize: 11 }}>#{e.evidence_id}</a>}
+                      <EvidenceLink id={e.evidence_id} variant="inline" />
                     </div>
                   ))}
                 </div>

@@ -3,6 +3,7 @@ import { useRoute } from "../hooks/useRoute";
 import { useHotkey } from "../hooks/useHotkey";
 import { isFullCanvas, isInspectorRoute, type RouteState } from "../types";
 import { useApp, useInspectorState } from "../state/AppState";
+import { ErrorBoundary } from "./primitives/ErrorBoundary";
 import { ToastViewport } from "./primitives/ToastViewport";
 import { CommandPalette } from "./primitives/CommandPalette";
 import { CommandPanel } from "./command-panel/CommandPanel";
@@ -45,6 +46,19 @@ function renderInspector(route: RouteState) {
       return <EvidenceInspector id={route.id} />;
     default:
       return null;
+  }
+}
+
+function inspectorKey(route: RouteState): string {
+  switch (route.name) {
+    case "vessel-detail":
+      return `vessel-${route.id}`;
+    case "entity-detail":
+      return `entity-${route.id}`;
+    case "evidence":
+      return `evidence-${route.id}`;
+    default:
+      return route.name;
   }
 }
 
@@ -110,15 +124,34 @@ export function Shell() {
   });
 
   return (
-    <div className={`shell ${state.backendOnline ? "" : "offline"}`}>
-      {!fullCanvas && <MapCanvas />}
+    <div className={`shell ${state.backendOnline ? "" : "offline"} ${state.isPanelCollapsed ? "panel-collapsed" : "panel-expanded"}`}>
+      {!fullCanvas && (
+        <ErrorBoundary
+          fallback={
+            <div className="map-canvas" style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
+              <div className="panel-solid" style={{ padding: 18, maxWidth: 420 }}>
+                <strong>Map failed to initialize.</strong>
+                <div className="t-sm" style={{ marginTop: 6 }}>
+                  Open the browser dev tools console — MapLibre should have logged the underlying error. Common causes: blocked tile CDN, or the map style spec rejected by MapLibre.
+                </div>
+              </div>
+            </div>
+          }
+        >
+          <MapCanvas />
+        </ErrorBoundary>
+      )}
       <CommandPanel />
       {fullCanvas ? (
-        <div className="fullcanvas">
-          <Suspense fallback={<div className="t-muted">Loading…</div>}>{renderFullCanvas(route)}</Suspense>
+        <div className="fullcanvas" key={`canvas-${route.name}`}>
+          <ErrorBoundary>
+            <Suspense fallback={<div className="t-muted">Loading…</div>}>{renderFullCanvas(route)}</Suspense>
+          </ErrorBoundary>
         </div>
       ) : inspectorVisible ? (
-        <Suspense fallback={null}>{renderInspector(route)}</Suspense>
+        <ErrorBoundary key={inspectorKey(route)}>
+          <Suspense fallback={null}>{renderInspector(route)}</Suspense>
+        </ErrorBoundary>
       ) : null}
       <ToastViewport />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

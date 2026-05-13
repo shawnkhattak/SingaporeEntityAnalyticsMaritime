@@ -12,7 +12,10 @@ class Settings(BaseSettings):
     feature_ai: bool = False
     database_url: str = "postgresql+asyncpg://seam:seam@localhost:5432/seam"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
-    max_requests_per_run: int = 100
+    # OCEANS-X positions snapshot regularly returns 1000+ vessels. The old
+    # 100-cap was a portfolio-era safety throttle — bump it so the map
+    # actually reflects the fleet OCEANS-X reports.
+    max_requests_per_run: int = 5000
     max_particulars_per_batch: int = 25
     oceansx_api_key: str | None = None
     oceansx_base_url: str = "https://oceans-x.mpa.gov.sg"

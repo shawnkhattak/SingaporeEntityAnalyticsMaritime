@@ -92,7 +92,13 @@ class OceansXClient:
         except socket.timeout as exc:
             raise OceansXTimeoutError(f"Timed out while fetching OCEANS-X {label}.") from exc
         except urllib.error.HTTPError as exc:
-            raise OceansXResponseError(f"OCEANS-X {label} returned HTTP {exc.code}.") from exc
+            err_body = ""
+            try:
+                err_body = (exc.read() or b"").decode("utf-8", errors="replace").strip()
+            except Exception:
+                err_body = ""
+            snippet = f" body={err_body[:200]}" if err_body else ""
+            raise OceansXResponseError(f"OCEANS-X {label} returned HTTP {exc.code}.{snippet}") from exc
         except urllib.error.URLError as exc:
             raise OceansXResponseError(f"OCEANS-X {label} request failed: {exc.reason}") from exc
 

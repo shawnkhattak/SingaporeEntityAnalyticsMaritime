@@ -32,7 +32,7 @@ function parsePath(path: string, search: string): RouteState {
     return { name: "graph" };
   }
   if (clean === "/schema") return { name: "schema" };
-  if (clean === "/ops" || clean === "/dev") return { name: "ops" };
+  if (clean === "/operations" || clean === "/ops" || clean === "/dev") return { name: "ops" };
   if (clean === "/roadmap") return { name: "roadmap" };
   return { name: "map" };
 }
@@ -58,9 +58,13 @@ export function useRoute(): RouteState {
       const anchor = (event.target as HTMLElement).closest("a");
       if (!anchor || anchor.target || anchor.hasAttribute("download") || anchor.getAttribute("rel") === "external") return;
       if (anchor.origin !== window.location.origin) return;
+      const samePath = anchor.pathname === window.location.pathname && anchor.search === window.location.search;
       event.preventDefault();
-      window.history.pushState({}, "", anchor.href);
-      onNav();
+      if (!samePath) {
+        window.history.pushState({}, "", anchor.href);
+      }
+      // Dispatch a global event so every useRoute instance updates, not just this one.
+      window.dispatchEvent(new Event("seam:navigate"));
     }
     window.addEventListener("popstate", onPopState);
     window.addEventListener("seam:navigate", onNav as EventListener);

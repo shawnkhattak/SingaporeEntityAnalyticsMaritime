@@ -10,8 +10,9 @@ import { Input } from "../primitives/Input";
 import { RiskPill } from "../primitives/Pill";
 import { Skeleton } from "../primitives/Skeleton";
 import type { VesselMapFeature, VesselSearchResult } from "../../types";
-import { formatDate } from "../../format";
+import { formatRelative } from "../../format";
 import { matchesFilters, highestSeverity } from "../map/filters";
+import { countryName, flagEmoji, vesselTypeLabel } from "../../labels";
 import { InspectorShell } from "./InspectorShell";
 
 const PAGE_SIZE = 25;
@@ -23,6 +24,7 @@ type Row = {
   mmsi: string | null;
   call_sign: string | null;
   flag_country_code: string | null;
+  vessel_type_code: string | null;
   position_timestamp: string | null;
   severity: ReturnType<typeof highestSeverity>;
 };
@@ -67,6 +69,7 @@ export function VesselListInspector() {
         mmsi: v.mmsi,
         call_sign: v.call_sign,
         flag_country_code: v.flag_country_code,
+        vessel_type_code: v.vessel_type_code,
         position_timestamp: v.latest_position?.position_timestamp ?? null,
         severity: highestSeverity(state.riskByVessel[v.id] ?? []),
       }));
@@ -80,6 +83,7 @@ export function VesselListInspector() {
         mmsi: v.mmsi,
         call_sign: v.call_sign,
         flag_country_code: v.flag_country_code,
+        vessel_type_code: v.vessel_type_code,
         position_timestamp: v.position_timestamp,
         severity: highestSeverity(state.riskByVessel[v.vessel_id] ?? []),
       }));
@@ -120,35 +124,52 @@ export function VesselListInspector() {
       )}
       {!loading && rows.length === 0 && (
         <EmptyState
-          icon={<Ship size={22} />}
-          title="No vessels match"
-          body={query ? `No matches for "${query}".` : "Run a positions snapshot from the Command Panel to load AIS data."}
+          compact
+          icon={<Ship size={18} />}
+          title={query ? `No vessels match "${query}"` : "No vessels loaded yet"}
+          body={query ? "Try a different IMO, MMSI, call sign, or name." : "Run a positions snapshot to load AIS data."}
         />
       )}
       <div className="col" style={{ marginTop: 12, gap: 6 }}>
-        {visible.map((row) => (
-          <a
-            key={row.id}
-            href={`/vessels/${row.id}`}
-            className="card row"
-            style={{ padding: "10px 12px", gap: 10, textDecoration: "none", color: "inherit" }}
-          >
-            <Avatar label={row.name} ring={row.severity !== "none" ? row.severity : undefined} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="row">
-                <strong style={{ fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.name}</strong>
-                {row.flag_country_code && <span className="pill" style={{ fontSize: 10 }}>{row.flag_country_code}</span>}
+        {visible.map((row) => {
+          const typeText = row.vessel_type_code ? vesselTypeLabel(row.vessel_type_code) : null;
+          return (
+            <a
+              key={row.id}
+              href={`/vessels/${row.id}`}
+              className="card row lift"
+              style={{ padding: "10px 12px", gap: 10, textDecoration: "none", color: "inherit", alignItems: "flex-start" }}
+            >
+              <Avatar label={row.name} ring={row.severity !== "none" ? row.severity : undefined} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="row" style={{ gap: 6 }}>
+                  <strong style={{ fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.name}</strong>
+                  {row.flag_country_code && (
+                    <span
+                      title={countryName(row.flag_country_code) || row.flag_country_code}
+                      aria-label={countryName(row.flag_country_code) || row.flag_country_code}
+                      style={{ fontSize: 14, lineHeight: 1, cursor: "help" }}
+                    >
+                      {flagEmoji(row.flag_country_code) || row.flag_country_code}
+                    </span>
+                  )}
+                  {typeText && typeText !== "Unknown" && (
+                    <span className="pill" style={{ fontSize: 10 }}>{typeText}</span>
+                  )}
+                </div>
+                <div className="mono t-muted" style={{ fontSize: 11, marginTop: 2 }}>
+                  {[row.imo && `IMO ${row.imo}`, row.mmsi && `MMSI ${row.mmsi}`, row.call_sign].filter(Boolean).join(" · ") || "—"}
+                </div>
+                <div className="t-faded" style={{ fontSize: 10, marginTop: 2 }}>
+                  OCEANS-X · last seen {formatRelative(row.position_timestamp)}
+                </div>
               </div>
-              <div className="mono t-muted" style={{ fontSize: 11 }}>
-                {[row.imo && `IMO ${row.imo}`, row.mmsi && `MMSI ${row.mmsi}`, row.call_sign].filter(Boolean).join(" · ") || "—"}
+              <div className="col" style={{ alignItems: "flex-end", gap: 4 }}>
+                {row.severity !== "none" && <RiskPill severity={row.severity} />}
               </div>
-            </div>
-            <div className="col" style={{ alignItems: "flex-end", gap: 4 }}>
-              {row.severity !== "none" && <RiskPill severity={row.severity} />}
-              <span className="t-faded" style={{ fontSize: 10 }}>{formatDate(row.position_timestamp)}</span>
-            </div>
-          </a>
-        ))}
+            </a>
+          );
+        })}
       </div>
     </InspectorShell>
   );

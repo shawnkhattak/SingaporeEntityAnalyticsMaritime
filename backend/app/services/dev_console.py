@@ -25,6 +25,8 @@ TABLE_MODELS = {
     "source_observations": SourceObservation,
 }
 
+INVALID_IMO_VALUES = ("0", "00", "000", "0000")
+
 
 class DevConsoleService:
     def __init__(self, session: AsyncSession) -> None:
@@ -49,6 +51,7 @@ class DevConsoleService:
         statement = (
             select(Vessel, VesselPositionLatest)
             .outerjoin(VesselPositionLatest, VesselPositionLatest.vessel_id == Vessel.id)
+            .where(or_(Vessel.imo.is_(None), Vessel.imo.notin_(INVALID_IMO_VALUES)))
             .order_by(desc(VesselPositionLatest.position_timestamp).nullslast(), Vessel.name)
             .limit(limit)
         )

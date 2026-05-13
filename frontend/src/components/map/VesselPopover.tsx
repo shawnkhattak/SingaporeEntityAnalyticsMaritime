@@ -1,8 +1,8 @@
-import { ExternalLink, Network, X } from "lucide-react";
+import { ChevronRight, ExternalLink, Network, X } from "lucide-react";
 import { navigateTo } from "../../hooks/useRoute";
 import type { RiskFlag, VesselMapFeature } from "../../types";
-import { Button } from "../primitives/Button";
 import { RiskPill } from "../primitives/Pill";
+import { countryName, flagEmoji, riskLabel, vesselTypeLabel } from "../../labels";
 import { formatDate } from "../../format";
 
 type VesselPopoverProps = {
@@ -15,45 +15,82 @@ type VesselPopoverProps = {
 };
 
 export function VesselPopover({ x, y, vessel, severity, flags, onClose }: VesselPopoverProps) {
-  const openCount = flags.filter((f) => f.status !== "resolved").length;
+  const top = flags.find((f) => f.status !== "resolved");
+  const flagName = countryName(vessel.flag_country_code);
+  const flagGlyph = flagEmoji(vessel.flag_country_code);
+  const type = vesselTypeLabel(vessel.vessel_type_code);
+
   return (
-    <div className="vessel-popover glass" style={{ left: x, top: y, transform: "translate(-50%, calc(-100% - 14px))" }}>
-      <div className="row" style={{ marginBottom: 6 }}>
-        <strong style={{ fontSize: 14, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{vessel.name}</strong>
+    <div
+      className="vessel-popover glass"
+      style={{
+        left: x,
+        top: y,
+        transform: "translate(-50%, calc(-100% - 14px))",
+        width: 240,
+        padding: 12,
+      }}
+    >
+      <div className="row" style={{ marginBottom: 4, gap: 6 }}>
+        <strong style={{ fontSize: 13, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {vessel.name}
+        </strong>
         <button className="btn ghost icon sm" onClick={onClose} aria-label="Close">
           <X size={12} />
         </button>
       </div>
-      <div className="row-id mono t-muted" style={{ fontSize: 11 }}>
-        {vessel.imo && <span>IMO {vessel.imo}</span>}
-        {vessel.mmsi && <span>MMSI {vessel.mmsi}</span>}
-        {vessel.call_sign && <span>{vessel.call_sign}</span>}
+      <div className="mono t-muted" style={{ fontSize: 11 }}>
+        {[vessel.imo && `IMO ${vessel.imo}`, vessel.mmsi && `MMSI ${vessel.mmsi}`].filter(Boolean).join(" · ") || "—"}
       </div>
-      <div style={{ marginTop: 8, fontSize: 12 }}>
-        <div className="mono">{vessel.latitude.toFixed(3)}, {vessel.longitude.toFixed(3)}</div>
-        <div className="t-faded" style={{ fontSize: 11 }}>
-          {[vessel.speed_knots != null ? `${vessel.speed_knots.toFixed(1)} kn` : null, vessel.course_degrees != null ? `${vessel.course_degrees.toFixed(0)}°` : null, vessel.navigational_status]
-            .filter(Boolean)
-            .join(" · ")}
-        </div>
-        <div className="t-faded" style={{ fontSize: 11 }}>{formatDate(vessel.position_timestamp)}</div>
-      </div>
-      <div className="row" style={{ marginTop: 8, flexWrap: "wrap", gap: 4 }}>
-        {severity !== "none" && <RiskPill severity={severity as RiskFlag["severity"] as never} />}
-        {openCount > 0 && <span className="pill info">{openCount} open</span>}
-      </div>
-      <div className="row" style={{ marginTop: 10, gap: 6 }}>
-        <Button size="sm" variant="primary" onClick={() => navigateTo(`/vessels/${vessel.vessel_id}`)}>
-          Open vessel
-        </Button>
-        <Button size="sm" leadingIcon={<Network size={12} />} onClick={() => navigateTo(`/graph?subject=vessel&id=${vessel.vessel_id}`)}>
-          Graph
-        </Button>
-        {vessel.evidence_id != null && (
-          <Button size="sm" leadingIcon={<ExternalLink size={12} />} onClick={() => navigateTo(`/evidence/${vessel.evidence_id}`)}>
-            Evidence
-          </Button>
+      <div className="t-faded" style={{ fontSize: 11, marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+        {flagGlyph && (
+          <span title={flagName} aria-label={flagName} style={{ fontSize: 14, lineHeight: 1, cursor: "help" }}>
+            {flagGlyph}
+          </span>
         )}
+        {type !== "Unknown" && <span>{type}</span>}
+      </div>
+      <div className="t-faded mono" style={{ fontSize: 11, marginTop: 4 }}>
+        {vessel.latitude.toFixed(3)}, {vessel.longitude.toFixed(3)}
+        {vessel.speed_knots != null ? ` · ${vessel.speed_knots.toFixed(1)} kn` : ""}
+      </div>
+      <div className="t-faded" style={{ fontSize: 10, marginTop: 2 }}>{formatDate(vessel.position_timestamp)}</div>
+
+      {top && (
+        <div className="row" style={{ marginTop: 6, gap: 4, flexWrap: "wrap" }}>
+          <RiskPill severity={severity as never} label={riskLabel(top.flag_type).title} />
+        </div>
+      )}
+
+      {/* Action row: icon-only, no big "Open vessel" button. The click
+          already navigated to the inspector; these are quick jumps. */}
+      <div className="row" style={{ marginTop: 8, gap: 4, justifyContent: "flex-end" }}>
+        <button
+          className="btn ghost icon sm"
+          aria-label="Open in graph"
+          title="Open in graph"
+          onClick={() => navigateTo(`/graph?subject=vessel&id=${vessel.vessel_id}`)}
+        >
+          <Network size={12} />
+        </button>
+        {vessel.evidence_id != null && (
+          <button
+            className="btn ghost icon sm"
+            aria-label="Open evidence"
+            title="Open evidence"
+            onClick={() => navigateTo(`/evidence/${vessel.evidence_id}`)}
+          >
+            <ExternalLink size={12} />
+          </button>
+        )}
+        <button
+          className="btn ghost icon sm"
+          aria-label="Open vessel detail"
+          title="Open vessel"
+          onClick={() => navigateTo(`/vessels/${vessel.vessel_id}`)}
+        >
+          <ChevronRight size={12} />
+        </button>
       </div>
     </div>
   );

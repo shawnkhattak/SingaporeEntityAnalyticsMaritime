@@ -132,7 +132,12 @@ a:hover { text-decoration: underline; }
   background: var(--white);
   border: 1px solid var(--gray-200);
   border-radius: var(--r-card);
+  transition: border-color var(--motion-fast) var(--ease-out),
+              box-shadow var(--motion-fast) var(--ease-out),
+              transform var(--motion-fast) var(--ease-out);
 }
+a.card:hover, button.card:hover { transform: translateY(-1px); border-color: var(--gray-300); box-shadow: 0 4px 14px rgba(14, 34, 53, 0.07); }
+a.card:active, button.card:active { transform: translateY(0); transition-duration: 60ms; }
 .card-subtle { background: var(--gray-50); }
 .card-tint   { background: var(--ocean-50); border-color: var(--ocean-200); }
 
@@ -146,10 +151,15 @@ a:hover { text-decoration: underline; }
   background: var(--white);
   color: var(--navy-900);
   cursor: pointer;
-  transition: background .12s, border-color .12s, box-shadow .12s, color .12s;
+  transition: background var(--motion-fast) var(--ease-out),
+              border-color var(--motion-fast) var(--ease-out),
+              box-shadow var(--motion-fast) var(--ease-out),
+              color var(--motion-fast) var(--ease-out),
+              transform var(--motion-fast) var(--ease-out);
 }
-.btn:hover { background: var(--gray-50); border-color: var(--gray-300); }
-.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn:hover { background: var(--gray-50); border-color: var(--gray-300); transform: translateY(-1px); }
+.btn:active { transform: translateY(0); transition-duration: 60ms; }
+.btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 .btn.primary {
   background: var(--ocean-500);
   border-color: var(--ocean-500);
@@ -177,7 +187,8 @@ a:hover { text-decoration: underline; }
   border-radius: var(--r-btn);
   font-size: 13px;
   color: var(--navy-900);
-  transition: border-color .12s, box-shadow .12s;
+  transition: border-color var(--motion-fast) var(--ease-out),
+              box-shadow var(--motion-fast) var(--ease-out);
 }
 .input:focus-within {
   border-color: var(--ocean-500);
@@ -254,10 +265,14 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   color: var(--navy-700);
   border: 1px solid var(--gray-200);
   cursor: pointer;
-  transition: background .1s, color .1s, border-color .1s;
+  transition: background var(--motion-fast) var(--ease-out),
+              color var(--motion-fast) var(--ease-out),
+              border-color var(--motion-fast) var(--ease-out),
+              transform var(--motion-fast) var(--ease-out);
   user-select: none;
 }
-.chip:hover { border-color: var(--gray-300); }
+.chip:hover { border-color: var(--gray-300); transform: translateY(-1px); }
+.chip:active { transform: scale(0.96); transition-duration: 60ms; }
 .chip.selected { background: var(--navy-900); color: var(--white); border-color: var(--navy-900); }
 .chip.crit.selected { background: var(--risk-critical); border-color: var(--risk-critical); }
 .chip.high.selected { background: var(--risk-high); border-color: var(--risk-high); }
@@ -281,7 +296,10 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   margin-bottom: -1px;
   cursor: pointer;
   background: transparent; border-top: 0; border-left: 0; border-right: 0;
+  transition: color var(--motion-fast) var(--ease-out),
+              border-bottom-color var(--motion-base) var(--ease-out);
 }
+.tab:hover { color: var(--navy-700); }
 .tab.active { color: var(--navy-900); border-bottom-color: var(--ocean-500); font-weight: 600; }
 .tab .count {
   display: inline-block; margin-left: 6px;
@@ -323,17 +341,22 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   background: transparent; border: 0;
   width: 100%; text-align: left;
 }
+.nav { transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
 .nav:hover { background: rgba(58,127,184,.06); color: var(--navy-900); }
 .nav.active {
   background: var(--ocean-50);
   color: var(--navy-900);
   font-weight: 600;
 }
-.nav.active::before {
+.nav::before {
   content: ''; position: absolute;
   left: 0; top: 8px; bottom: 8px; width: 3px;
   background: var(--ocean-500); border-radius: 0 2px 2px 0;
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform var(--motion-base) var(--ease-out);
 }
+.nav.active::before { transform: scaleY(1); }
 .nav svg { width: 16px; height: 16px; flex: 0 0 auto; }
 .nav .count { margin-left: auto; font-size: 11px; color: var(--slate-500); font-weight: 500; }
 
@@ -357,6 +380,63 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   color: transparent;
 }
 @keyframes skel { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ===== Motion system ====================================================
+   Standardize easings + durations. Any class with `transition:` should
+   reach into these vars so the whole app feels coherent. Respect the
+   user's prefers-reduced-motion preference at the bottom. */
+:root {
+  --motion-fast: 120ms;
+  --motion-base: 220ms;
+  --motion-slow: 360ms;
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-pop:   cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Generic keyframes reused across components */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes pop-in {
+  0%   { opacity: 0; transform: scale(0.94); }
+  60%  { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(198,40,40,0.55); }
+  50%      { transform: scale(1.18); box-shadow: 0 0 0 5px rgba(198,40,40,0); }
+}
+
+.anim-fade-in { animation: fade-in var(--motion-base) var(--ease-out) both; }
+.anim-slide-in { animation: slide-in-left var(--motion-base) var(--ease-out) both; }
+.anim-pop-in { animation: pop-in var(--motion-base) var(--ease-pop) both; }
+
+/* Hover-lift: a tiny elevation cue for cards and tiles. */
+.lift {
+  transition: transform var(--motion-fast) var(--ease-out),
+              box-shadow var(--motion-fast) var(--ease-out),
+              border-color var(--motion-fast) var(--ease-out);
+}
+.lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(14, 34, 53, 0.08);
+  border-color: var(--gray-300);
+}
+.lift:active { transform: translateY(0); transition-duration: 60ms; }
 
 /* ===== Misc ===== */
 .hr { height: 1px; background: var(--gray-200); border: 0; margin: 12px 0; }
@@ -386,17 +466,25 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   background: var(--ocean-50);
 }
 
-/* Command panel positioning */
+/* Command panel positioning — purposely sits 12 px in from each edge
+   to read as a floating card, not a full-height sidebar. Width is
+   tuned so the inspector + map area still feels open at 1366 px. */
 .cmd-panel {
   position: fixed;
-  left: 16px; top: 16px; bottom: 16px;
-  width: 320px;
+  left: 12px; top: 12px; bottom: 12px;
+  width: 296px;
   z-index: 30;
   display: flex; flex-direction: column;
   overflow: hidden;
-  transition: width .22s cubic-bezier(.4,.0,.2,1);
+  transition: width var(--motion-base) var(--ease-in-out);
+  animation: slide-in-left var(--motion-base) var(--ease-out) both;
+  /* Slightly stronger glass + inner ocean tint so the panel reads
+     as a card hovering over the map. */
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  box-shadow: var(--shadow-card), inset 0 0 0 1px rgba(58, 127, 184, 0.06);
 }
-.cmd-panel.collapsed { width: 64px; }
+.cmd-panel.collapsed { width: 60px; }
 .cmd-panel-body { flex: 1; overflow-y: auto; padding: 0 12px 12px; }
 .cmd-section { padding: 8px 0; border-top: 1px solid var(--gray-200); }
 .cmd-section:first-child { border-top: 0; }
@@ -411,22 +499,35 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
 
 .cmd-rail { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 0; }
 .cmd-rail .nav {
-  width: 40px; height: 40px;
+  width: 36px; height: 36px;
   justify-content: center;
   padding: 0;
 }
 .cmd-rail .nav::before { display: none; }
 .cmd-rail .nav.active { background: var(--ocean-50); }
 
-/* Inspector */
+/* Inspector — slides next to the command panel.
+   Default assumes panel is collapsed (rail width 64px). When the shell
+   is marked .panel-expanded the inspector shifts right to clear the
+   expanded panel (320px). */
 .inspector {
   position: fixed;
-  top: 16px; bottom: 16px;
-  left: 96px;
+  top: 12px; bottom: 12px;
+  left: 84px;
   z-index: 25;
   display: flex; flex-direction: column;
   overflow: hidden;
+  transition: left var(--motion-base) var(--ease-in-out),
+              width var(--motion-base) var(--ease-in-out);
+  animation: slide-in-left var(--motion-base) var(--ease-out) both;
+  will-change: transform, opacity;
 }
+.shell.panel-expanded .inspector { left: 320px; }
+.shell.panel-expanded .fullcanvas { left: 320px; }
+
+/* Inspector body content gets a fade-in when the inspector mounts. */
+.inspector-body { animation: fade-in var(--motion-slow) var(--ease-out) both; }
+.inspector-foot { animation: fade-in var(--motion-slow) var(--ease-out) both; }
 .inspector-head {
   padding: 16px 18px 12px;
   border-bottom: 1px solid var(--gray-200);
@@ -449,14 +550,54 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
 /* Map */
 .map-canvas {
   position: fixed;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
+  width: 100vw;
+  height: 100vh;
   z-index: 1;
+  background: var(--ocean-100);
 }
 .map-canvas canvas { outline: none; }
+.maplibregl-canvas-container,
+.maplibregl-canvas { width: 100% !important; height: 100% !important; }
 .map-utility {
-  position: fixed; top: 16px; right: 16px;
+  position: fixed; top: 12px; right: 12px;
   z-index: 20;
   display: flex; flex-direction: column; gap: 8px;
+}
+/* Grouped vertical pill — one rounded rectangle per cluster (zoom, basemap, tools). */
+.util-stack {
+  display: flex; flex-direction: column;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--r-btn);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.util-btn {
+  background: transparent;
+  border: 0;
+  width: 34px; height: 34px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--navy-700);
+  cursor: pointer;
+  position: relative;
+  transition: background var(--motion-fast) var(--ease-out),
+              color var(--motion-fast) var(--ease-out);
+}
+.util-btn + .util-btn { border-top: 1px solid var(--gray-100); }
+.util-btn:hover { background: var(--ocean-50); color: var(--navy-900); }
+.util-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.util-btn:disabled:hover { background: transparent; color: var(--navy-700); }
+.util-btn svg { width: 15px; height: 15px; }
+.util-badge {
+  position: absolute; top: 3px; right: 3px;
+  font-size: 9px; font-weight: 700;
+  background: var(--ocean-500); color: #fff;
+  border-radius: 999px;
+  padding: 0 4px; min-width: 12px;
+  line-height: 12px; text-align: center;
 }
 .map-status {
   position: fixed; bottom: 24px;
@@ -482,10 +623,13 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
 /* Full-canvas surface */
 .fullcanvas {
   position: fixed;
-  inset: 16px 16px 16px 96px;
+  top: 12px; right: 12px; bottom: 12px;
+  left: 84px;
   z-index: 5;
   overflow: auto;
   padding: 18px;
+  transition: left var(--motion-base) var(--ease-in-out);
+  animation: fade-in var(--motion-slow) var(--ease-out) both;
 }
 .fullcanvas.padded { padding: 24px; }
 
@@ -507,9 +651,13 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   border-radius: var(--r-card);
   box-shadow: var(--shadow-popover);
   font-size: 13px;
-  animation: toast-in .18s ease-out;
+  animation: toast-in var(--motion-base) var(--ease-out) both;
+  transition: transform var(--motion-fast) var(--ease-out);
 }
-@keyframes toast-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes toast-in {
+  from { transform: translateY(12px) scale(0.96); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
 .toast.success { border-left-color: var(--health-ok); }
 .toast.info    { border-left-color: var(--ocean-500); }
 .toast.warning { border-left-color: var(--risk-medium); }
@@ -517,8 +665,13 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
 .toast-icon { flex: 0 0 auto; }
 .toast-title { font-weight: 600; }
 .toast-body { color: var(--slate-500); font-size: 12px; margin-top: 2px; }
-.toast-close { margin-left: auto; background: transparent; border: 0; color: var(--slate-400); cursor: pointer; padding: 2px; }
+.toast-close {
+  margin-left: auto; background: transparent; border: 0;
+  color: var(--slate-400); cursor: pointer; padding: 2px;
+  transition: color var(--motion-fast) var(--ease-out);
+}
 .toast-close:hover { color: var(--navy-700); }
+.toast:hover { transform: translateX(-2px); }
 
 /* Modal */
 .modal-backdrop {
@@ -527,7 +680,7 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
   padding: 20px;
-  animation: backdrop-in .14s ease-out;
+  animation: backdrop-in var(--motion-base) var(--ease-out) both;
 }
 @keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 .modal {
@@ -537,9 +690,12 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   width: 100%;
   max-width: 480px;
   padding: 20px 22px 18px;
-  animation: modal-in .18s ease-out;
+  animation: modal-in var(--motion-base) var(--ease-pop) both;
 }
-@keyframes modal-in { from { transform: translateY(10px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes modal-in {
+  from { transform: translateY(14px) scale(0.96); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
 .modal-title { font-size: 16px; font-weight: 600; margin: 0 0 8px; }
 .modal-body { color: var(--navy-700); font-size: 13.5px; line-height: 1.55; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
@@ -553,14 +709,16 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   color: var(--navy-700);
 }
 .empty-icon {
-  width: 56px; height: 56px;
+  width: 48px; height: 48px;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--ocean-50);
   color: var(--navy-700);
 }
-.empty-title { font-size: 15px; font-weight: 600; color: var(--navy-900); }
-.empty-body { font-size: 13px; color: var(--slate-500); max-width: 320px; }
+.empty-icon-sm { width: 32px; height: 32px; border-radius: 9px; }
+.empty-title { font-size: 14px; font-weight: 600; color: var(--navy-900); }
+.empty-body { font-size: 12.5px; color: var(--slate-500); max-width: 320px; line-height: 1.5; }
+.empty-compact { padding: 18px 14px; gap: 8px; }
 
 .errstate {
   display: flex; flex-direction: column; gap: 10px;
@@ -600,7 +758,7 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   background: rgba(14,34,53,.28);
   display: flex; align-items: flex-start; justify-content: center;
   padding-top: 12vh;
-  animation: backdrop-in .12s ease-out;
+  animation: backdrop-in var(--motion-fast) var(--ease-out) both;
 }
 .palette {
   width: 100%; max-width: 640px;
@@ -609,7 +767,7 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   border-radius: var(--r-panel);
   box-shadow: var(--shadow-modal);
   overflow: hidden;
-  animation: modal-in .15s ease-out;
+  animation: modal-in var(--motion-base) var(--ease-pop) both;
 }
 .palette-input {
   display: flex; align-items: center; gap: 10px;
@@ -634,9 +792,23 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   border-radius: var(--r-btn);
   cursor: pointer;
   color: var(--navy-900);
+  transition: background var(--motion-fast) var(--ease-out),
+              transform var(--motion-fast) var(--ease-out);
 }
 .palette-row:hover, .palette-row.active { background: var(--ocean-50); }
+.palette-row.active { box-shadow: inset 2px 0 0 var(--ocean-500); }
+.palette-row:active { transform: scale(0.99); }
 .palette-row .hint { margin-left: auto; }
+
+.palette-footer {
+  display: flex; align-items: center; gap: 14px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--gray-200);
+  font-size: 11px;
+  color: var(--slate-500);
+  background: var(--gray-50);
+}
+.palette-footer .kbd { font-size: 9px; padding: 0 4px; }
 
 /* Tooltip */
 .tooltip {
@@ -679,6 +851,15 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   padding: 12px 14px;
   display: flex; flex-direction: column; gap: 4px;
   min-height: 76px;
+  transition: border-color var(--motion-fast) var(--ease-out),
+              box-shadow var(--motion-fast) var(--ease-out),
+              transform var(--motion-fast) var(--ease-out);
+}
+button.metric { cursor: pointer; }
+button.metric:hover, a.metric:hover {
+  border-color: var(--gray-300);
+  box-shadow: 0 4px 14px rgba(14, 34, 53, 0.08);
+  transform: translateY(-1px);
 }
 .metric-label { font-size: 11px; font-weight: 500; color: var(--slate-500); text-transform: uppercase; letter-spacing: .06em; }
 .metric-value { font-family: var(--font-mono); font-size: 22px; font-weight: 700; letter-spacing: -.02em; color: var(--navy-900); }
@@ -691,6 +872,8 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   width: 280px;
   padding: 14px;
   pointer-events: auto;
+  animation: pop-in var(--motion-base) var(--ease-pop) both;
+  transform-origin: bottom center;
 }
 .vessel-popover .row-id { display: flex; gap: 6px; flex-wrap: wrap; font-size: 11px; }
 
@@ -707,17 +890,32 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
-.util-chip:hover { background: var(--white); border-color: var(--gray-300); }
+.util-chip { transition: background var(--motion-fast) var(--ease-out),
+                           border-color var(--motion-fast) var(--ease-out),
+                           transform var(--motion-fast) var(--ease-out); }
+.util-chip:hover { background: var(--white); border-color: var(--gray-300); transform: translateY(-1px); }
+.util-chip:active { transform: translateY(0) scale(0.97); transition-duration: 60ms; }
 .util-chip svg { width: 14px; height: 14px; }
 
 /* Greyscale wash for backend-unreachable */
+.shell .map-canvas { transition: filter var(--motion-slow) var(--ease-in-out); }
 .shell.offline .map-canvas { filter: grayscale(1) brightness(.92); }
+.shell.offline .pill.fail { animation: pulse-soft 1.8s var(--ease-in-out) infinite; }
+
+/* Respect users who turn motion down at the OS level. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
 
 /* Helpers */
-.dot-status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.dot-status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; transition: background var(--motion-fast) var(--ease-out); }
 .dot-status.ok    { background: var(--health-ok); }
 .dot-status.stale { background: var(--risk-medium); }
-.dot-status.fail  { background: var(--risk-critical); }
+.dot-status.fail  { background: var(--risk-critical); animation: pulse-dot 1.6s var(--ease-in-out) infinite; }
 .dot-status.none  { background: var(--slate-400); }
 
 .hidden { display: none !important; }

@@ -1,4 +1,12 @@
-export type CenterEvent = { lng: number; lat: number; zoom?: number };
+export type CenterEvent = {
+  lng: number;
+  lat: number;
+  zoom?: number;
+  /** Optional override; otherwise MapCanvas computes padding from
+   *  the current panel + inspector geometry so the target lands in
+   *  the visible map area to the right of the side menus. */
+  padding?: { left: number; right: number; top: number; bottom: number };
+};
 
 const channel = new EventTarget();
 

@@ -14,6 +14,8 @@ from app.schemas.vessels import (
     VesselSummary,
 )
 
+INVALID_IMO_VALUES = ("0", "00", "000", "0000")
+
 
 class VesselService:
     def __init__(self, session: AsyncSession) -> None:
@@ -36,6 +38,7 @@ class VesselService:
                     Vessel.name.ilike(pattern),
                 )
             )
+            .where(or_(Vessel.imo.is_(None), Vessel.imo.notin_(INVALID_IMO_VALUES)))
             .order_by(
                 (func.lower(Vessel.imo) == normalized_query.lower()).desc(),
                 (func.lower(Vessel.mmsi) == normalized_query.lower()).desc(),

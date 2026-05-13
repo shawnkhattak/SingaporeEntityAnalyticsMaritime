@@ -28,6 +28,7 @@ import { Modal } from "../primitives/Modal";
 import { Skeleton } from "../primitives/Skeleton";
 import type { DevVesselBrowseRow, IngestionJob, IngestionLog, SourceHealth, VesselObservation, VesselSearchResult } from "../../types";
 import { formatDate } from "../../format";
+import { countryName, flagEmoji, vesselTypeLabel } from "../../labels";
 
 const PAGE_SIZE = 25;
 
@@ -162,8 +163,11 @@ export function OpsConsole() {
     <div className="col" style={{ gap: 12, paddingBottom: 30 }}>
       <header className="row" style={{ marginBottom: 4 }}>
         <div style={{ flex: 1 }}>
-          <div className="t-caption">Operations console</div>
-          <h1 className="t-display" style={{ margin: 0, fontSize: 22 }}>Manual ingestion & data state</h1>
+          <div className="t-caption">Data operations</div>
+          <h1 className="t-display" style={{ margin: 0, fontSize: 22 }}>Ingestion console</h1>
+          <p className="t-sm" style={{ margin: "6px 0 0", color: "var(--slate-500)" }}>
+            Manual control surface for OCEANS-X, sanctions, news, and risk ingestion. Live sources only — fixture replay was removed.
+          </p>
         </div>
         <Button leadingIcon={<RefreshCw size={14} />} onClick={refreshDev}>Refresh</Button>
         <Button
@@ -371,6 +375,13 @@ export function OpsConsole() {
               <Button size="sm" onClick={() => runJob("ports-arrive", () => runPortActivity("due-arrive"), { successTitle: "Arrivals updated", errorTitle: "Arrivals failed" }).then(refreshDev)}>Pull due-arrive</Button>
               <Button size="sm" onClick={() => runJob("ports-depart", () => runPortActivity("due-depart"), { successTitle: "Departures updated", errorTitle: "Departures failed" }).then(refreshDev)}>Pull due-depart</Button>
             </div>
+            <p className="t-faded" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>
+              If these return HTTP 400, your OCEANS-X subscription likely doesn't
+              include the <code className="mono">duetoarrive</code> /
+              <code className="mono"> duetodepart</code> endpoints. Positions,
+              particulars, and movements use a different scope and continue to
+              work independently.
+            </p>
           </Panel>
         </div>
       </div>
@@ -395,15 +406,29 @@ export function OpsConsole() {
           <table className="table">
             <thead>
               <tr>
-                <th>Vessel</th><th>IMO/MMSI</th><th>Position</th><th>Risk</th><th>Flags</th><th>Updated</th><th></th>
+                <th>Vessel</th><th>IMO/MMSI</th><th>Position</th><th>Flag</th><th>Type</th><th>Risk</th><th>Flags</th><th>Updated</th><th></th>
               </tr>
             </thead>
             <tbody>
-              {visible.length === 0 ? <tr><td colSpan={7} className="t-faded">No vessels.</td></tr> : visible.map((row) => (
+              {visible.length === 0 ? <tr><td colSpan={9} className="t-faded">No vessels.</td></tr> : visible.map((row) => (
                 <tr key={row.vessel_id}>
                   <td><a href={`/vessels/${row.vessel_id}`}>{row.name}</a></td>
                   <td className="mono" style={{ fontSize: 11 }}>{row.imo ?? row.mmsi ?? row.call_sign ?? "—"}</td>
                   <td className="mono" style={{ fontSize: 11 }}>{row.latest_position ? `${row.latest_position.latitude.toFixed(2)}, ${row.latest_position.longitude.toFixed(2)}` : "—"}</td>
+                  <td className="t-sm">
+                    {row.flag_country_code ? (
+                      <span
+                        title={countryName(row.flag_country_code) || row.flag_country_code}
+                        aria-label={countryName(row.flag_country_code) || row.flag_country_code}
+                        style={{ fontSize: 16, lineHeight: 1, cursor: "help" }}
+                      >
+                        {flagEmoji(row.flag_country_code) || row.flag_country_code}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="t-sm">{vesselTypeLabel(row.vessel_type_code)}</td>
                   <td>{row.highest_risk_severity ? <RiskPill severity={row.highest_risk_severity as never} /> : <span className="t-faded">—</span>}</td>
                   <td className="t-sm">{row.risk_flag_types.join(", ") || "—"}</td>
                   <td className="t-faded" style={{ fontSize: 11 }}>{formatDate(row.latest_position?.position_timestamp ?? row.source_updated_at)}</td>

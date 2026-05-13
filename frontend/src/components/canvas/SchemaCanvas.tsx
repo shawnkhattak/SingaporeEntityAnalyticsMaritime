@@ -43,46 +43,64 @@ export function SchemaCanvas() {
   }, []);
 
   const domains = useMemo(() => Array.from(new Set((schema?.nodes ?? []).map((n) => n.domain))).sort(), [schema]);
-  const visible = (schema?.nodes ?? []).filter((n) => domain === "all" || n.domain === domain);
-  const visibleIds = new Set(visible.map((n) => n.id));
 
-  const nodes: Node[] = visible.map((node, index) => ({
-    id: node.id,
-    position: { x: (index % 4) * 240, y: Math.floor(index / 4) * 180 },
-    data: { label: `${node.label}\n${node.domain}` },
-    style: {
-      background: "var(--white)",
-      border: "1px solid var(--gray-200)",
-      borderLeft: `4px solid ${DOMAIN_COLOR[node.domain] ?? "var(--slate-500)"}`,
-      borderRadius: 8,
-      padding: 10,
-      fontSize: 12,
-      whiteSpace: "pre-line",
-      width: 200,
-    },
-  }));
+  const visible = useMemo(
+    () => (schema?.nodes ?? []).filter((n) => domain === "all" || n.domain === domain),
+    [schema, domain],
+  );
 
-  const edges: Edge[] = (schema?.edges ?? [])
-    .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
-    .map((e, i) => ({
-      id: `${e.source}-${e.target}-${i}`,
-      source: e.source,
-      target: e.target,
-      label: e.label,
-      style: { stroke: "var(--slate-500)" },
-    }));
+  const nodes: Node[] = useMemo(
+    () =>
+      visible.map((node, index) => ({
+        id: node.id,
+        position: { x: (index % 4) * 240, y: Math.floor(index / 4) * 180 },
+        data: { label: `${node.label}\n${node.domain}` },
+        style: {
+          background: "var(--white)",
+          border: "1px solid var(--gray-200)",
+          borderLeft: `4px solid ${DOMAIN_COLOR[node.domain] ?? "var(--slate-500)"}`,
+          borderRadius: 8,
+          padding: 10,
+          fontSize: 12,
+          whiteSpace: "pre-line",
+          width: 200,
+        },
+      })),
+    [visible],
+  );
+
+  const edges: Edge[] = useMemo(() => {
+    const visibleIds = new Set(visible.map((n) => n.id));
+    return (schema?.edges ?? [])
+      .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
+      .map((e, i) => ({
+        id: `${e.source}-${e.target}-${i}`,
+        source: e.source,
+        target: e.target,
+        label: e.label,
+        style: { stroke: "var(--slate-500)" },
+      }));
+  }, [schema, visible]);
 
   const selectedNode = useMemo(() => schema?.nodes.find((n) => n.id === selected), [schema, selected]);
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div className="panel-solid row" style={{ padding: 12 }}>
+      <div className="panel-solid row" style={{ padding: 12, gap: 10, flexWrap: "wrap" }}>
         <span className="t-caption">Domain</span>
         <select className="select" value={domain} onChange={(e) => setDomain(e.target.value)}>
           <option value="all">All</option>
           {domains.map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
         <span className="spacer" />
+        <div className="row" style={{ gap: 10, fontSize: 11, color: "var(--slate-500)" }}>
+          {domains.slice(0, 5).map((d) => (
+            <span key={d} className="row" style={{ gap: 4 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: DOMAIN_COLOR[d] ?? "var(--slate-500)" }} />
+              {d}
+            </span>
+          ))}
+        </div>
         <span className="t-faded" style={{ fontSize: 11 }}>{visible.length} tables</span>
       </div>
       <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 320px", gap: 12, minHeight: 0 }}>

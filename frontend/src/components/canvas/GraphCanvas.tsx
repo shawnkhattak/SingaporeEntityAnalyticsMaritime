@@ -1,7 +1,7 @@
 import { Background, Controls, ReactFlow, type Edge, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Building2, Database, Network, Search, ShieldAlert, Ship } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getEntityGraph, getVesselGraph } from "../../api";
 import type { GraphRead } from "../../types";
 import { Button } from "../primitives/Button";
@@ -60,21 +60,45 @@ export function GraphCanvas({ subject }: GraphCanvasProps) {
   const [mode, setMode] = useState<LayoutMode>("force");
   const [selected, setSelected] = useState<{ id: string; type: string; label: string } | null>(null);
 
-  async function load(e?: FormEvent) {
-    e?.preventDefault();
-    setError(null);
-    const id = Number(idInput);
-    if (!Number.isInteger(id) || id <= 0) {
-      setError("Provide a numeric subject ID.");
-      return;
-    }
-    try {
-      const next = type === "vessel" ? await getVesselGraph(id) : await getEntityGraph(id);
-      setGraph(next);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }
+  const load = useCallback(
+    async (e?: FormEvent) => {
+      e?.preventDefault();
+      setError(null);
+      const id = Number(idInput);
+      if (!Number.isInteger(id) || id <= 0) {
+        setError("Provide a numeric subject ID.");
+        return;
+      }
+      try {
+        const next = type === "vessel" ? await getVesselGraph(id) : await getEntityGraph(id);
+        setGraph(next);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [idInput, type],
+  );
+
+  // Auto-load when arriving via `/graph?subject=vessel&id=42`.
+  const autoLoadedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!subject) return;
+    const key = `${subject.type}-${subject.id}`;
+    if (autoLoadedRef.current === key) return;
+    autoLoadedRef.current = key;
+    setType(subject.type);
+    setIdInput(String(subject.id));
+    // Fire directly with the URL's id, not the (possibly stale) state.
+    (async () => {
+      try {
+        const next = subject.type === "vessel" ? await getVesselGraph(subject.id) : await getEntityGraph(subject.id);
+        setGraph(next);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+  }, [subject]);
 
   const positions = useMemo(() => (graph ? layout(graph, mode) : []), [graph, mode]);
 
@@ -153,23 +177,32 @@ export function GraphCanvas({ subject }: GraphCanvasProps) {
       <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 320px", gap: 12, minHeight: 0 }}>
         <div className="panel-solid" style={{ overflow: "hidden" }}>
           {graph && graph.nodes.length > 0 ? (
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              fitView
-              onNodeClick={(_, node) => {
-                const found = graph.nodes.find((n) => n.id === node.id);
-                if (found) setSelected({ id: found.id, type: found.type, label: found.label });
-              }}
-            >
-              <Background gap={20} color="#E6E9EE" />
-              <Controls />
-            </ReactFlow>
+            <>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                fitView
+                onNodeClick={(_, node) => {
+                  const found = graph.nodes.find((n) => n.id === node.id);
+                  if (found) setSelected({ id: found.id, type: found.type, label: found.label });
+                }}
+              >
+                <Background gap={20} color="#E6E9EE" />
+                <Controls />
+              </ReactFlow>
+              <GraphLegend />
+            </>
+          ) : graph ? (
+            <EmptyState
+              icon={<Network size={22} />}
+              title={`No graph data for ${type} #${idInput}`}
+              body="Try refreshing particulars or movements from the Operations console — the graph builds itself from linked observations."
+            />
           ) : (
             <EmptyState
               icon={<Network size={22} />}
-              title="Load a subgraph"
-              body="Pick Vessel or Entity, enter the numeric ID, and press Load."
+              title="Load a relationship subgraph"
+              body="Pick Vessel or Entity, enter the numeric ID, then press Load. The graph shows linked owners, sources, and risk flags."
             />
           )}
         </div>
@@ -186,6 +219,44 @@ export function GraphCanvas({ subject }: GraphCanvasProps) {
           )}
         </aside>
       </div>
+    </div>
+  );
+}
+
+function GraphLegend() {
+  return (
+    <div
+      className="panel-solid"
+      style={{
+        position: "absolute",
+        top: 12,
+        left: 12,
+        padding: "10px 12px",
+        zIndex: 5,
+        fontSize: 11,
+        maxWidth: 220,
+      }}
+    >
+      <div className="t-caption" style={{ marginBottom: 6 }}>Legend</div>
+      <LegendRow color="var(--cyan-400)" label="Vessel" />
+      <LegendRow color="var(--ocean-500)" label="Entity" />
+      <LegendRow color="var(--risk-critical)" label="Risk flag" />
+      <LegendRow color="var(--slate-500)" label="Evidence" />
+      <div className="hr" style={{ margin: "8px 0" }} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, color: "var(--slate-500)" }}>
+        <span><span style={{ display: "inline-block", width: 22, borderTop: "1.6px solid var(--ocean-500)", verticalAlign: 4 }} /> Confidence: high</span>
+        <span><span style={{ display: "inline-block", width: 22, borderTop: "1px solid var(--slate-500)", verticalAlign: 4 }} /> medium</span>
+        <span><span style={{ display: "inline-block", width: 22, borderTop: "1px dashed var(--slate-500)", verticalAlign: 4 }} /> low</span>
+      </div>
+    </div>
+  );
+}
+
+function LegendRow({ color, label }: { color: string; label: string }) {
+  return (
+    <div className="row" style={{ gap: 6, marginBottom: 2 }}>
+      <span style={{ width: 12, height: 10, borderRadius: 3, borderLeft: `4px solid ${color}`, background: "var(--white)", border: "1px solid var(--gray-200)" }} />
+      <span style={{ fontSize: 11 }}>{label}</span>
     </div>
   );
 }

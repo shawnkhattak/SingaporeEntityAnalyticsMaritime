@@ -1,4 +1,5 @@
 import type { MapFilters, RiskFlag, RiskSeverity, VesselMapFeature } from "../../types";
+import { parseBackendDate } from "../../format";
 
 const SEVERITY_ORDER: RiskSeverity[] = ["critical", "high", "medium", "low", "none"];
 
@@ -31,7 +32,7 @@ export function matchesFilters(
   if (filters.hasOpenRiskFlag && !flags.some((f) => f.status === "open")) return false;
   if (filters.timeWindow !== "live" && v.position_timestamp) {
     const cutoff = Date.now() - TIME_WINDOW_MS[filters.timeWindow];
-    if (new Date(v.position_timestamp).getTime() < cutoff) return false;
+    if (parseBackendDate(v.position_timestamp).getTime() < cutoff) return false;
   }
   return true;
 }

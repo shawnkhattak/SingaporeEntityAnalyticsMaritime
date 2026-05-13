@@ -29,7 +29,7 @@ export function RoadmapPage() {
               <p className="t-sm" style={{ margin: "6px 0 0" }}>{stage.body}</p>
               <div className="row" style={{ marginTop: 8, gap: 10, fontSize: 11 }}>
                 <a href="https://github.com/shawnkhattak/SingaporeEntityAnalyticsMaritime" target="_blank" rel="noopener noreferrer">Docs</a>
-                <a href="/ops">Operations</a>
+                <a href="/operations">Operations</a>
               </div>
             </div>
           </article>

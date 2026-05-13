@@ -2,6 +2,7 @@ import { RefreshCw } from "lucide-react";
 import { useMemo } from "react";
 import { runPositionsSnapshot } from "../../api";
 import { useApp, useRunningJobs } from "../../state/AppState";
+import { formatRelative } from "../../format";
 
 type MapStatusStripProps = {
   vesselCount: number;
@@ -11,19 +12,6 @@ type MapStatusStripProps = {
     messages: { successTitle: string; errorTitle: string; successBody?: (result: T) => string | undefined },
   ) => Promise<T | null>;
 };
-
-function relativeTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const ms = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return "just now";
-  const sec = Math.round(ms / 1000);
-  if (sec < 60) return `${sec}s ago`;
-  const min = Math.round(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  return `${Math.round(hr / 24)}d ago`;
-}
 
 export function MapStatusStrip({ vesselCount, runJob }: MapStatusStripProps) {
   const { state } = useApp();
@@ -43,7 +31,7 @@ export function MapStatusStrip({ vesselCount, runJob }: MapStatusStripProps) {
         Showing <strong>{vesselCount}</strong> {vesselCount === 1 ? "vessel" : "vessels"}
       </span>
       <span className="t-muted" style={{ fontSize: 11 }}>·</span>
-      <span className="t-muted" style={{ fontSize: 11 }}>last refresh {relativeTime(newest)}</span>
+      <span className="t-muted" style={{ fontSize: 11 }}>last refresh {formatRelative(newest)}</span>
       <button
         type="button"
         className="btn ghost icon sm"

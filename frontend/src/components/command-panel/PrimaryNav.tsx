@@ -19,7 +19,7 @@ const MAIN_NAV: NavItem[] = [
 ];
 
 const DEV_NAV: NavItem[] = [
-  { label: "Operations", href: "/ops", icon: Database, matches: (r) => r.name === "ops" },
+  { label: "Operations", href: "/operations", icon: Database, matches: (r) => r.name === "ops" },
   { label: "Roadmap", href: "/roadmap", icon: RouteIcon, matches: (r) => r.name === "roadmap" },
 ];
 

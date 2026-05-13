@@ -2,13 +2,14 @@ import { Building2, Network, Ship } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getEntity, getEntityGraph, getEntityRelationships, getEntityRiskFlags, getEntityVessels } from "../../api";
 import { navigateTo } from "../../hooks/useRoute";
-import { useApp } from "../../state/AppState";
+import { recordRecent, useApp } from "../../state/AppState";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { ErrorState } from "../primitives/ErrorState";
 import { RiskPill } from "../primitives/Pill";
 import { Skeleton } from "../primitives/Skeleton";
 import type { Entity, EntityRelationship, GraphRead, RiskFlag, VesselSummary } from "../../types";
+import { countryName, flagEmoji } from "../../labels";
 import { InspectorShell } from "./InspectorShell";
 
 type Loaded = {
@@ -31,6 +32,7 @@ export function EntityDetailInspector({ id }: { id: number }) {
       .then(([entity, vessels, relationships, risk]) => {
         setData({ entity, vessels, relationships, risk });
         dispatch({ type: "CACHE_ENTITY_RISK", id, flags: risk });
+        recordRecent("entity", id, entity.name);
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }
@@ -102,7 +104,15 @@ export function EntityDetailInspector({ id }: { id: number }) {
                 <strong style={{ fontSize: 13 }}>{v.name}</strong>
                 <div className="mono t-faded" style={{ fontSize: 11 }}>{v.imo ? `IMO ${v.imo}` : v.mmsi ? `MMSI ${v.mmsi}` : "—"}</div>
               </div>
-              {v.flag_country_code && <span className="pill">{v.flag_country_code}</span>}
+              {v.flag_country_code && (
+                <span
+                  title={countryName(v.flag_country_code) || v.flag_country_code}
+                  aria-label={countryName(v.flag_country_code) || v.flag_country_code}
+                  style={{ fontSize: 16, lineHeight: 1, cursor: "help" }}
+                >
+                  {flagEmoji(v.flag_country_code) || v.flag_country_code}
+                </span>
+              )}
             </a>
           ))}
         </div>

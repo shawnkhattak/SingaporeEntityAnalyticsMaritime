@@ -1,16 +1,16 @@
-import { RefreshCw, ShieldAlert } from "lucide-react";
+import { Anchor, RefreshCw, Scale, ShieldAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getVesselRiskFlags, runRiskRecompute } from "../../api";
 import { useApp, useJobRunner } from "../../state/AppState";
 import { Button } from "../primitives/Button";
 import { Chip } from "../primitives/Chip";
 import { EmptyState } from "../primitives/EmptyState";
-import { RiskPill } from "../primitives/Pill";
 import { Skeleton } from "../primitives/Skeleton";
 import type { RiskFlag, RiskSeverity } from "../../types";
-import { formatDate } from "../../format";
 import { requestMapCenter } from "../../hooks/useMapCenter";
 import { navigateTo } from "../../hooks/useRoute";
+import { riskLabel, type RiskKind } from "../../labels";
+import { RiskCard } from "./RiskCard";
 import { InspectorShell } from "./InspectorShell";
 
 const SEVERITIES: RiskSeverity[] = ["critical", "high", "medium", "low"];
@@ -54,14 +54,36 @@ export function RiskFeedInspector() {
 
   const flagTypes = useMemo(() => Array.from(new Set(flatFlags.map((r) => r.flag.flag_type))).sort(), [flatFlags]);
 
+  // Roll up flag_type → semantic kind so the user can quickly pick
+  // "Sanctioned" vs "Detained" vs "Watchlist" without thinking about
+  // raw backend strings.
+  const kindCounts = useMemo(() => {
+    const out: Record<RiskKind, number> = {
+      sanctioned: 0,
+      detained: 0,
+      watchlist: 0,
+      news: 0,
+      high_risk_flag: 0,
+      identity_conflict: 0,
+      other: 0,
+    };
+    for (const r of flatFlags) {
+      if (r.flag.status === "resolved") continue;
+      out[riskLabel(r.flag.flag_type).kind] += 1;
+    }
+    return out;
+  }, [flatFlags]);
+  const [kindFilter, setKindFilter] = useState<RiskKind | null>(null);
+
   const filtered = useMemo(() => {
     return flatFlags.filter((r) => {
       if (filter && r.flag.severity !== filter) return false;
       if (typeFilter && r.flag.flag_type !== typeFilter) return false;
+      if (kindFilter && riskLabel(r.flag.flag_type).kind !== kindFilter) return false;
       if (statusFilter === "open" && r.flag.status === "resolved") return false;
       return true;
     });
-  }, [flatFlags, filter, typeFilter, statusFilter]);
+  }, [flatFlags, filter, typeFilter, kindFilter, statusFilter]);
 
   const severityCounts = useMemo(() => {
     const out: Record<RiskSeverity, number> = { critical: 0, high: 0, medium: 0, low: 0, none: 0 };
@@ -99,14 +121,35 @@ export function RiskFeedInspector() {
           </Chip>
         ))}
       </div>
+      <div className="row" style={{ flexWrap: "wrap", gap: 4, marginTop: 8 }}>
+        {(
+          [
+            { kind: "sanctioned" as const, label: "Sanctioned", icon: <Scale size={11} /> },
+            { kind: "detained" as const, label: "Detained", icon: <Anchor size={11} /> },
+            { kind: "watchlist" as const, label: "Watchlist", icon: <ShieldAlert size={11} /> },
+            { kind: "high_risk_flag" as const, label: "High-risk flag", icon: null },
+            { kind: "identity_conflict" as const, label: "Identity conflict", icon: null },
+            { kind: "news" as const, label: "Adverse news", icon: null },
+          ] as { kind: RiskKind; label: string; icon: React.ReactNode }[]
+        ).map((k) => (
+          <Chip key={k.kind} selected={kindFilter === k.kind} onClick={() => setKindFilter((curr) => (curr === k.kind ? null : k.kind))}>
+            {k.icon}
+            <span>{k.label}</span>
+            <span style={{ opacity: 0.6, marginLeft: 2 }}>· {kindCounts[k.kind] ?? 0}</span>
+          </Chip>
+        ))}
+      </div>
       {flagTypes.length > 0 && (
-        <div className="row" style={{ flexWrap: "wrap", gap: 4, marginTop: 8 }}>
-          {flagTypes.map((t) => (
-            <Chip key={t} selected={typeFilter === t} onClick={() => setTypeFilter((curr) => (curr === t ? null : t))}>
-              {t}
-            </Chip>
-          ))}
-        </div>
+        <details style={{ marginTop: 8 }}>
+          <summary className="t-caption" style={{ cursor: "pointer" }}>Filter by raw flag type</summary>
+          <div className="row" style={{ flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+            {flagTypes.map((t) => (
+              <Chip key={t} selected={typeFilter === t} onClick={() => setTypeFilter((curr) => (curr === t ? null : t))}>
+                {t}
+              </Chip>
+            ))}
+          </div>
+        </details>
       )}
       <div className="row" style={{ marginTop: 8, fontSize: 11 }}>
         <label className="row" style={{ gap: 4 }}>
@@ -116,15 +159,36 @@ export function RiskFeedInspector() {
       </div>
 
       {loading && <Skeleton height={48} style={{ marginTop: 12 }} />}
-      {!loading && filtered.length === 0 && <EmptyState icon={<ShieldAlert size={20} />} title="No risk flags match" body="Try clearing filters or refreshing risk." />}
+      {!loading && filtered.length === 0 && (
+        <EmptyState
+          compact
+          icon={<ShieldAlert size={18} />}
+          title={flatFlags.length === 0 ? "No risk flags loaded" : "No risk flags match these filters"}
+          body={
+            flatFlags.length === 0
+              ? "Recompute risk to derive flags from the current vessel + observation set."
+              : "Clear the severity, kind, or status filters to see more."
+          }
+          action={
+            <Button
+              size="sm"
+              variant="primary"
+              leadingIcon={<RefreshCw size={11} />}
+              onClick={() => runJob("risk-recompute", () => runRiskRecompute(), { successTitle: "Risk recompute complete", errorTitle: "Risk recompute failed" })}
+            >
+              Recompute risk
+            </Button>
+          }
+        />
+      )}
 
       <div className="col" style={{ marginTop: 12, gap: 6 }}>
         {filtered.map((r) => (
-          <div
-            key={`${r.flag.id}`}
-            className={`card stripe-${r.flag.severity === "critical" ? "crit" : r.flag.severity === "high" ? "high" : r.flag.severity === "medium" ? "med" : "low"}`}
-            style={{ padding: "10px 12px 10px 14px", cursor: "pointer" }}
-            onClick={() => {
+          <RiskCard
+            key={r.flag.id}
+            flag={r.flag}
+            subject={r.subject}
+            onOpenSubject={() => {
               if (r.vesselId != null) {
                 const v = state.vessels.find((x) => x.vessel_id === r.vesselId);
                 if (v) requestMapCenter({ lng: v.longitude, lat: v.latitude, zoom: 8 });
@@ -133,15 +197,7 @@ export function RiskFeedInspector() {
                 navigateTo(`/entities/${r.entityId}`);
               }
             }}
-          >
-            <div className="row">
-              <RiskPill severity={r.flag.severity as never} />
-              <strong style={{ flex: 1, marginLeft: 6 }}>{r.flag.flag_type}</strong>
-              <span className="t-faded" style={{ fontSize: 11 }}>{formatDate(r.flag.created_at)}</span>
-            </div>
-            <div className="t-sm" style={{ marginTop: 4 }}>{r.flag.summary}</div>
-            <div className="t-faded" style={{ fontSize: 11, marginTop: 4 }}>{r.subject}</div>
-          </div>
+          />
         ))}
       </div>
     </InspectorShell>

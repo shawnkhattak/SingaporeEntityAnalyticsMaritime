@@ -100,7 +100,17 @@ def _first_value(row: dict[str, Any], nested: dict[str, Any], *keys: str) -> Any
     return None
 
 
+_INVALID_IDENTIFIERS = {"", "0", "00", "000", "0000", "none", "null", "n/a", "na", "unknown"}
+
+
 def _clean_identifier(value: Any) -> str | None:
+    """Normalize a source-provided identifier (IMO/MMSI/call sign).
+
+    Treats placeholder values like "0" as missing — OCEANS-X commonly
+    reports IMO=0 for vessels without a registered IMO number, and
+    storing the literal "0" causes hundreds of distinct AIS contacts to
+    dedupe into a single "vessel".
+    """
     if value is None:
         return None
     text = str(value).strip()
@@ -108,6 +118,8 @@ def _clean_identifier(value: Any) -> str | None:
         return None
     if text.endswith(".0"):
         text = text[:-2]
+    if text.lower() in _INVALID_IDENTIFIERS:
+        return None
     return text
 
 
@@ -534,11 +546,23 @@ class IngestionService:
                 base_url=settings.oceansx_base_url,
                 timeout_seconds=settings.oceansx_request_timeout_seconds,
             )
-            today = datetime.now(UTC).date().isoformat()
-            if kind == "due-arrive":
-                return extract_snapshot_rows(await client.fetch_due_to_arrive(today, 24))
-            if kind == "due-depart":
-                return extract_snapshot_rows(await client.fetch_due_to_depart(today, 24))
+            # OCEANS-X port-activity endpoints accept the date in YYYYMMDD
+            # form; ISO with dashes returns HTTP 400. Try the compact form
+            # first and fall back to ISO so we surface the upstream error
+            # body if both are wrong.
+            now = datetime.now(UTC).date()
+            primary = now.strftime("%Y%m%d")
+            fallback = now.isoformat()
+            for fmt in (primary, fallback):
+                try:
+                    if kind == "due-arrive":
+                        return extract_snapshot_rows(await client.fetch_due_to_arrive(fmt, 24))
+                    if kind == "due-depart":
+                        return extract_snapshot_rows(await client.fetch_due_to_depart(fmt, 24))
+                except Exception:
+                    if fmt is fallback:
+                        raise
+                    continue
         raise ValueError("mode must be live")
 
     @staticmethod

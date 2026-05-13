@@ -7,6 +7,7 @@ import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { Modal } from "../primitives/Modal";
 import type { RiskFlag } from "../../types";
+import { EvidenceLink } from "../primitives/EvidenceLink";
 import { formatDate } from "../../format";
 import { InspectorShell } from "./InspectorShell";
 
@@ -43,14 +44,29 @@ export function SanctionsInspector() {
           <Button size="sm" variant="danger" leadingIcon={<RefreshCw size={12} />} onClick={() => setConfirmOpen(true)}>
             Refresh from API
           </Button>
-          <Button size="sm" leadingIcon={<Database size={12} />} onClick={() => navigateTo("/ops")}>
+          <Button size="sm" leadingIcon={<Database size={12} />} onClick={() => navigateTo("/operations")}>
             Upload CSV in Ops
           </Button>
         </div>
       }
     >
       {matches.length === 0 && (
-        <EmptyState icon={<Scale size={22} />} title="No sanctions matches loaded" body="Open the Operations Console to upload a CSV or refresh the API." />
+        <EmptyState
+          compact
+          icon={<Scale size={18} />}
+          title="No sanctions matches"
+          body="Sanctions ingestion runs from the Operations console — upload a CSV, pull the latest CSV URL, or call the OpenSanctions API (uses 1 quota)."
+          action={
+            <Button size="sm" variant="primary" onClick={() => navigateTo("/operations")}>
+              Open operations
+            </Button>
+          }
+          secondary={
+            <Button size="sm" variant="danger" onClick={() => setConfirmOpen(true)}>
+              Refresh from API
+            </Button>
+          }
+        />
       )}
       <div className="col" style={{ gap: 6 }}>
         {matches.map((m) => (
@@ -60,12 +76,12 @@ export function SanctionsInspector() {
               <span className="t-faded" style={{ fontSize: 11 }}>{formatDate(m.flag.created_at)}</span>
             </div>
             <div className="t-sm" style={{ marginTop: 4 }}>{m.flag.summary}</div>
-            {m.flag.evidence_id != null && <a href={`/evidence/${m.flag.evidence_id}`} className="mono" style={{ fontSize: 11 }}>Evidence #{m.flag.evidence_id}</a>}
+            <EvidenceLink id={m.flag.evidence_id} variant="chip" />
           </a>
         ))}
       </div>
       <p className="t-faded" style={{ fontSize: 11, marginTop: 14 }}>
-        Sanctions CSV ingestion lives in <a href="/ops">Operations Console</a>. This view is read-only.
+        Sanctions CSV ingestion lives in <a href="/operations">Operations Console</a>. This view is read-only.
       </p>
 
       <Modal

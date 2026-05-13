@@ -170,6 +170,50 @@ export function useApp(): AppContextValue {
   return ctx;
 }
 
+/** Canonical stats snapshot used by every dashboard count tile so the
+ *  same numbers appear in every consumer. Keys are aligned to the
+ *  backend's `getDevTableCounts()` response — not invented strings. */
+export type StatsSnapshot = {
+  vessels: number | null;
+  positions: number | null;
+  portEvents: number | null;
+  sanctionsRecords: number | null;
+  riskFlags: number | null;
+  newsArticles: number | null;
+  entities: number | null;
+  evidenceObservations: number | null;
+  loaded: boolean;
+};
+
+export function useStatsSnapshot(): StatsSnapshot {
+  const { state } = useApp();
+  const tc = state.tableCounts;
+  if (!tc) {
+    return {
+      vessels: null,
+      positions: null,
+      portEvents: null,
+      sanctionsRecords: null,
+      riskFlags: null,
+      newsArticles: null,
+      entities: null,
+      evidenceObservations: null,
+      loaded: false,
+    };
+  }
+  return {
+    vessels: tc.vessels ?? null,
+    positions: tc.vessel_positions_latest ?? null,
+    portEvents: tc.port_events ?? null,
+    sanctionsRecords: tc.sanctions_records ?? null,
+    riskFlags: tc.risk_flags ?? null,
+    newsArticles: tc.news_articles ?? null,
+    entities: tc.entities ?? null,
+    evidenceObservations: tc.source_observations ?? null,
+    loaded: true,
+  };
+}
+
 export function useFilters() {
   const { state, dispatch } = useApp();
   return {
@@ -274,13 +318,45 @@ export function useJobRunner() {
 
 /** Persist recently viewed vessels for the command palette. */
 export function recordRecentVessel(id: number) {
+  recordRecent("vessel", id);
+}
+
+export type RecentKind = "vessel" | "entity" | "evidence" | "port";
+
+export type RecentEntry = {
+  kind: RecentKind;
+  id: number | string;
+  label?: string;
+  at: number;
+};
+
+const RECENT_KEY = "seam:recent";
+
+export function recordRecent(kind: RecentKind, id: number | string, label?: string) {
   try {
-    const raw = localStorage.getItem("seam:recent-vessels");
-    const arr: number[] = raw ? JSON.parse(raw) : [];
-    const next = [id, ...arr.filter((v) => v !== id)].slice(0, 8);
-    localStorage.setItem("seam:recent-vessels", JSON.stringify(next));
+    const raw = localStorage.getItem(RECENT_KEY);
+    const arr: RecentEntry[] = raw ? JSON.parse(raw) : [];
+    const filtered = arr.filter((e) => !(e.kind === kind && String(e.id) === String(id)));
+    const next: RecentEntry[] = [{ kind, id, label, at: Date.now() }, ...filtered].slice(0, 20);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+    // Legacy: keep the old vessels-only key in sync so older callers still work.
+    if (kind === "vessel") {
+      const ids = next.filter((e) => e.kind === "vessel").map((e) => Number(e.id)).filter(Number.isFinite);
+      localStorage.setItem("seam:recent-vessels", JSON.stringify(ids.slice(0, 8)));
+    }
   } catch {
     /* ignore */
+  }
+}
+
+export function readRecent(): RecentEntry[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
   }
 }
 

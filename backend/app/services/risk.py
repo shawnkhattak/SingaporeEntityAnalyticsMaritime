@@ -1,8 +1,10 @@
-from sqlalchemy import desc, select
+from datetime import datetime, UTC
+
+from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.evidence import SourceObservation
-from app.models.maritime import Entity, Relationship, Vessel
+from app.models.maritime import Vessel
 from app.models.risk import RiskFlag
 from app.schemas.risk import RiskFlagRead
 
@@ -36,23 +38,29 @@ class RiskService:
         return [RiskFlagRead.model_validate(row) for row in rows]
 
     async def recompute(self, vessel_id: int | None = None) -> dict[str, int]:
-        stats = {"vessels_seen": 0, "flags_inserted": 0}
+        stats = {"vessels_seen": 0, "flags_inserted": 0, "flags_retired": 0}
+
+        # Retire historical "unknown_ownership" flags — the rule was removed.
+        retire_stmt = (
+            update(RiskFlag)
+            .where(RiskFlag.flag_type == "unknown_ownership", RiskFlag.status == "active")
+            .values(status="resolved", resolved_at=datetime.now(UTC))
+        )
+        if vessel_id is not None:
+            retire_stmt = retire_stmt.where(RiskFlag.vessel_id == vessel_id)
+        retired = await self.session.execute(retire_stmt)
+        stats["flags_retired"] = retired.rowcount or 0
+
         statement = select(Vessel)
         if vessel_id is not None:
             statement = statement.where(Vessel.id == vessel_id)
         vessels = list(await self.session.scalars(statement))
         for vessel in vessels:
             stats["vessels_seen"] += 1
-            owner = await self.session.scalar(
-                select(Relationship).where(
-                    Relationship.vessel_id == vessel.id,
-                    Relationship.relationship_type.in_(["registered_owner", "registeredOwnership"]),
-                )
-            )
-            if owner is None:
-                stats["flags_inserted"] += int(
-                    await self._ensure_flag(vessel.id, None, "unknown_ownership", "medium", "No registered owner relationship is available.", None)
-                )
+            # NOTE: the old "unknown_ownership" rule was removed. OCEANS-X
+            # currently exposes registered-owner relationships only for
+            # Singapore-flagged vessels, so absence of ownership data on
+            # other flags is uninformative and shouldn't penalize a vessel.
             severity = flag_country_severity(vessel.flag_country_code)
             if severity:
                 stats["flags_inserted"] += int(

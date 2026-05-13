@@ -52,7 +52,12 @@ export function InspectorShell({ title, breadcrumb, tabs, activeTab = 0, onTabCh
           <Tabs items={tabs} active={activeTab} onChange={onTabChange ?? (() => undefined)} />
         </div>
       )}
-      <div className="inspector-body scroll">{children}</div>
+      <div className="inspector-body scroll">
+        {/* Re-keying on activeTab forces a remount of the panel
+            contents which retriggers the CSS fade-in animation —
+            tab swaps feel like proper transitions, not a snap. */}
+        <div key={activeTab} className="anim-fade-in">{children}</div>
+      </div>
       {footer && <footer className="inspector-foot">{footer}</footer>}
     </aside>
   );

@@ -16,15 +16,42 @@ import { MapUtilityBar } from "./MapUtilityBar";
 import { MapStatusStrip } from "./MapStatusStrip";
 import { VesselPopover } from "./VesselPopover";
 
+// Minimal maritime basemap: CartoDB Positron *no-labels* tiles.
+// Shows land/coastline shape only — no place names, no roads, no
+// buildings. Ocean becomes the dominant surface so vessels read as
+// the primary content. Free, no API key required.
 const BASE_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-  sources: {},
+  sources: {
+    basemap: {
+      type: "raster",
+      tiles: [
+        "https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}@2x.png",
+        "https://b.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}@2x.png",
+        "https://c.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}@2x.png",
+        "https://d.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}@2x.png",
+      ],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution:
+        '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a>',
+    },
+  },
   layers: [
+    // Ocean wash sits behind everything; CartoDB tiles are transparent
+    // over the sea so this color shows through.
+    { id: "ocean", type: "background", paint: { "background-color": "#E5EFF6" } },
     {
-      id: "background",
-      type: "background",
-      paint: { "background-color": "#E5EFF6" },
+      id: "basemap",
+      type: "raster",
+      source: "basemap",
+      paint: {
+        // Pull a touch of saturation so the beige land sits quietly
+        // against the ocean tone.
+        "raster-saturation": -0.2,
+        "raster-contrast": -0.04,
+      },
     },
   ],
 };
@@ -37,7 +64,63 @@ const SEVERITY_COLOR: Record<string, string> = {
   none: "#3FB6C9",
 };
 
+// Singapore Island defaults — the workspace centers there because that's
+// the operating picture analysts open the tool against.
+const DEFAULT_CENTER: [number, number] = [103.85, 1.29];
+const DEFAULT_ZOOM = 9.2;
+
 const geoCache = new Map<string, GeoJSON.FeatureCollection>();
+
+/**
+ * Build a single colored AIS-style triangle icon. We render one image
+ * per severity (no SDF + halo combo, which was painting a square aura
+ * behind every vessel). Each rasterized icon has a 1.5 px white stroke
+ * baked in, so the silhouette stays crisp against any basemap.
+ *
+ * Rotation 0 = north. `icon-rotate` aligns the bow with the vessel's
+ * heading.
+ */
+function buildVesselArrow(fill: string): { width: number; height: number; data: Uint8ClampedArray } {
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return { width: size, height: size, data: new Uint8ClampedArray(size * size * 4) };
+  ctx.clearRect(0, 0, size, size);
+  ctx.imageSmoothingEnabled = true;
+  ctx.translate(size / 2, size / 2);
+
+  ctx.beginPath();
+  ctx.moveTo(0, -26);
+  ctx.quadraticCurveTo(2, -22, 14, 18);
+  ctx.lineTo(10, 22);
+  ctx.quadraticCurveTo(0, 18, -10, 22);
+  ctx.lineTo(-14, 18);
+  ctx.quadraticCurveTo(-2, -22, 0, -26);
+  ctx.closePath();
+
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "#ffffff";
+  ctx.stroke();
+
+  return {
+    width: size,
+    height: size,
+    data: new Uint8ClampedArray(ctx.getImageData(0, 0, size, size).data),
+  };
+}
+
+const VESSEL_ICON_IDS: Record<string, string> = {
+  critical: "vessel-critical",
+  high: "vessel-high",
+  medium: "vessel-medium",
+  low: "vessel-low",
+  none: "vessel-none",
+};
 
 type PopoverState = { x: number; y: number; vessel: VesselMapFeature; severity: string } | null;
 
@@ -51,27 +134,57 @@ export function MapCanvas() {
   const { select, clear } = useSelection();
   const runJob = useJobRunner();
 
-  // Persist a snapshot of risk + filters for click handlers.
+  // Refs that always point at the latest values so click handlers
+  // (registered once during map init) read fresh state.
   const filtersRef = useRef(filters);
   const riskRef = useRef(state.riskByVessel);
+  const vesselsRef = useRef(state.vessels);
   filtersRef.current = filters;
   riskRef.current = state.riskByVessel;
+  vesselsRef.current = state.vessels;
 
   // Initial map setup — once per SPA lifetime.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: BASE_STYLE,
-      center: [103.85, 1.28],
-      zoom: 4.2,
-      attributionControl: { compact: true },
-      maxZoom: 16,
+    const container = containerRef.current;
+    // eslint-disable-next-line no-console
+    console.info("[SEAM] mounting map", {
+      width: container.clientWidth,
+      height: container.clientHeight,
+    });
+    let map: maplibregl.Map;
+    try {
+      map = new maplibregl.Map({
+        container,
+        style: BASE_STYLE,
+        center: DEFAULT_CENTER,
+        zoom: DEFAULT_ZOOM,
+        attributionControl: { compact: true },
+        maxZoom: 16,
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[SEAM] MapLibre init failed", err);
+      return;
+    }
+    map.on("error", (e) => {
+      // eslint-disable-next-line no-console
+      console.error("[SEAM] MapLibre error", e?.error ?? e);
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
 
     map.on("load", () => {
+      // Register one pre-colored vessel image per severity. No SDF, no
+      // halo — the white stroke is baked into the bitmap so there's
+      // never a square aura behind the silhouette.
+      (Object.keys(VESSEL_ICON_IDS) as (keyof typeof SEVERITY_COLOR)[]).forEach((sev) => {
+        const id = VESSEL_ICON_IDS[sev];
+        if (!map.hasImage(id)) {
+          map.addImage(id, buildVesselArrow(SEVERITY_COLOR[sev]));
+        }
+      });
+
       // Vessels source + layers
       map.addSource("vessels", {
         type: "geojson",
@@ -88,7 +201,7 @@ export function MapCanvas() {
         source: "vessels",
         filter: ["all", ["!", ["has", "point_count"]], ["!=", ["get", "severity"], "none"]],
         paint: {
-          "circle-radius": 16,
+          "circle-radius": 18,
           "circle-color": [
             "match",
             ["get", "severity"],
@@ -109,26 +222,48 @@ export function MapCanvas() {
 
       map.addLayer({
         id: "vessels-point",
-        type: "circle",
+        type: "symbol",
         source: "vessels",
         filter: ["!", ["has", "point_count"]],
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 3.5, 11, 7],
-          "circle-color": [
+        layout: {
+          // Pick the pre-colored icon based on severity. None/unknown
+          // vessels fall through to the cyan default.
+          "icon-image": [
             "match",
             ["get", "severity"],
             "critical",
-            SEVERITY_COLOR.critical,
+            VESSEL_ICON_IDS.critical,
             "high",
-            SEVERITY_COLOR.high,
+            VESSEL_ICON_IDS.high,
             "medium",
-            SEVERITY_COLOR.medium,
+            VESSEL_ICON_IDS.medium,
             "low",
-            SEVERITY_COLOR.low,
-            SEVERITY_COLOR.none,
+            VESSEL_ICON_IDS.low,
+            VESSEL_ICON_IDS.none,
           ],
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 1.5,
+          "icon-rotate": ["coalesce", ["get", "heading"], ["get", "course"], 0],
+          "icon-rotation-alignment": "map",
+          "icon-pitch-alignment": "viewport",
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          "icon-size": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            3,
+            0.22,
+            6,
+            0.28,
+            9,
+            0.34,
+            12,
+            0.42,
+            15,
+            0.55,
+          ],
+        },
+        paint: {
+          "icon-opacity": 0.95,
         },
       });
 
@@ -138,9 +273,9 @@ export function MapCanvas() {
         source: "vessels",
         filter: ["==", ["get", "vessel_id"], -1],
         paint: {
-          "circle-radius": 11,
-          "circle-color": "#3A7FB8",
-          "circle-stroke-color": "#ffffff",
+          "circle-radius": 14,
+          "circle-color": "rgba(58,127,184,0.22)",
+          "circle-stroke-color": "#3A7FB8",
           "circle-stroke-width": 2,
         },
       });
@@ -165,8 +300,9 @@ export function MapCanvas() {
         source: "vessels",
         filter: ["has", "point_count"],
         layout: {
-          "text-field": "{point_count_abbreviated}",
+          "text-field": ["get", "point_count_abbreviated"],
           "text-size": 11,
+          "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
         },
         paint: {
           "text-color": "#ffffff",
@@ -178,14 +314,22 @@ export function MapCanvas() {
         if (!f) return;
         const props = f.properties as Record<string, unknown>;
         const id = Number(props.vessel_id);
+        if (!Number.isFinite(id)) return;
         const severity = String(props.severity ?? "none");
         const coords = (f.geometry as GeoJSON.Point).coordinates;
-        const point = map.project([coords[0], coords[1]]);
-        const v = findVessel(id);
-        if (!v) return;
-        setPopover({ x: point.x, y: point.y, vessel: v, severity });
+        // Read latest vessels via the ref (the closure was registered once
+        // when the map mounted, before any vessels were loaded).
+        const v = vesselsRef.current.find((x) => x.vessel_id === id) ?? null;
+        // Navigate first so the user always lands on the detail view —
+        // popover is best-effort enrichment.
         select({ kind: "vessel", id });
         navigateTo(`/vessels/${id}`);
+        if (v) {
+          const point = map.project([coords[0], coords[1]]);
+          setPopover({ x: point.x, y: point.y, vessel: v, severity });
+        } else {
+          setPopover(null);
+        }
       });
 
       map.on("click", "vessels-cluster", (e) => {
@@ -239,10 +383,6 @@ export function MapCanvas() {
       mapRef.current = null;
     };
   }, [select, clear]);
-
-  function findVessel(id: number): VesselMapFeature | null {
-    return state.vessels.find((v) => v.vessel_id === id) ?? null;
-  }
 
   // Refresh vessels on the map whenever data or filters change.
   const filteredVessels = useMemo(
@@ -351,12 +491,36 @@ export function MapCanvas() {
     };
   }, [dispatch]);
 
-  // External pan requests (from inspectors).
+  // Hold panel/inspector geometry in refs so the map-center subscriber
+  // (registered once) can compute fresh padding on every fly-to.
+  const layoutRef = useRef({
+    panelCollapsed: state.isPanelCollapsed,
+    inspectorOpen: state.isInspectorOpen,
+    inspectorWidth: state.inspectorWidth,
+  });
+  layoutRef.current = {
+    panelCollapsed: state.isPanelCollapsed,
+    inspectorOpen: state.isInspectorOpen,
+    inspectorWidth: state.inspectorWidth,
+  };
+
+  // External pan requests (from inspectors). Pad the visible area so the
+  // target lands in the open space to the right of the side menus.
   useEffect(() => {
     return onMapCenter((ev) => {
       const map = mapRef.current;
       if (!map) return;
-      map.flyTo({ center: [ev.lng, ev.lat], zoom: ev.zoom ?? Math.max(map.getZoom(), 6), duration: 400 });
+      const panelWidth = layoutRef.current.panelCollapsed ? 64 : 320;
+      const inspectorWidth = layoutRef.current.inspectorOpen ? layoutRef.current.inspectorWidth : 0;
+      // 16px viewport gutter + panel + 16px gap + (optional inspector) + 16px gap
+      const left = 16 + panelWidth + 16 + (inspectorWidth ? inspectorWidth + 16 : 0);
+      const padding = ev.padding ?? { left, right: 16, top: 16, bottom: 16 };
+      map.flyTo({
+        center: [ev.lng, ev.lat],
+        zoom: ev.zoom ?? Math.max(map.getZoom(), 10),
+        padding,
+        duration: 500,
+      });
     });
   }, []);
 
@@ -416,6 +580,9 @@ export function MapCanvas() {
 }
 
 function featureFor(v: VesselMapFeature, flags: RiskFlag[] | undefined): GeoJSON.Feature {
+  // Prefer true heading; some AIS feeds only emit course-over-ground.
+  const heading = v.heading_degrees ?? null;
+  const course = v.course_degrees ?? null;
   return {
     type: "Feature",
     geometry: { type: "Point", coordinates: [v.longitude, v.latitude] },
@@ -424,6 +591,8 @@ function featureFor(v: VesselMapFeature, flags: RiskFlag[] | undefined): GeoJSON
       name: v.name,
       imo: v.imo,
       mmsi: v.mmsi,
+      heading,
+      course,
       severity: highestSeverity(flags ?? []),
     },
   };

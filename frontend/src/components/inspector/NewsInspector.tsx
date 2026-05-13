@@ -47,7 +47,22 @@ export function NewsInspector() {
     >
       {loading && <Skeleton height={64} />}
       {!loading && news.length === 0 && (
-        <EmptyState icon={<Newspaper size={22} />} title="No news ingested yet" body="Run the RSS refresh to fetch the latest stories." />
+        <EmptyState
+          compact
+          icon={<Newspaper size={18} />}
+          title="No news ingested yet"
+          body="Pull the latest from your configured RSS feeds to populate this view."
+          action={
+            <Button
+              size="sm"
+              variant="primary"
+              leadingIcon={<RefreshCw size={11} />}
+              onClick={() => runJob("news", runNewsLive, { successTitle: "News refreshed", errorTitle: "News failed" }).then(load)}
+            >
+              Refresh RSS now
+            </Button>
+          }
+        />
       )}
       <div className="col" style={{ gap: 6 }}>
         {news.map((n) => {
