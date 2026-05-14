@@ -56,6 +56,7 @@ class VesselEventRead(BaseModel):
 
     id: int
     vessel_id: int | None
+    vessel: VesselSummary | None = None
     port_code: str | None
     port_name: str | None
     event_type: str

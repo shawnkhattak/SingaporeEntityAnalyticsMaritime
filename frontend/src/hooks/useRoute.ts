@@ -55,7 +55,9 @@ export function useRoute(): RouteState {
       if (event.defaultPrevented) return;
       if (event.button !== 0) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const anchor = (event.target as HTMLElement).closest("a");
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest("a");
       if (!anchor || anchor.target || anchor.hasAttribute("download") || anchor.getAttribute("rel") === "external") return;
       if (anchor.origin !== window.location.origin) return;
       const samePath = anchor.pathname === window.location.pathname && anchor.search === window.location.search;

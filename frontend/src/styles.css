@@ -485,6 +485,21 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   box-shadow: var(--shadow-card), inset 0 0 0 1px rgba(58, 127, 184, 0.06);
 }
 .cmd-panel.collapsed { width: 60px; }
+.brand-header {
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--gray-200);
+}
+.brand-header.collapsed {
+  padding: 12px 8px 10px;
+  justify-content: center;
+  gap: 4px;
+}
+.brand-header.collapsed .spacer { display: none; }
+.brand-header.collapsed .btn.icon.sm {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+}
 .cmd-panel-body { flex: 1; overflow-y: auto; padding: 0 12px 12px; }
 .cmd-section { padding: 8px 0; border-top: 1px solid var(--gray-200); }
 .cmd-section:first-child { border-top: 0; }

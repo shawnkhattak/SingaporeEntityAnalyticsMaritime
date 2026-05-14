@@ -1,43 +1,40 @@
 import { Database, RefreshCw, Scale } from "lucide-react";
-import { useMemo, useState } from "react";
-import { runSanctionsLive } from "../../api";
+import { useEffect, useState } from "react";
+import { getRiskFeed, runSanctionsLive } from "../../api";
 import { navigateTo } from "../../hooks/useRoute";
-import { useApp, useJobRunner } from "../../state/AppState";
+import { useJobRunner } from "../../state/AppState";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { Modal } from "../primitives/Modal";
-import type { RiskFlag } from "../../types";
+import type { RiskFeedItem } from "../../types";
 import { EvidenceLink } from "../primitives/EvidenceLink";
+import { Skeleton } from "../primitives/Skeleton";
 import { formatDate } from "../../format";
 import { InspectorShell } from "./InspectorShell";
 
+const SANCTIONS_FLAG_TYPES = ["sanctions_match", "sanctions"];
+
 export function SanctionsInspector() {
-  const { state } = useApp();
+  const [matches, setMatches] = useState<RiskFeedItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const runJob = useJobRunner();
 
-  const matches: { flag: RiskFlag; subject: string; href: string }[] = useMemo(() => {
-    const out: { flag: RiskFlag; subject: string; href: string }[] = [];
-    for (const [idStr, list] of Object.entries(state.riskByVessel)) {
-      const id = Number(idStr);
-      const v = state.vessels.find((x) => x.vessel_id === id);
-      list
-        .filter((f) => f.flag_type === "sanctions")
-        .forEach((flag) => out.push({ flag, subject: v?.name ?? `Vessel #${id}`, href: `/vessels/${id}` }));
-    }
-    for (const [idStr, list] of Object.entries(state.riskByEntity)) {
-      const id = Number(idStr);
-      list
-        .filter((f) => f.flag_type === "sanctions")
-        .forEach((flag) => out.push({ flag, subject: `Entity #${id}`, href: `/entities/${id}` }));
-    }
-    return out;
-  }, [state.riskByVessel, state.riskByEntity, state.vessels]);
+  function load() {
+    setError(null);
+    getRiskFeed(500, false, SANCTIONS_FLAG_TYPES)
+      .then(setMatches)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
 
   return (
     <InspectorShell
       breadcrumb="Sanctions"
-      title={`Sanctions · ${matches.length}`}
+      title={`Sanctions · ${matches?.length ?? 0}`}
       onClose={() => window.history.back()}
       footer={
         <div className="row" style={{ gap: 6 }}>
@@ -45,12 +42,28 @@ export function SanctionsInspector() {
             Refresh from API
           </Button>
           <Button size="sm" leadingIcon={<Database size={12} />} onClick={() => navigateTo("/operations")}>
-            Upload CSV in Ops
+            Upload CSV in Operations
           </Button>
         </div>
       }
     >
-      {matches.length === 0 && (
+      {matches === null && !error && (
+        <div className="col" style={{ gap: 6, marginTop: 12 }}>
+          <Skeleton height={56} />
+          <Skeleton height={56} />
+          <Skeleton height={56} />
+        </div>
+      )}
+      {error && (
+        <EmptyState
+          compact
+          icon={<Scale size={18} />}
+          title="Could not load sanctions"
+          body={error}
+          action={<Button size="sm" onClick={load}>Retry</Button>}
+        />
+      )}
+      {matches !== null && matches.length === 0 && !error && (
         <EmptyState
           compact
           icon={<Scale size={18} />}
@@ -69,19 +82,26 @@ export function SanctionsInspector() {
         />
       )}
       <div className="col" style={{ gap: 6 }}>
-        {matches.map((m) => (
-          <a key={m.flag.id} href={m.href} className="card stripe-crit" style={{ padding: "10px 12px 10px 14px", display: "block", textDecoration: "none", color: "inherit" }}>
-            <div className="row">
-              <strong style={{ flex: 1 }}>{m.subject}</strong>
-              <span className="t-faded" style={{ fontSize: 11 }}>{formatDate(m.flag.created_at)}</span>
-            </div>
-            <div className="t-sm" style={{ marginTop: 4 }}>{m.flag.summary}</div>
-            <EvidenceLink id={m.flag.evidence_id} variant="chip" />
-          </a>
-        ))}
+        {matches?.map((m) => {
+          const href = m.vessel_id != null
+            ? `/vessels/${m.vessel_id}`
+            : m.entity_id != null
+            ? `/entities/${m.entity_id}`
+            : "#";
+          return (
+            <a key={m.flag.id} href={href} className="card stripe-crit" style={{ padding: "10px 12px 10px 14px", display: "block", textDecoration: "none", color: "inherit" }}>
+              <div className="row">
+                <strong style={{ flex: 1 }}>{m.subject}</strong>
+                <span className="t-faded" style={{ fontSize: 11 }}>{formatDate(m.flag.created_at)}</span>
+              </div>
+              <div className="t-sm" style={{ marginTop: 4 }}>{m.flag.summary}</div>
+              <EvidenceLink id={m.flag.evidence_id} variant="chip" />
+            </a>
+          );
+        })}
       </div>
       <p className="t-faded" style={{ fontSize: 11, marginTop: 14 }}>
-        Sanctions CSV ingestion lives in <a href="/operations">Operations Console</a>. This view is read-only.
+        Sanctions CSV ingestion lives in <a href="/operations">Operations console</a>. This view is read-only.
       </p>
 
       <Modal
@@ -94,7 +114,7 @@ export function SanctionsInspector() {
           variant: "danger",
           onClick: () => {
             setConfirmOpen(false);
-            runJob("sanctions", runSanctionsLive, { successTitle: "Sanctions refreshed", errorTitle: "Sanctions failed" });
+            runJob("sanctions", runSanctionsLive, { successTitle: "Sanctions refreshed", errorTitle: "Sanctions failed" }).then(load);
           },
         }}
       >

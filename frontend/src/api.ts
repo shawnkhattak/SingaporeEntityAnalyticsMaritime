@@ -5,6 +5,7 @@ import type {
   EntityRelationship,
   GraphRead,
   IngestionJob,
+  RiskFeedItem,
   RiskFlag,
   SchemaGraph,
   VesselDetail,
@@ -63,7 +64,7 @@ export async function loadDevState(): Promise<DevState & { vessels: VesselMapFea
     getJson<DevState["jobs"]>("/api/dev/ingestion/jobs"),
     getJson<DevState["logs"]>("/api/dev/ingestion/logs"),
     getJson<DevState["health"]>("/api/dev/source-health"),
-    getJson<VesselMapFeature[]>("/api/map/vessels?limit=25"),
+    getJson<VesselMapFeature[]>("/api/map/vessels?limit=5000&scope=latest-snapshot"),
   ]);
   return { jobs, logs, health, vessels };
 }
@@ -92,8 +93,12 @@ export function runMovements(vesselId: number) {
   return postJson<IngestionJob>(`/api/dev/ingestion/vessel-movements/${vesselId}?mode=live`);
 }
 
-export function runPortActivity(kind: "due-arrive" | "due-depart") {
-  return postJson<IngestionJob>(`/api/dev/ingestion/port-activity?kind=${kind}&mode=live`);
+export function runPortActivity(kind: "due-arrive" | "due-depart", date?: string) {
+  const params = new URLSearchParams({ kind, mode: "live" });
+  if (date) {
+    params.set("date", date);
+  }
+  return postJson<IngestionJob>(`/api/dev/ingestion/port-activity?${params.toString()}`);
 }
 
 export function runRefreshLive() {
@@ -117,7 +122,7 @@ export function runRiskRecompute(vesselId?: number) {
 }
 
 export function loadMapVessels(limit = 250) {
-  return getJson<VesselMapFeature[]>(`/api/map/vessels?limit=${limit}`);
+  return getJson<VesselMapFeature[]>(`/api/map/vessels?limit=${limit}&scope=latest-snapshot`);
 }
 
 export function searchVessels(query: string, limit = 20) {
@@ -160,6 +165,34 @@ export function getVesselRiskFlags(vesselId: number) {
   return getJson<RiskFlag[]>(`/api/vessels/${vesselId}/risk-flags`);
 }
 
+export function getRiskFeed(limit = 250, includeResolved = false, flagTypes?: string[]) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (includeResolved) {
+    params.set("include_resolved", "true");
+  }
+  if (flagTypes && flagTypes.length > 0) {
+    for (const t of flagTypes) params.append("flag_types", t);
+  }
+  return getJson<RiskFeedItem[]>(`/api/risk/feed?${params.toString()}`);
+}
+
+export function getEntitiesList(limit = 50) {
+  return getJson<Entity[]>(`/api/entities?limit=${limit}`);
+}
+
+export type NewsArticleItem = {
+  id: number;
+  source: string;
+  title: string;
+  url: string;
+  published_at: string | null;
+  summary: string | null;
+};
+
+export function getNewsList(limit = 50) {
+  return getJson<NewsArticleItem[]>(`/api/news?limit=${limit}`);
+}
+
 export function getVesselGraph(vesselId: number) {
   return getJson<GraphRead>(`/api/graph/vessels/${vesselId}`);
 }
@@ -194,8 +227,12 @@ export function getHealth() {
   return getJson<{ status: string; database: boolean }>("/api/health");
 }
 
-export function getPortActivity(kind: "due-arrive" | "due-depart", limit = 100) {
-  return getJson<VesselEvent[]>(`/api/ports/activity?kind=${kind}&limit=${limit}`);
+export function getPortActivity(kind: "due-arrive" | "due-depart", limit = 100, date?: string) {
+  const params = new URLSearchParams({ kind, limit: String(limit) });
+  if (date) {
+    params.set("date", date);
+  }
+  return getJson<VesselEvent[]>(`/api/ports/activity?${params.toString()}`);
 }
 
 export function getReferenceDomain(domain: string) {

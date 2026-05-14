@@ -6,6 +6,7 @@ import { Chip } from "../primitives/Chip";
 import { MultiSelect } from "../primitives/MultiSelect";
 import type { RiskSeverity, TimeWindow } from "../../types";
 import { DEFAULT_FILTERS } from "../../types";
+import { geoLayerLabel } from "../../labels";
 
 const SEVERITIES: RiskSeverity[] = ["critical", "high", "medium", "low"];
 const TIME_WINDOWS: TimeWindow[] = ["live", "1h", "6h", "24h", "7d"];
@@ -86,24 +87,23 @@ export function MapFilters() {
 
   return (
     <div className="cmd-section">
-      <button type="button" className="cmd-section-head btn ghost full" onClick={() => setOpen((v) => !v)}>
-        <Filter size={14} />
-        <span style={{ flex: 1, textAlign: "left", fontWeight: 600, color: "var(--navy-700)" }}>Map filters</span>
+      <div className="cmd-section-head row" style={{ gap: 6 }}>
+        <button type="button" className="btn ghost" style={{ flex: 1, justifyContent: "flex-start", minWidth: 0 }} onClick={() => setOpen((v) => !v)}>
+          <Filter size={14} />
+          <span style={{ flex: 1, textAlign: "left", fontWeight: 600, color: "var(--navy-700)" }}>Map filters</span>
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
         {!isDefault(filters) && (
           <button
             type="button"
-            className="t-faded"
-            style={{ background: "none", border: 0, cursor: "pointer", fontSize: 11 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              reset();
-            }}
+            className="btn ghost sm"
+            style={{ flex: "0 0 auto", fontSize: 11 }}
+            onClick={reset}
           >
             Reset
           </button>
         )}
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-      </button>
+      </div>
       {open && (
         <div style={{ padding: "0 4px 4px", display: "flex", flexDirection: "column", gap: 12 }}>
           <FilterGroup label="Risk severity">
@@ -198,7 +198,7 @@ export function MapFilters() {
                       checked={filters.enabledGeoLayers.has(layer.name)}
                       onChange={() => toggleLayer(layer.name)}
                     />
-                    <span className="mono" style={{ fontSize: 11 }}>{layer.name}</span>
+                    <span style={{ fontSize: 12 }} title={layer.name}>{geoLayerLabel(layer.name)}</span>
                   </label>
                 ))}
               </div>

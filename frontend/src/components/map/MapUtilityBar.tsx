@@ -1,7 +1,9 @@
 import { Crosshair, Layers, Maximize, Minus, Plus, Ruler, Satellite, Sun } from "lucide-react";
 import type maplibregl from "maplibre-gl";
-import { useState, type RefObject } from "react";
+import { useEffect, useState, type RefObject } from "react";
+import { getGeoLayers } from "../../api";
 import { useApp, useFilters } from "../../state/AppState";
+import { geoLayerLabel } from "../../labels";
 import { Tooltip } from "../primitives/Tooltip";
 
 type MapUtilityBarProps = {
@@ -9,10 +11,24 @@ type MapUtilityBarProps = {
 };
 
 export function MapUtilityBar({ mapRef }: MapUtilityBarProps) {
-  const { filters } = useFilters();
+  const { filters, setFilters } = useFilters();
   const { state } = useApp();
   const layerCount = filters.enabledGeoLayers.size;
   const [basemapOpen, setBasemapOpen] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [layers, setLayers] = useState<{ name: string; endpoint: string }[]>([]);
+
+  useEffect(() => {
+    if (!layersOpen || layers.length > 0) return;
+    getGeoLayers().then(setLayers).catch(() => undefined);
+  }, [layersOpen, layers.length]);
+
+  function toggleLayer(name: string) {
+    const next = new Set(filters.enabledGeoLayers);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    setFilters({ ...filters, enabledGeoLayers: next });
+  }
 
   function zoom(delta: number) {
     const map = mapRef.current;
@@ -49,12 +65,38 @@ export function MapUtilityBar({ mapRef }: MapUtilityBarProps) {
 
       {/* Basemap + layers cluster */}
       <div className="util-stack">
-        <Tooltip label={`Geo layers (${layerCount} on)`}>
-          <button className="util-btn" aria-label={`Geo layers · ${layerCount} on`}>
-            <Layers />
-            <span className="util-badge mono">{layerCount}</span>
-          </button>
-        </Tooltip>
+        <div style={{ position: "relative" }}>
+          <Tooltip label={`Geo layers (${layerCount} on)`}>
+            <button
+              className="util-btn"
+              aria-label={`Geo layers · ${layerCount} on`}
+              aria-expanded={layersOpen}
+              onClick={() => setLayersOpen((v) => !v)}
+            >
+              <Layers />
+              <span className="util-badge mono">{layerCount}</span>
+            </button>
+          </Tooltip>
+          {layersOpen && (
+            <div
+              className="panel-solid anim-fade-in"
+              style={{ position: "absolute", top: 0, right: "calc(100% + 8px)", padding: 8, width: 220, zIndex: 25 }}
+            >
+              <div className="t-caption" style={{ padding: "0 4px 6px" }}>Geo layers</div>
+              {layers.length === 0 && <div className="t-faded" style={{ fontSize: 11, padding: 4 }}>Loading…</div>}
+              {layers.map((l) => (
+                <label key={l.name} className="row" style={{ gap: 6, padding: "4px 4px", fontSize: 12, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={filters.enabledGeoLayers.has(l.name)}
+                    onChange={() => toggleLayer(l.name)}
+                  />
+                  <span style={{ flex: 1 }} title={l.name}>{geoLayerLabel(l.name)}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
         <div style={{ position: "relative" }}>
           <Tooltip label="Basemap style">
             <button
@@ -82,8 +124,8 @@ export function MapUtilityBar({ mapRef }: MapUtilityBarProps) {
 
       {/* Tools cluster */}
       <div className="util-stack">
-        <Tooltip label="Measure distance (coming soon)">
-          <button className="util-btn" aria-label="Measure" disabled>
+        <Tooltip label="Distance measure · coming in V1.1">
+          <button className="util-btn" aria-label="Distance measure (coming soon)" disabled>
             <Ruler />
           </button>
         </Tooltip>
@@ -101,11 +143,15 @@ function BasemapRow({ icon, label, active, disabled, hint }: { icon: React.React
   return (
     <div
       className="palette-row"
+      role="button"
+      aria-disabled={disabled}
+      aria-current={active ? "true" : undefined}
+      tabIndex={disabled ? -1 : 0}
       style={{ opacity: disabled ? 0.55 : 1, cursor: disabled ? "not-allowed" : "pointer", padding: "6px 8px" }}
     >
       {icon}
       <span style={{ flex: 1, fontSize: 12 }}>{label}</span>
-      {hint && <span className="t-faded" style={{ fontSize: 10 }}>{hint}</span>}
+      {hint && <span className="pill" style={{ fontSize: 9, padding: "0 6px" }}>{hint}</span>}
       {active && <span className="pill solid ok" style={{ fontSize: 9, padding: "0 6px" }}>Active</span>}
     </div>
   );

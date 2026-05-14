@@ -9,7 +9,13 @@ import { EmptyState } from "../primitives/EmptyState";
 import { ErrorState } from "../primitives/ErrorState";
 import { Skeleton } from "../primitives/Skeleton";
 import type { GraphRead, RiskFlag, VesselDetail, VesselEvent, VesselObservation } from "../../types";
-import { formatDate, formatRelative } from "../../format";
+import { formatDate, formatRelative, parseSourceRecordId } from "../../format";
+
+function evidenceSubtitle(value: string | null | undefined): string | null {
+  const parsed = parseSourceRecordId(value);
+  if (!parsed) return null;
+  return parsed.kind === "structured" ? parsed.display : parsed.raw;
+}
 import { countryName, flagEmoji, vesselTypeLabel } from "../../labels";
 import { EvidenceLink } from "../primitives/EvidenceLink";
 import { RiskCard } from "./RiskCard";
@@ -96,14 +102,27 @@ export function VesselDetailInspector({ id }: { id: number }) {
     { label: "Graph" },
   ];
 
+  // If we arrived from the Risk feed, surface a "Back to Risk feed"
+  // breadcrumb so the analyst doesn't lose context (bug #9).
+  const fromRisk = (() => {
+    try { return sessionStorage.getItem("seam:return-to-risk") === "1"; } catch { return false; }
+  })();
+
   return (
     <InspectorShell
-      breadcrumb="Vessel"
+      breadcrumb={fromRisk ? "Risk feed → Vessel" : "Vessel"}
       title={v.name}
       tabs={tabItems}
       activeTab={tab}
       onTabChange={setTab}
-      onClose={() => window.history.back()}
+      onClose={() => {
+        if (fromRisk) {
+          try { sessionStorage.removeItem("seam:return-to-risk"); } catch { /* ignore */ }
+          navigateTo("/risk");
+        } else {
+          window.history.back();
+        }
+      }}
       footer={
         tab === 0 ? (
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
@@ -178,15 +197,26 @@ export function VesselDetailInspector({ id }: { id: number }) {
               sub={`Type ${vesselTypeLabel(v.vessel_type_code)}`}
               icon={<Database size={14} />}
             />
-            <Metric label="Evidence" value={data.detail.evidence_ids.length} sub="linked observations" icon={<FileText size={14} />} />
+            <Metric label="Evidence" value={data.observations.length} sub="source observations" icon={<FileText size={14} />} />
             <Metric label="Open risk" value={data.risk.filter((f) => f.status !== "resolved").length} sub="active flags" icon={<RefreshCw size={14} />} />
           </div>
           {data.risk.length > 0 && (
             <div>
-              <div className="t-caption" style={{ paddingBottom: 6 }}>Top risk flags</div>
+              <div className="row" style={{ paddingBottom: 6 }}>
+                <div className="t-caption" style={{ flex: 1 }}>Top risk flags</div>
+                {data.risk.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setTab(3)}
+                    style={{ background: "none", border: 0, color: "var(--ocean-500)", fontSize: 11, cursor: "pointer", padding: 0 }}
+                  >
+                    View all {data.risk.length} →
+                  </button>
+                )}
+              </div>
               <div className="col" style={{ gap: 4 }}>
                 {data.risk.slice(0, 3).map((flag) => (
-                  <RiskCard key={flag.id} flag={flag} subject={v.name} vesselId={id} onOpenSubject={() => undefined} />
+                  <RiskCard key={flag.id} flag={flag} subject={v.name} vesselId={id} hideSubject onOpenSubject={() => undefined} />
                 ))}
               </div>
             </div>
@@ -244,7 +274,7 @@ export function VesselDetailInspector({ id }: { id: number }) {
                   <span className="t-faded" style={{ fontSize: 11 }}>{formatDate(obs.observed_at ?? obs.fetched_at)}</span>
                 </div>
                 <div className="t-faded mono" style={{ fontSize: 11 }}>
-                  {obs.observation_type} · {obs.source_record_id ?? obs.payload_hash.slice(0, 10)}
+                  {obs.observation_type} · {evidenceSubtitle(obs.source_record_id) ?? obs.payload_hash.slice(0, 10)}
                 </div>
               </a>
             ))
@@ -287,10 +317,17 @@ function SourceConfidence({ observations, events, risk }: { observations: Vessel
     return Array.from(sources);
   }, [observations]);
   const positionSources = useMemo(
-    () => new Set(observations.filter((o) => o.observation_type === "positions" || o.observation_type === "position").map((o) => o.source)).size,
+    () => new Set(observations.filter((o) => o.observation_type === "vessel_position").map((o) => o.source)).size,
     [observations],
   );
-  const movementsCount = events.length;
+  // Movements come from either port_events (preferred) or vessel_movement
+  // observations. Backend writes observation_type="vessel_movement" so we
+  // count both sources.
+  const movementSources = useMemo(
+    () => new Set(observations.filter((o) => o.observation_type === "vessel_movement").map((o) => o.source)).size,
+    [observations],
+  );
+  const movementsCount = events.length > 0 ? events.length : movementSources;
   const riskCount = risk.length;
 
   return (

@@ -20,6 +20,13 @@ class EntityService:
         )
         return [EntityRead.model_validate(row) for row in rows]
 
+    async def list_recent(self, limit: int = 50) -> list[EntityRead]:
+        """Recent-first listing, used when no search query is active."""
+        rows = await self.session.scalars(
+            select(Entity).order_by(desc(Entity.updated_at), desc(Entity.id)).limit(limit)
+        )
+        return [EntityRead.model_validate(row) for row in rows]
+
     async def get(self, entity_id: int) -> EntityRead | None:
         entity = await self.session.get(Entity, entity_id)
         return EntityRead.model_validate(entity) if entity is not None else None

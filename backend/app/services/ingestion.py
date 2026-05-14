@@ -1,9 +1,15 @@
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from zoneinfo import ZoneInfo
+
+# OCEANS-X is operated by MPA Singapore; its date-bucketed endpoints
+# (duetoarrive, duetodepart) expect Singapore-local calendar dates.
+# Querying UTC dates returns the wrong bucket for half the day.
+SINGAPORE_TZ = ZoneInfo("Asia/Singapore")
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -287,6 +293,7 @@ class IngestionService:
                 payload,
                 fetched_at=now,
                 max_rows=settings.max_requests_per_run,
+                snapshot_job_id=job.id,
             )
         except (OceansXError, ValueError, OSError) as exc:
             job.status = "failed"
@@ -439,15 +446,20 @@ class IngestionService:
         settings: Settings,
         kind: str,
         mode: str | None = None,
+        activity_date: date | None = None,
         requested_by: str = "dev",
     ) -> IngestionJob:
         selected_mode = self._live_mode(mode)
         now = datetime.now(UTC)
+        # OCEANS-X port-activity endpoints expect Singapore-local dates;
+        # use SGT for the default so the bucket matches the analyst's
+        # mental model of "today" in the source's timezone.
+        selected_date = activity_date or datetime.now(SINGAPORE_TZ).date()
         job = IngestionJob(
             job_type=OCEANSX_PORT_ACTIVITY_JOB_TYPE,
             status="running",
             requested_by=requested_by,
-            parameters={"mode": selected_mode, "source": OCEANSX_SOURCE, "kind": kind},
+            parameters={"mode": selected_mode, "source": OCEANSX_SOURCE, "kind": kind, "date": selected_date.isoformat()},
             started_at=now,
         )
         self.session.add(job)
@@ -458,7 +470,7 @@ class IngestionService:
         try:
             if kind not in {"due-arrive", "due-depart"}:
                 raise ValueError("kind must be due-arrive or due-depart")
-            payload = await self._load_port_activity_payload(settings, selected_mode, kind)
+            payload = await self._load_port_activity_payload(settings, selected_mode, kind, selected_date)
             stats = await self._ingest_event_payload(
                 payload=payload,
                 fetched_at=now,
@@ -539,30 +551,18 @@ class IngestionService:
             return extract_snapshot_rows(await client.fetch_vessel_movements(imo))
         raise ValueError("mode must be live")
 
-    async def _load_port_activity_payload(self, settings: Settings, mode: str, kind: str) -> list[dict[str, Any]]:
+    async def _load_port_activity_payload(self, settings: Settings, mode: str, kind: str, activity_date: date) -> list[dict[str, Any]]:
         if mode == "live":
             client = OceansXClient(
                 api_key=settings.oceansx_api_key,
                 base_url=settings.oceansx_base_url,
                 timeout_seconds=settings.oceansx_request_timeout_seconds,
             )
-            # OCEANS-X port-activity endpoints accept the date in YYYYMMDD
-            # form; ISO with dashes returns HTTP 400. Try the compact form
-            # first and fall back to ISO so we surface the upstream error
-            # body if both are wrong.
-            now = datetime.now(UTC).date()
-            primary = now.strftime("%Y%m%d")
-            fallback = now.isoformat()
-            for fmt in (primary, fallback):
-                try:
-                    if kind == "due-arrive":
-                        return extract_snapshot_rows(await client.fetch_due_to_arrive(fmt, 24))
-                    if kind == "due-depart":
-                        return extract_snapshot_rows(await client.fetch_due_to_depart(fmt, 24))
-                except Exception:
-                    if fmt is fallback:
-                        raise
-                    continue
+            date_path_param = activity_date.strftime("%Y%m%d")
+            if kind == "due-arrive":
+                return extract_snapshot_rows(await client.fetch_due_to_arrive(date_path_param, 24))
+            if kind == "due-depart":
+                return extract_snapshot_rows(await client.fetch_due_to_depart(date_path_param, 24))
         raise ValueError("mode must be live")
 
     @staticmethod
@@ -571,7 +571,7 @@ class IngestionService:
             return "live"
         raise ValueError("Fixture mode has been removed. Live OCEANS-X ingestion is required.")
 
-    async def _ingest_positions_payload(self, payload: Any, fetched_at: datetime, max_rows: int) -> dict[str, Any]:
+    async def _ingest_positions_payload(self, payload: Any, fetched_at: datetime, max_rows: int, snapshot_job_id: int | None = None) -> dict[str, Any]:
         rows = extract_snapshot_rows(payload)
         limited_rows = rows[:max_rows]
         stats: dict[str, Any] = {
@@ -602,7 +602,7 @@ class IngestionService:
             else:
                 stats["vessels_updated"] += 1
 
-            inserted_position = await self._upsert_latest_position(normalized, vessel.id, observation.id)
+            inserted_position = await self._upsert_latest_position(normalized, vessel.id, observation.id, fetched_at, snapshot_job_id)
             stats["positions_inserted" if inserted_position else "positions_updated"] += 1
 
         return stats
@@ -681,7 +681,14 @@ class IngestionService:
             return await self.session.scalar(select(Vessel).where(Vessel.call_sign == row.call_sign).limit(1))
         return None
 
-    async def _upsert_latest_position(self, row: VesselPositionRow, vessel_id: int, evidence_id: int) -> bool:
+    async def _upsert_latest_position(
+        self,
+        row: VesselPositionRow,
+        vessel_id: int,
+        evidence_id: int,
+        fetched_at: datetime,
+        snapshot_job_id: int | None,
+    ) -> bool:
         latest = await self.session.get(VesselPositionLatest, vessel_id)
         if latest is None:
             latest = VesselPositionLatest(
@@ -694,6 +701,8 @@ class IngestionService:
                 navigational_status=row.navigational_status,
                 position_timestamp=row.observed_at,
                 evidence_id=evidence_id,
+                snapshot_job_id=snapshot_job_id,
+                updated_at=fetched_at,
             )
             self.session.add(latest)
             await self.session.flush()
@@ -707,6 +716,8 @@ class IngestionService:
         latest.navigational_status = row.navigational_status
         latest.position_timestamp = row.observed_at
         latest.evidence_id = evidence_id
+        latest.snapshot_job_id = snapshot_job_id
+        latest.updated_at = fetched_at
         await self.session.flush()
         return False
 
@@ -844,13 +855,15 @@ class IngestionService:
             "skip_reasons": {},
         }
         for row in payload:
-            target_vessel = vessel or await self._find_vessel_for_event(row)
+            target_vessel = vessel or await self._get_or_create_vessel_for_event(row, fetched_at)
             event_time = _datetime_value(
                 _first_value(
                     row,
                     _particulars(row),
                     "eventTime",
                     "event_time",
+                    "duetoArriveTime",
+                    "dueToDepart",
                     "eta",
                     "etd",
                     "arrivalTime",
@@ -861,7 +874,14 @@ class IngestionService:
                 fetched_at,
             )
             event_type = _clean_text(row.get("eventType") or row.get("event_type") or row.get("kind")) or default_event_type
-            port_code = _clean_text(row.get("portCode") or row.get("port_code") or row.get("toPortCode") or row.get("fromPortCode"))
+            port_code = _clean_text(
+                row.get("portCode")
+                or row.get("port_code")
+                or row.get("toPortCode")
+                or row.get("fromPortCode")
+                or row.get("locationTo")
+                or row.get("locationFrom")
+            )
             port_name = _clean_text(row.get("portName") or row.get("port_name") or row.get("toPortName") or row.get("fromPortName"))
             if target_vessel is None and observation_type == OCEANSX_MOVEMENT_OBSERVATION_TYPE:
                 self._count_skip(stats, "unknown_vessel")
@@ -884,7 +904,7 @@ class IngestionService:
                         filter(
                             None,
                             [
-                                _clean_identifier(row.get("imoNumber") or row.get("imo")),
+                                _clean_identifier(_first_value(row, _particulars(row), "imoNumber", "imo", "imo_number")),
                                 event_type,
                                 event_time.isoformat(),
                             ],
@@ -924,21 +944,23 @@ class IngestionService:
             stats["events_inserted"] += 1
         return stats
 
-    async def _find_vessel_for_event(self, row: dict[str, Any]) -> Vessel | None:
+    async def _get_or_create_vessel_for_event(self, row: dict[str, Any], fetched_at: datetime) -> Vessel | None:
         particulars = _particulars(row)
         imo = _clean_identifier(_first_value(row, particulars, "imoNumber", "imo", "imo_number"))
         mmsi = _clean_identifier(_first_value(row, particulars, "mmsiNumber", "mmsi", "mmsi_number"))
         call_sign = _clean_text(_first_value(row, particulars, "callSign", "call_sign", "callsign"))
+        if not (imo or mmsi or call_sign):
+            return None
         lookup = VesselPositionRow(
             raw_payload=row,
             payload_hash=stable_payload_hash(row),
             source_record_id="",
-            observed_at=datetime.now(UTC),
+            observed_at=fetched_at,
             imo=imo,
             mmsi=mmsi,
             call_sign=call_sign,
-            vessel_name=_clean_text(row.get("vesselName") or row.get("name")) or "Unknown vessel",
-            flag_country_code=None,
+            vessel_name=_clean_text(_first_value(row, particulars, "vesselName", "name", "vessel_name")) or "Unknown vessel",
+            flag_country_code=_clean_text(_first_value(row, particulars, "flag", "flagCountryCode", "flag_country_code")),
             vessel_type_code=None,
             latitude=Decimal("0"),
             longitude=Decimal("0"),
@@ -947,7 +969,8 @@ class IngestionService:
             heading_degrees=None,
             navigational_status=None,
         )
-        return await self._find_vessel(lookup)
+        vessel, _ = await self._get_or_create_vessel(lookup)
+        return vessel
 
     async def _fail_job(
         self,

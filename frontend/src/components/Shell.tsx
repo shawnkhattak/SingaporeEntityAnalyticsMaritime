@@ -81,24 +81,59 @@ export function Shell() {
   const route = useRoute();
   const { state, dispatch } = useApp();
   const inspector = useInspectorState();
+  const { open: openInspector, close: closeInspector } = inspector;
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const inspectorVisible = isInspectorRoute(route);
   const fullCanvas = isFullCanvas(route);
 
   useEffect(() => {
-    if (inspectorVisible) inspector.open();
-    else inspector.close();
-  }, [inspectorVisible, inspector]);
+    if (inspectorVisible) openInspector();
+    else closeInspector();
+  }, [inspectorVisible, openInspector, closeInspector]);
 
-  // Auto-collapse the panel when an inspector or full canvas is showing,
-  // unless the user has manually expanded.
+  // Auto-collapse fires AT MOST ONCE per session. After the first
+  // inspector or full-canvas route opens, we set
+  // `autoCollapsedThisSession` and never preempt the user's panel
+  // intent again — fixes bug #6 where the panel collapsed on every
+  // navigation.
   useEffect(() => {
     const shouldBeCollapsed = inspectorVisible || fullCanvas;
-    if (shouldBeCollapsed && !state.isPanelCollapsed && !state.panelManuallyExpanded) {
+    if (
+      shouldBeCollapsed &&
+      !state.isPanelCollapsed &&
+      !state.panelManuallyExpanded &&
+      !state.autoCollapsedThisSession
+    ) {
       dispatch({ type: "SET_PANEL_COLLAPSED", collapsed: true });
+      dispatch({ type: "MARK_AUTO_COLLAPSED" });
+      try { sessionStorage.setItem("seam:auto-collapsed", "1"); } catch { /* ignore */ }
     }
-  }, [inspectorVisible, fullCanvas, state.isPanelCollapsed, state.panelManuallyExpanded, dispatch]);
+  }, [inspectorVisible, fullCanvas, state.isPanelCollapsed, state.panelManuallyExpanded, state.autoCollapsedThisSession, dispatch]);
+
+  // Browser tab title per route (bug #21).
+  useEffect(() => {
+    const base = "SEAM V2";
+    let label = "Map";
+    switch (route.name) {
+      case "vessels-list": label = "Vessels"; break;
+      case "vessel-detail": label = `Vessel #${route.id}`; break;
+      case "entities-list": label = "Entities"; break;
+      case "entity-detail": label = `Entity #${route.id}`; break;
+      case "ports": label = "Ports"; break;
+      case "risk": label = "Risk feed"; break;
+      case "news": label = "News"; break;
+      case "sanctions": label = "Sanctions"; break;
+      case "evidence": label = `Evidence #${route.id}`; break;
+      case "graph": label = "Graph"; break;
+      case "schema": label = "Schema"; break;
+      case "ops": label = "Operations"; break;
+      case "roadmap": label = "Roadmap"; break;
+      case "map":
+      default: label = "Map"; break;
+    }
+    document.title = `${label} · ${base}`;
+  }, [route]);
 
   useHotkey("mod+k", (e) => {
     e.preventDefault();

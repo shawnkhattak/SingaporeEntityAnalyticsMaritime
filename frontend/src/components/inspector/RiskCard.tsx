@@ -13,6 +13,11 @@ type RiskCardProps = {
   subject: string;
   /** Vessel ID if this flag belongs to one — enables per-vessel recompute. */
   vesselId?: number;
+  /** When true, render the risk-type as the primary heading and omit
+   *  the subject line (already shown in the surrounding inspector).
+   *  Used inside VesselDetailInspector where the vessel name is the
+   *  surrounding context. */
+  hideSubject?: boolean;
   onOpenSubject: () => void;
 };
 
@@ -27,12 +32,13 @@ const KIND_ICONS: Record<RiskKind, React.ReactNode> = {
 };
 
 /**
- * Phase 1.5 card layout: subject + status + timestamp on top, severity +
- * kind + source on the middle row, expandable description + actions
- * on the bottom. Body copy is collapsed behind a "More" toggle so the
- * feed stays scannable.
+ * Card layout (bug #23 swap):
+ *   Row 1: risk-type label + severity + status pill + relative time
+ *   Row 2: subject (clickable) + source attribution        [hidden if hideSubject]
+ *   Row 3: description with "more" toggle
+ *   Row 4: Evidence chip + Open button + (optional) recompute icon
  */
-export function RiskCard({ flag, subject, vesselId, onOpenSubject }: RiskCardProps) {
+export function RiskCard({ flag, subject, vesselId, hideSubject, onOpenSubject }: RiskCardProps) {
   const [expanded, setExpanded] = useState(false);
   const runJob = useJobRunner();
   const label = riskLabel(flag.flag_type);
@@ -48,40 +54,41 @@ export function RiskCard({ flag, subject, vesselId, onOpenSubject }: RiskCardPro
   const sourceHint = sourceFor(flag.flag_type);
 
   return (
-    <div
-      className={`card ${stripeTone}`}
-      style={{ padding: "10px 12px 10px 14px" }}
-    >
-      {/* Row 1: subject + status + timestamp */}
-      <div className="row" style={{ gap: 6 }}>
-        <button
-          type="button"
-          onClick={onOpenSubject}
-          style={{ background: "none", border: 0, padding: 0, cursor: "pointer", flex: 1, textAlign: "left", color: "var(--navy-900)", fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-        >
-          {subject}
-        </button>
+    <div className={`card ${stripeTone}`} style={{ padding: "10px 12px 10px 14px" }}>
+      {/* Row 1 — risk type is now the primary heading */}
+      <div className="row" style={{ gap: 6, alignItems: "center" }}>
+        <span style={{ color: label.toneClass === "crit" ? "var(--risk-critical)" : "var(--navy-700)" }}>
+          {KIND_ICONS[label.kind]}
+        </span>
+        <strong style={{ flex: 1, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {label.title}
+        </strong>
+        <RiskPill severity={flag.severity as never} />
         <Pill variant={isResolved ? "ok" : "info"}>{isResolved ? "Resolved" : "Active"}</Pill>
         <span className="t-faded" style={{ fontSize: 11 }} title={formatDate(flag.created_at)}>
           {formatRelative(flag.created_at)}
         </span>
       </div>
 
-      {/* Row 2: severity + kind + source */}
-      <div className="row" style={{ gap: 4, marginTop: 6, flexWrap: "wrap" }}>
-        <RiskPill severity={flag.severity as never} />
-        <Pill variant={label.toneClass}>
-          {KIND_ICONS[label.kind]}
-          {label.title}
-        </Pill>
-        <span className="t-faded" style={{ fontSize: 11, marginLeft: 4 }}>{sourceHint}</span>
-      </div>
+      {/* Row 2 — subject (when surrounding inspector isn't already the subject) + source */}
+      {!hideSubject ? (
+        <div className="row" style={{ gap: 6, marginTop: 6, fontSize: 12 }}>
+          <button
+            type="button"
+            onClick={onOpenSubject}
+            style={{ background: "none", border: 0, padding: 0, cursor: "pointer", color: "var(--ocean-500)", fontWeight: 500, flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          >
+            {subject}
+          </button>
+          <span className="t-faded" style={{ fontSize: 11 }}>{sourceHint}</span>
+        </div>
+      ) : (
+        <div className="t-faded" style={{ fontSize: 11, marginTop: 4 }}>{sourceHint}</div>
+      )}
 
-      {/* Row 3: description + actions */}
+      {/* Row 3 — description */}
       <div className="t-sm" style={{ marginTop: 6, lineHeight: 1.5 }}>
-        {expanded
-          ? label.body
-          : truncate(label.body, 120)}
+        {expanded ? label.body : truncate(label.body, 120)}
         {label.body.length > 120 && (
           <button
             type="button"
@@ -96,6 +103,7 @@ export function RiskCard({ flag, subject, vesselId, onOpenSubject }: RiskCardPro
         )}
       </div>
 
+      {/* Row 4 — actions */}
       <div className="row" style={{ gap: 4, marginTop: 8, flexWrap: "wrap" }}>
         {flag.evidence_id != null && (
           <button
@@ -111,14 +119,16 @@ export function RiskCard({ flag, subject, vesselId, onOpenSubject }: RiskCardPro
             Evidence #{flag.evidence_id}
           </button>
         )}
-        <button
-          type="button"
-          onClick={onOpenSubject}
-          className="btn ghost sm"
-          style={{ padding: "0 8px" }}
-        >
-          <ChevronRight size={11} /> Open
-        </button>
+        {!hideSubject && (
+          <button
+            type="button"
+            onClick={onOpenSubject}
+            className="btn ghost sm"
+            style={{ padding: "0 8px" }}
+          >
+            <ChevronRight size={11} /> Open
+          </button>
+        )}
         {vesselId != null && (
           <button
             type="button"
@@ -132,6 +142,7 @@ export function RiskCard({ flag, subject, vesselId, onOpenSubject }: RiskCardPro
             className="btn ghost sm"
             style={{ padding: "0 8px" }}
             title="Recompute risk for this vessel"
+            aria-label="Recompute risk for this vessel"
           >
             <RefreshCw size={10} />
           </button>
@@ -146,10 +157,6 @@ function truncate(s: string, n: number): string {
   return s.length <= n ? s : `${s.slice(0, n).trimEnd()}…`;
 }
 
-/**
- * Best-effort source attribution from flag_type. Could be replaced
- * with backend-supplied source field once denormalized (see plan §14).
- */
 function sourceFor(flag_type: string): string {
   if (flag_type === "sanctions_match" || flag_type === "sanctions") return "OpenSanctions";
   if (flag_type === "negative_news_mention") return "RSS news";

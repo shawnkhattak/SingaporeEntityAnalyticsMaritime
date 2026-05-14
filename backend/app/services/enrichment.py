@@ -281,16 +281,28 @@ class EnrichmentService:
         stats["risk_flags_inserted"] += int(inserted)
 
     async def _ensure_risk_flag(self, vessel_id: int | None, entity_id: int | None, flag_type: str, severity: str, summary: str, evidence_id: int | None) -> bool:
+        """Insert-or-update a unique active risk flag per (subject, flag_type).
+        Mirrors `RiskService._ensure_flag` — drops `evidence_id` from the
+        uniqueness key so a vessel accumulates one active sanctions /
+        news flag, not one per matching observation. Latest evidence
+        replaces the older row's evidence_id.
+        """
         existing = await self.session.scalar(
             select(RiskFlag).where(
                 RiskFlag.vessel_id == vessel_id,
                 RiskFlag.entity_id == entity_id,
                 RiskFlag.flag_type == flag_type,
-                RiskFlag.evidence_id == evidence_id,
                 RiskFlag.status == "active",
             )
         )
         if existing is not None:
+            if evidence_id is not None and existing.evidence_id != evidence_id:
+                existing.evidence_id = evidence_id
+            if existing.severity != severity:
+                existing.severity = severity
+            if existing.summary != summary:
+                existing.summary = summary
+            await self.session.flush()
             return False
         self.session.add(RiskFlag(vessel_id=vessel_id, entity_id=entity_id, flag_type=flag_type, severity=severity, summary=summary, evidence_id=evidence_id, status="active"))
         await self.session.flush()

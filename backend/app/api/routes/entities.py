@@ -22,6 +22,17 @@ async def search_entities(
     return await EntityService(session).search(query=q, limit=limit)
 
 
+@router.get("", response_model=list[EntityRead])
+async def list_entities(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[EntityRead]:
+    """Recent-first list of entities — used by EntityListInspector when
+    no search query is active so the page shows real rows on first
+    paint instead of an empty state."""
+    return await EntityService(session).list_recent(limit=limit)
+
+
 @router.get("/{entity_id}", response_model=EntityRead)
 async def get_entity(session: Annotated[AsyncSession, Depends(get_session)], entity_id: int) -> EntityRead:
     entity = await EntityService(session).get(entity_id)

@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/map", tags=["map"])
 async def list_vessels_for_map(
     session: Annotated[AsyncSession, Depends(get_session)],
     limit: Annotated[int, Query(ge=1, le=5000)] = 500,
+    scope: Annotated[Literal["latest-snapshot", "all"], Query()] = "latest-snapshot",
 ) -> list[VesselMapFeature]:
     service = MapService(session)
-    return await service.list_vessel_positions(limit=limit)
+    return await service.list_vessel_positions(limit=limit, scope=scope)

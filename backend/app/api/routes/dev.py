@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
@@ -89,9 +90,10 @@ async def run_port_activity_ingestion(
     settings: Annotated[Settings, Depends(get_settings)],
     kind: Annotated[Literal["due-arrive", "due-depart"], Query()],
     mode: Annotated[Literal["live"] | None, Query()] = None,
+    activity_date: Annotated[date | None, Query(alias="date")] = None,
 ) -> IngestionJobRead:
     service = IngestionService(session)
-    return await service.run_port_activity(settings=settings, kind=kind, mode=mode)
+    return await service.run_port_activity(settings=settings, kind=kind, mode=mode, activity_date=activity_date)
 
 
 @router.post("/ingestion/geo-layers", dependencies=[Depends(require_dev_mutations)])

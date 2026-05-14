@@ -122,6 +122,35 @@ const VESSEL_ICON_IDS: Record<string, string> = {
   none: "vessel-none",
 };
 
+const RISK_SORT_KEY: maplibregl.ExpressionSpecification = [
+  "match",
+  ["get", "severity"],
+  "critical",
+  50,
+  "high",
+  40,
+  "medium",
+  30,
+  "low",
+  20,
+  0,
+];
+
+function vesselFocusOpacity(selectedId: number): number | maplibregl.ExpressionSpecification {
+  if (selectedId === -1) return 0.95;
+  return ["case", ["==", ["get", "vessel_id"], selectedId], 1, 0.16];
+}
+
+function riskHaloFocusOpacity(selectedId: number): number | maplibregl.ExpressionSpecification {
+  if (selectedId === -1) return 0.18;
+  return ["case", ["==", ["get", "vessel_id"], selectedId], 0.34, 0.025];
+}
+
+function vesselSortKey(selectedId: number): maplibregl.ExpressionSpecification {
+  if (selectedId === -1) return RISK_SORT_KEY;
+  return ["case", ["==", ["get", "vessel_id"], selectedId], 100, RISK_SORT_KEY];
+}
+
 type PopoverState = { x: number; y: number; vessel: VesselMapFeature; severity: string } | null;
 
 export function MapCanvas() {
@@ -246,6 +275,7 @@ export function MapCanvas() {
           "icon-pitch-alignment": "viewport",
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
+          "symbol-sort-key": RISK_SORT_KEY,
           "icon-size": [
             "interpolate",
             ["linear"],
@@ -409,6 +439,13 @@ export function MapCanvas() {
     if (map.getLayer("vessels-selected")) {
       map.setFilter("vessels-selected", ["==", ["get", "vessel_id"], id]);
     }
+    if (map.getLayer("vessels-point")) {
+      map.setLayoutProperty("vessels-point", "symbol-sort-key", vesselSortKey(id));
+      map.setPaintProperty("vessels-point", "icon-opacity", vesselFocusOpacity(id));
+    }
+    if (map.getLayer("vessels-halo")) {
+      map.setPaintProperty("vessels-halo", "circle-opacity", riskHaloFocusOpacity(id));
+    }
     if (id === -1) setPopover(null);
   }, [state.selected, ready]);
 
@@ -529,7 +566,10 @@ export function MapCanvas() {
       <div className="map-canvas" ref={containerRef} />
       <MapUtilityBar mapRef={mapRef} />
       <MapStatusStrip vesselCount={filteredVessels.length} runJob={runJob} />
-      {state.vessels.length === 0 && ready && (
+      {/* Only show the "no vessels loaded" CTA after we've actually
+          attempted at least one fetch. Previously this flashed on
+          first paint while loadMapVessels() was still resolving. */}
+      {state.vessels.length === 0 && state.vesselsLoaded && ready && (
         <div
           style={{
             position: "fixed",
@@ -583,6 +623,7 @@ function featureFor(v: VesselMapFeature, flags: RiskFlag[] | undefined): GeoJSON
   // Prefer true heading; some AIS feeds only emit course-over-ground.
   const heading = v.heading_degrees ?? null;
   const course = v.course_degrees ?? null;
+  const severity = highestSeverity(flags ?? []);
   return {
     type: "Feature",
     geometry: { type: "Point", coordinates: [v.longitude, v.latitude] },
@@ -593,7 +634,7 @@ function featureFor(v: VesselMapFeature, flags: RiskFlag[] | undefined): GeoJSON
       mmsi: v.mmsi,
       heading,
       course,
-      severity: highestSeverity(flags ?? []),
+      severity,
     },
   };
 }

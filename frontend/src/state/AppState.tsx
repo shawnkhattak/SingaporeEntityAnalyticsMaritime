@@ -16,11 +16,17 @@ export type AppState = {
   selected: SelectedSubject;
   isPanelCollapsed: boolean;
   panelManuallyExpanded: boolean;
+  /** Sticky flag — once the panel has auto-collapsed (or the user
+   *  manually toggled), subsequent navigations don't trigger the
+   *  auto-collapse rule again. Persisted in sessionStorage so a fresh
+   *  tab gets the first-time behavior. */
+  autoCollapsedThisSession: boolean;
   isInspectorOpen: boolean;
   inspectorWidth: 480 | 720;
   toasts: Toast[];
   runningJobs: Record<string, true>;
   vessels: VesselMapFeature[];
+  vesselsLoaded: boolean;
   health: SourceHealth[];
   jobs: IngestionJob[];
   riskByVessel: Record<number, RiskFlag[]>;
@@ -49,6 +55,7 @@ type Action =
   | { type: "SET_TABLE_COUNTS"; counts: Record<string, number> }
   | { type: "CACHE_VESSEL_RISK"; id: number; flags: RiskFlag[] }
   | { type: "CACHE_ENTITY_RISK"; id: number; flags: RiskFlag[] }
+  | { type: "MARK_AUTO_COLLAPSED" }
   | { type: "SET_BACKEND_ONLINE"; online: boolean };
 
 function readBool(key: string, fallback: boolean): boolean {
@@ -77,11 +84,15 @@ const initialState: AppState = {
   selected: null,
   isPanelCollapsed: readBool("seam:panel-collapsed", false),
   panelManuallyExpanded: false,
+  autoCollapsedThisSession: (() => {
+    try { return sessionStorage.getItem("seam:auto-collapsed") === "1"; } catch { return false; }
+  })(),
   isInspectorOpen: false,
   inspectorWidth: (readNum("seam:inspector-width", 480) === 720 ? 720 : 480) as 480 | 720,
   toasts: [],
   runningJobs: {},
   vessels: [],
+  vesselsLoaded: false,
   health: [],
   jobs: [],
   riskByVessel: {},
@@ -103,21 +114,39 @@ function reducer(state: AppState, action: Action): AppState {
     case "TOGGLE_PANEL": {
       const collapsed = !state.isPanelCollapsed;
       try { localStorage.setItem("seam:panel-collapsed", collapsed ? "1" : "0"); } catch { /* ignore */ }
-      return { ...state, isPanelCollapsed: collapsed, panelManuallyExpanded: !collapsed };
+      try { sessionStorage.setItem("seam:auto-collapsed", "1"); } catch { /* ignore */ }
+      // Any manual toggle locks the user's intent: the auto-collapse rule
+      // should never preempt them again this session.
+      return {
+        ...state,
+        isPanelCollapsed: collapsed,
+        panelManuallyExpanded: !collapsed,
+        autoCollapsedThisSession: true,
+      };
     }
     case "SET_PANEL_COLLAPSED": {
+      if (state.isPanelCollapsed === action.collapsed && !action.manual) return state;
       try { localStorage.setItem("seam:panel-collapsed", action.collapsed ? "1" : "0"); } catch { /* ignore */ }
+      if (action.manual) {
+        try { sessionStorage.setItem("seam:auto-collapsed", "1"); } catch { /* ignore */ }
+      }
       return {
         ...state,
         isPanelCollapsed: action.collapsed,
         panelManuallyExpanded: action.manual ? !action.collapsed : state.panelManuallyExpanded,
+        autoCollapsedThisSession: action.manual ? true : state.autoCollapsedThisSession,
       };
     }
+    case "MARK_AUTO_COLLAPSED":
+      return { ...state, autoCollapsedThisSession: true };
     case "OPEN_INSPECTOR":
+      if (state.isInspectorOpen) return state;
       return { ...state, isInspectorOpen: true };
     case "CLOSE_INSPECTOR":
+      if (!state.isInspectorOpen) return state;
       return { ...state, isInspectorOpen: false };
     case "RESIZE_INSPECTOR": {
+      if (state.inspectorWidth === action.width) return state;
       try { localStorage.setItem("seam:inspector-width", String(action.width)); } catch { /* ignore */ }
       return { ...state, inspectorWidth: action.width };
     }
@@ -126,14 +155,16 @@ function reducer(state: AppState, action: Action): AppState {
     case "DISMISS_TOAST":
       return { ...state, toasts: state.toasts.filter((t) => t.id !== action.id) };
     case "JOB_STARTED":
+      if (state.runningJobs[action.slug]) return state;
       return { ...state, runningJobs: { ...state.runningJobs, [action.slug]: true } };
     case "JOB_FINISHED": {
+      if (!state.runningJobs[action.slug]) return state;
       const next = { ...state.runningJobs };
       delete next[action.slug];
       return { ...state, runningJobs: next };
     }
     case "SET_VESSELS":
-      return { ...state, vessels: action.vessels };
+      return { ...state, vessels: action.vessels, vesselsLoaded: true };
     case "SET_HEALTH":
       return { ...state, health: action.health };
     case "SET_JOBS":
@@ -145,6 +176,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "CACHE_ENTITY_RISK":
       return { ...state, riskByEntity: { ...state.riskByEntity, [action.id]: action.flags } };
     case "SET_BACKEND_ONLINE":
+      if (state.backendOnline === action.online) return state;
       return { ...state, backendOnline: action.online };
     default:
       return state;

@@ -83,47 +83,155 @@ export function countryName(code: string | null | undefined): string {
 
 /**
  * `code` may be a long string ("Cargo", "Bulk Carrier") or a short
- * MPA OCEANS-X 2-3 letter code. The mapping below covers the codes
- * we've seen in production; unknown codes fall back to the raw value.
+ * MPA OCEANS-X vessel type code. The mapping below mirrors the
+ * VESSELTYPES_REF_JSON artifact; unknown codes fall back to the raw
+ * value.
  */
 const VESSEL_TYPE_LABELS: Record<string, string> = {
-  CC: "Container ship",
-  BC: "Bulk carrier",
-  TC: "Tanker",
-  CS: "Chemical tanker",
-  GC: "General cargo",
-  LP: "LPG carrier",
-  LN: "LNG carrier",
-  CT: "Crude tanker",
-  PT: "Product tanker",
-  TU: "Tug",
-  TS: "Tug / supply",
-  SV: "Supply vessel",
-  WB: "Workboat",
-  WA: "Workboat",
-  PV: "Passenger vessel",
-  FB: "Ferry",
-  HS: "High-speed craft",
-  YA: "Yacht",
-  FV: "Fishing vessel",
   BA: "Barge",
-  BG: "Barge",
+  BAAC: "Accommodation/Pipe Laying Barge",
+  BADR: "Dredger Barge",
+  BAFG: "Flat Top Deck Cargo Barge",
+  BAFL: "Flat Top Barge",
+  BAFW: "Flat Top Oil/Water Barge",
+  BAHA: "Hatch Barge",
+  BAHP: "Hopper Barge",
+  BAHT: "Heavy Transport Vessel",
+  BAJA: "Jack-Up Barge",
+  BAOI: "Oil Barge",
+  BAPI: "Piling Barge",
+  BASO: "Sludge/Slop Barge",
+  BAWO: "Work Barge",
+  BC: "Bulk Carrier",
+  BCCC: "Cement Carrier",
+  BCOB: "Ore/Bulk Carrier",
+  C2: "Container Ship-2nd Gen.",
+  C3: "Container Ship-3rd Gen.",
+  CC: "Vehicle Carrier",
+  CCCV: "Container Vehicle Carrier",
+  CCRR: "RoRo Car Carrier",
+  CF: "Container Ship-Feeder",
+  CH: "Chemical Tanker",
+  CL: "Cable Laying Ship",
+  CO: "Coaster",
+  CR: "Container Ship-Roll On/Off",
+  CS: "Container Ship",
+  CX: "Crane Barge",
+  DL: "Drill Ship",
   DR: "Dredger",
-  DL: "Dredger / loader",
-  LC: "Landing craft",
-  RV: "Research vessel",
-  RE: "Research vessel",
-  OR: "Offshore / other",
-  CL: "Crew / liner",
-  CX: "Container feeder",
-  FR: "Reefer",
-  PB: "Patrol boat",
-  LB: "Lifeboat / supply",
-  LH: "Light buoy / harbor",
-  LV: "Light vessel",
-  MV: "Motor vessel",
-  ST: "Storage tanker",
-  TUSV: "Tug / supply",
+  DS: "Dead Ship",
+  FB: "Ferry Boat",
+  FBPC: "Passenger/Car Ferry",
+  FBPG: "Passenger/Cargo Ferry",
+  FBVF: "Passenger Vehicular Ferry",
+  FR: "General Cargo",
+  FRRR: "RoRo Cargo",
+  FS: "Factory Ship",
+  FV: "Fishing Vessel",
+  HS: "Heavyload Semi-Submersible",
+  IB: "Icebreaker",
+  JU: "Junk",
+  LA: "LASH Vessel",
+  LC: "Landing Craft",
+  LI: "Lighter",
+  LN: "LNG",
+  LP: "LPG",
+  LU: "Passenger Launch",
+  LV: "Live-Stock Vessel",
+  NN: "Nuclear Power Vessel",
+  NV: "Naval Vessel",
+  OB: "Oil-Bulk-Ore Carrier",
+  OBOL: "Oil-Gas Carrier",
+  OR: "Oil Rig",
+  ORAC: "Accommodation Rig",
+  ORJA: "Jack-Up Rig",
+  ORSS: "Semi-Submersible Rig",
+  ORTE: "Tender Rig",
+  OT: "Others",
+  PL: "Passenger Vessel (D.C.)",
+  PM: "Motorised Pleasure Boat",
+  PMCB: "Cabin Cruiser",
+  PMCT: "Motorised Catamaran",
+  PMDI: "Motorised Dinghy",
+  PMFU: "Motorised Funboat",
+  PMHO: "Motorised Hovercraft",
+  PMHY: "Hydrofoil",
+  PMSB: "Ski-Boat",
+  PMSP: "Speedboat",
+  PMST: "Motorised Catamaran",
+  PMTR: "Motorised Trimaran",
+  PR: "Rowing Boat",
+  PRBA: "Powered Recreational Barge",
+  PRCA: "Canoe",
+  PRDI: "Rowing Dinghy",
+  PRFU: "Rowing Funboat",
+  PS: "Sailing Boat",
+  PSCT: "Catamaran",
+  PSDI: "Sailing Dinghy",
+  PSFU: "Sailing Funboat",
+  PSTR: "Trimaran",
+  PT: "Parcel Tanker",
+  PV: "Passenger Vessel",
+  PVHO: "Passenger Hovercraft",
+  RE: "Reefer Vessel",
+  RV: "Research/Survey Vessel",
+  SA: "Salvage Vessel",
+  SC: "Semi-Container Ship",
+  SM: "Sampan",
+  SMBG: "Big Motor Sampan",
+  SMBI: "Big Non-Motorised Sampan",
+  SMBM: "Bumboat",
+  SMMO: "Motor Sampan",
+  SMRO: "Rowing Sampan",
+  SMTO: "Tongkang",
+  SMTW: "Chinese Twako",
+  SR: "Submarine Support & Rescue",
+  SV: "Supply Vessel",
+  SVOF: "Offshore Supply Vessel",
+  TA: "Tanker",
+  TAAT: "Asphalt Tanker",
+  TABA: "Tanker Barge",
+  TABU: "Bunker Tanker",
+  TACG: "Chemical/Gas Tanker",
+  TACO: "Crude Oil Tanker",
+  TAFO: "Floating Storage Offshore",
+  TAFP: "FPSO Vessel",
+  TAFU: "Floating Storage Unit",
+  TAFX: "Floating Storage Regas. Unit",
+  TALG: "Liquefied Gas Carrier",
+  TAMO: "Mobile Offshore Production Unit",
+  TAOC: "Oil/Chemical/Gas Tanker",
+  TAP1: "Petroleum Product Tanker (>=60C)",
+  TAP2: "Petroleum Product Tanker (<60C)",
+  TAP3: "Petroleum Product Tanker (<=60C)",
+  TAPC: "Petroleum/Chemical Tanker",
+  TAUL: "ULCC",
+  TAVL: "VLCC",
+  TAVO: "Vegetable Oil Tanker",
+  TAWA: "Water Tanker",
+  TAWD: "Wooden Bunker Craft",
+  TS: "Training Ship",
+  TU: "Tug Boat",
+  TUCC: "Supply Vessel/ Cement Carrier",
+  TUPU: "Pusher Tug",
+  TUSV: "Tug/Supply Vessel",
+  UT: "Utility Vessel",
+  UTDV: "Diving Support Vessel",
+  UTOS: "Oil Spill Response Vessel",
+  WA: "Waterboat",
+  WB: "Workboat",
+  WBCB: "Crew Boat",
+  WG: "Wing In Ground Craft",
+  YA: "Yacht",
+  YA50: "International 505",
+  YACB: "Cabin Cruiser",
+  YACT: "Motorised Catamaran",
+  YAHO: "Motorised Hovercraft",
+  YAMO: "Motorised Yacht",
+  YASL: "Sailing Yacht",
+  YASP: "Speedboat",
+  YATR: "Motorised Trimaran",
+  YAWG: "Yacht-Wing In Ground Craft",
 };
 
 export function vesselTypeLabel(code: string | null | undefined): string {
@@ -232,4 +340,47 @@ export function isSanctioned(flag_type: string): boolean {
 }
 export function isDetained(flag_type: string): boolean {
   return riskLabel(flag_type).kind === "detained";
+}
+
+// --- Geo layer humanization ----------------------------------------
+
+/**
+ * OCEANS-X geo-layer endpoints use compact identifiers like `ports_p`
+ * (point), `coastline_l` (line), `offshore_a` (polygon). Map to
+ * analyst-readable labels; unknown layers fall back to title-casing
+ * the bare name with the suffix translated.
+ */
+const GEO_LAYER_LABELS: Record<string, string> = {
+  ports_p: "Ports",
+  dangers_p: "Danger areas",
+  aton_p: "Aids to navigation",
+  coastline_l: "Coastline",
+  offshore_a: "Offshore zones",
+  anchorages_a: "Anchorages",
+  fairway_l: "Fairways",
+  port_limits_a: "Port limits",
+  tss_a: "Traffic separation schemes",
+  restricted_a: "Restricted areas",
+  pilot_boarding_p: "Pilot boarding stations",
+};
+
+const GEO_LAYER_SUFFIXES: Record<string, string> = {
+  p: "points",
+  l: "lines",
+  a: "areas",
+};
+
+export function geoLayerLabel(name: string | null | undefined): string {
+  if (!name) return "";
+  if (GEO_LAYER_LABELS[name]) return GEO_LAYER_LABELS[name];
+  const match = name.match(/^(.+)_(p|l|a)$/);
+  if (match) {
+    const [, base, suffix] = match;
+    const pretty = base
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+    const suffixLabel = GEO_LAYER_SUFFIXES[suffix];
+    return suffixLabel ? `${pretty} (${suffixLabel})` : pretty;
+  }
+  return name;
 }

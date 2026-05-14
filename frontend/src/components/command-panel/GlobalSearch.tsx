@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { searchEntities, searchVessels } from "../../api";
 import { useDebounce } from "../../hooks/useDebounce";
 import { navigateTo } from "../../hooks/useRoute";
+import { useSelection } from "../../state/AppState";
 import type { Entity, VesselSearchResult } from "../../types";
 
 type Result =
@@ -11,6 +12,7 @@ type Result =
   | { kind: "evidence"; id: number };
 
 export function GlobalSearch({ compact }: { compact?: boolean }) {
+  const { select } = useSelection();
   const [query, setQuery] = useState("");
   const debounced = useDebounce(query, 200);
   const [vessels, setVessels] = useState<VesselSearchResult[]>([]);
@@ -121,9 +123,18 @@ export function GlobalSearch({ compact }: { compact?: boolean }) {
                 ? r.item.entity_type
                 : "Open evidence";
             const onClick = () => {
-              if (r.kind === "vessel") navigateTo(`/vessels/${r.item.id}`);
-              else if (r.kind === "entity") navigateTo(`/entities/${r.item.id}`);
-              else navigateTo(`/evidence/${r.id}`);
+              // Dispatch selection BEFORE the route push so the map +
+              // inspector see the new subject on the same render cycle.
+              if (r.kind === "vessel") {
+                select({ kind: "vessel", id: r.item.id });
+                navigateTo(`/vessels/${r.item.id}`);
+              } else if (r.kind === "entity") {
+                select({ kind: "entity", id: r.item.id });
+                navigateTo(`/entities/${r.item.id}`);
+              } else {
+                select({ kind: "evidence", id: r.id });
+                navigateTo(`/evidence/${r.id}`);
+              }
               setOpen(false);
               setQuery("");
             };

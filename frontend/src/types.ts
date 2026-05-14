@@ -99,6 +99,7 @@ export type VesselObservation = {
 export type VesselEvent = {
   id: number;
   vessel_id: number | null;
+  vessel?: VesselSummary | null;
   port_code: string | null;
   port_name: string | null;
   event_type: string;
@@ -143,6 +144,13 @@ export type RiskFlag = {
   status: string;
   created_at: string;
   resolved_at: string | null;
+};
+
+export type RiskFeedItem = {
+  flag: RiskFlag;
+  subject: string;
+  vessel_id: number | null;
+  entity_id: number | null;
 };
 
 export type GraphNode = { id: string; type: string; label: string; summary: Record<string, unknown> };

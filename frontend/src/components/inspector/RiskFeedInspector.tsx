@@ -1,12 +1,12 @@
 import { Anchor, RefreshCw, Scale, ShieldAlert } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { getVesselRiskFlags, runRiskRecompute } from "../../api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { getRiskFeed, runRiskRecompute } from "../../api";
 import { useApp, useJobRunner } from "../../state/AppState";
 import { Button } from "../primitives/Button";
 import { Chip } from "../primitives/Chip";
 import { EmptyState } from "../primitives/EmptyState";
 import { Skeleton } from "../primitives/Skeleton";
-import type { RiskFlag, RiskSeverity } from "../../types";
+import type { RiskFeedItem, RiskFlag, RiskSeverity } from "../../types";
 import { requestMapCenter } from "../../hooks/useMapCenter";
 import { navigateTo } from "../../hooks/useRoute";
 import { riskLabel, type RiskKind } from "../../labels";
@@ -17,40 +17,51 @@ const SEVERITIES: RiskSeverity[] = ["critical", "high", "medium", "low"];
 
 export function RiskFeedInspector() {
   const { state, dispatch } = useApp();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<RiskSeverity | null>(null);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"open" | "all">("open");
+  const [feedItems, setFeedItems] = useState<RiskFeedItem[]>([]);
   const runJob = useJobRunner();
 
-  useEffect(() => {
-    // TODO(api): replace fan-out with GET /api/risk/feed (design/wiring.md §14.1).
-    const candidates = state.vessels.slice(0, 80).filter((v) => !(v.vessel_id in state.riskByVessel));
-    if (candidates.length === 0) return;
+  const loadFeed = useCallback(() => {
     setLoading(true);
-    Promise.all(
-      candidates.map((v) =>
-        getVesselRiskFlags(v.vessel_id)
-          .then((flags) => dispatch({ type: "CACHE_VESSEL_RISK", id: v.vessel_id, flags }))
-          .catch(() => undefined),
-      ),
-    ).finally(() => setLoading(false));
-  }, [state.vessels, state.riskByVessel, dispatch]);
+    getRiskFeed(1000, true)
+      .then((items) => {
+        setFeedItems(items);
+
+        const byVessel = new Map<number, RiskFlag[]>();
+        const byEntity = new Map<number, RiskFlag[]>();
+        for (const item of items) {
+          if (item.vessel_id != null) {
+            byVessel.set(item.vessel_id, [...(byVessel.get(item.vessel_id) ?? []), item.flag]);
+          } else if (item.entity_id != null) {
+            byEntity.set(item.entity_id, [...(byEntity.get(item.entity_id) ?? []), item.flag]);
+          }
+        }
+        for (const [id, flags] of byVessel) {
+          dispatch({ type: "CACHE_VESSEL_RISK", id, flags });
+        }
+        for (const [id, flags] of byEntity) {
+          dispatch({ type: "CACHE_ENTITY_RISK", id, flags });
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => setLoading(false));
+  }, [dispatch]);
+
+  useEffect(() => {
+    loadFeed();
+  }, [loadFeed]);
 
   const flatFlags: { flag: RiskFlag; subject: string; vesselId?: number; entityId?: number }[] = useMemo(() => {
-    const out: { flag: RiskFlag; subject: string; vesselId?: number; entityId?: number }[] = [];
-    for (const [idStr, list] of Object.entries(state.riskByVessel)) {
-      const id = Number(idStr);
-      const vessel = state.vessels.find((v) => v.vessel_id === id);
-      const subject = vessel?.name ?? `Vessel #${id}`;
-      list.forEach((flag) => out.push({ flag, subject, vesselId: id }));
-    }
-    for (const [idStr, list] of Object.entries(state.riskByEntity)) {
-      const id = Number(idStr);
-      list.forEach((flag) => out.push({ flag, subject: `Entity #${id}`, entityId: id }));
-    }
-    return out;
-  }, [state.riskByVessel, state.riskByEntity, state.vessels]);
+    return feedItems.map((item) => ({
+      flag: item.flag,
+      subject: item.subject,
+      vesselId: item.vessel_id ?? undefined,
+      entityId: item.entity_id ?? undefined,
+    }));
+  }, [feedItems]);
 
   const flagTypes = useMemo(() => Array.from(new Set(flatFlags.map((r) => r.flag.flag_type))).sort(), [flatFlags]);
 
@@ -103,7 +114,10 @@ export function RiskFeedInspector() {
           size="sm"
           variant="primary"
           leadingIcon={<RefreshCw size={12} />}
-          onClick={() => runJob("risk-recompute", () => runRiskRecompute(), { successTitle: "Risk recompute complete", errorTitle: "Risk recompute failed" })}
+          onClick={() =>
+            runJob("risk-recompute", () => runRiskRecompute(), { successTitle: "Risk recompute complete", errorTitle: "Risk recompute failed" })
+              .then(loadFeed)
+          }
         >
           Recompute risk flags
         </Button>
@@ -174,7 +188,10 @@ export function RiskFeedInspector() {
               size="sm"
               variant="primary"
               leadingIcon={<RefreshCw size={11} />}
-              onClick={() => runJob("risk-recompute", () => runRiskRecompute(), { successTitle: "Risk recompute complete", errorTitle: "Risk recompute failed" })}
+              onClick={() =>
+                runJob("risk-recompute", () => runRiskRecompute(), { successTitle: "Risk recompute complete", errorTitle: "Risk recompute failed" })
+                  .then(loadFeed)
+              }
             >
               Recompute risk
             </Button>
@@ -189,6 +206,10 @@ export function RiskFeedInspector() {
             flag={r.flag}
             subject={r.subject}
             onOpenSubject={() => {
+              // Remember we came from /risk so the destination inspector
+              // can render a "Back to Risk feed" affordance (bug #9 —
+              // the user shouldn't lose the risk context).
+              try { sessionStorage.setItem("seam:return-to-risk", "1"); } catch { /* ignore */ }
               if (r.vesselId != null) {
                 const v = state.vessels.find((x) => x.vessel_id === r.vesselId);
                 if (v) requestMapCenter({ lng: v.longitude, lat: v.latitude, zoom: 8 });

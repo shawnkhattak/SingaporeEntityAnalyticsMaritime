@@ -1,6 +1,6 @@
 import { Anchor, MapPin, Scale, ShieldAlert } from "lucide-react";
 import { navigateTo } from "../../hooks/useRoute";
-import { useStatsSnapshot } from "../../state/AppState";
+import { useApp, useStatsSnapshot } from "../../state/AppState";
 import { Skeleton } from "../primitives/Skeleton";
 
 /**
@@ -12,6 +12,8 @@ import { Skeleton } from "../primitives/Skeleton";
  */
 export function KeyStatsStrip() {
   const stats = useStatsSnapshot();
+  const { state } = useApp();
+  const liveVesselCount = state.vesselsLoaded ? state.vessels.length : null;
 
   return (
     <div style={{ padding: "10px 12px 12px", borderTop: "1px solid var(--gray-200)" }}>
@@ -19,9 +21,9 @@ export function KeyStatsStrip() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
         <StatTile
           icon={<Anchor size={11} />}
-          label="Vessels"
-          value={stats.vessels}
-          help="Total vessels in DB"
+          label="Live vessels"
+          value={liveVesselCount}
+          help="Vessels in the latest map snapshot"
           onClick={() => navigateTo("/vessels")}
         />
         <StatTile

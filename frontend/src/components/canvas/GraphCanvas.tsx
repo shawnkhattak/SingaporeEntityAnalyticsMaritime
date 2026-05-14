@@ -224,20 +224,41 @@ export function GraphCanvas({ subject }: GraphCanvasProps) {
 }
 
 function GraphLegend() {
+  const [open, setOpen] = useState(true);
   return (
     <div
       className="panel-solid"
       style={{
         position: "absolute",
-        top: 12,
+        // Bottom-left so the Vessel/Entity toolbar at the top isn't
+        // occluded (bug #12).
+        bottom: 12,
         left: 12,
-        padding: "10px 12px",
+        padding: "8px 12px",
         zIndex: 5,
         fontSize: 11,
         maxWidth: 220,
       }}
     >
-      <div className="t-caption" style={{ marginBottom: 6 }}>Legend</div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="t-caption row"
+        style={{ background: "none", border: 0, cursor: "pointer", marginBottom: open ? 6 : 0, padding: 0, color: "var(--slate-500)", width: "100%", justifyContent: "space-between" }}
+        aria-expanded={open}
+        aria-label="Toggle legend"
+      >
+        <span>Legend</span>
+        <span style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }}>▾</span>
+      </button>
+      {open && <LegendBody />}
+    </div>
+  );
+}
+
+function LegendBody() {
+  return (
+    <>
       <LegendRow color="var(--cyan-400)" label="Vessel" />
       <LegendRow color="var(--ocean-500)" label="Entity" />
       <LegendRow color="var(--risk-critical)" label="Risk flag" />
@@ -248,7 +269,7 @@ function GraphLegend() {
         <span><span style={{ display: "inline-block", width: 22, borderTop: "1px solid var(--slate-500)", verticalAlign: 4 }} /> medium</span>
         <span><span style={{ display: "inline-block", width: 22, borderTop: "1px dashed var(--slate-500)", verticalAlign: 4 }} /> low</span>
       </div>
-    </div>
+    </>
   );
 }
 

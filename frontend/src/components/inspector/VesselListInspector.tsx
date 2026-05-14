@@ -92,10 +92,17 @@ export function VesselListInspector() {
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const visible = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
+  const totalInSnapshot = state.vessels.length;
+  const titleSuffix = results
+    ? `${rows.length} match${rows.length === 1 ? "" : "es"}`
+    : totalInSnapshot && rows.length !== totalInSnapshot
+    ? `${rows.length} of ${totalInSnapshot} visible`
+    : `${rows.length}`;
+
   return (
     <InspectorShell
       breadcrumb="Vessels"
-      title={`Vessels · ${rows.length}`}
+      title={`Vessels · ${titleSuffix}`}
       onClose={() => window.history.back()}
       footer={
         <div className="row" style={{ justifyContent: "space-between", fontSize: 12 }}>

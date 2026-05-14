@@ -12,15 +12,20 @@ export function usePoll(fn: () => Promise<unknown> | void, intervalMs: number, o
   useEffect(() => {
     if (options.paused) return;
     let cancelled = false;
+    let inFlight = false;
     let timer: number | undefined;
 
     async function tick() {
       if (cancelled) return;
       if (document.visibilityState === "hidden") return;
+      if (inFlight) return;
+      inFlight = true;
       try {
         await fnRef.current();
       } catch {
         /* surface errors through toasts elsewhere */
+      } finally {
+        inFlight = false;
       }
     }
 

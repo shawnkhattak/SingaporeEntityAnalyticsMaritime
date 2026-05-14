@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, MapPin, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getPortActivity, runPortActivity } from "../../api";
 import { useJobRunner } from "../../state/AppState";
 import { Button } from "../primitives/Button";
@@ -18,19 +18,29 @@ const TABS = [
 
 type Cached = { arrive?: VesselEvent[]; depart?: VesselEvent[] };
 
+function currentDateParam() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
 export function PortsInspector() {
   const [cached, setCached] = useState<Cached>({});
   const [tab, setTab] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [activityDate] = useState(() => currentDateParam());
+  const loadedDateRef = useRef<string | null>(null);
   const runJob = useJobRunner();
 
   useEffect(() => {
+    if (loadedDateRef.current === activityDate) return;
+    loadedDateRef.current = activityDate;
     setLoading(true);
-    Promise.all([getPortActivity("due-arrive").catch(() => []), getPortActivity("due-depart").catch(() => [])])
+    Promise.all([loadKind("due-arrive"), loadKind("due-depart")])
       .then(([a, d]) => setCached({ arrive: a, depart: d }))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activityDate]);
 
   const kind = TABS[tab].kind;
   const events: VesselEvent[] = useMemo(() => {
@@ -41,7 +51,7 @@ export function PortsInspector() {
   const grouped = useMemo(() => {
     const m = new Map<string, VesselEvent[]>();
     for (const e of events) {
-      const key = e.port_code ?? e.port_name ?? "—";
+      const key = e.port_code ?? e.port_name ?? "Unassigned";
       const list = m.get(key) ?? [];
       list.push(e);
       m.set(key, list);
@@ -60,8 +70,8 @@ export function PortsInspector() {
 
   function refreshKind(k: "due-arrive" | "due-depart") {
     return runJob(`ports-${k}`, async () => {
-      await runPortActivity(k);
-      const fresh = await getPortActivity(k);
+      await runPortActivity(k, activityDate);
+      const fresh = await getPortActivity(k, 100, activityDate);
       setCached((curr) => ({ ...curr, [k === "due-arrive" ? "arrive" : "depart"]: fresh }));
     }, {
       successTitle: `Port ${k === "due-arrive" ? "arrivals" : "departures"} refreshed`,
@@ -69,11 +79,26 @@ export function PortsInspector() {
     });
   }
 
+  async function loadKind(k: "due-arrive" | "due-depart") {
+    try {
+      await runPortActivity(k, activityDate);
+      return await getPortActivity(k, 100, activityDate);
+    } catch {
+      return [];
+    }
+  }
+
+  const emptyActionKind = kind === "due-depart" ? "due-depart" : "due-arrive";
+  const emptyActionLabel = emptyActionKind === "due-arrive" ? "Pull arrivals now" : "Pull departures now";
+
   return (
     <InspectorShell
       breadcrumb="Ports"
-      title={`Ports · ${grouped.length}`}
-      tabs={TABS.map((t) => ({ label: t.label }))}
+      title={`Ports · ${events.length}`}
+      tabs={TABS.map((t) => ({
+        label: t.label,
+        count: t.kind === "all" ? (cached.arrive?.length ?? 0) + (cached.depart?.length ?? 0) : t.kind === "due-arrive" ? cached.arrive?.length ?? 0 : cached.depart?.length ?? 0,
+      }))}
       activeTab={tab}
       onTabChange={setTab}
       onClose={() => window.history.back()}
@@ -90,10 +115,10 @@ export function PortsInspector() {
           compact
           icon={<MapPin size={18} />}
           title="No port activity yet"
-          body="OCEANS-X due-arrive / due-depart endpoints currently return scope-limited responses. Pull manually or check the Operations console for status."
+          body={`No OCEANS-X ${kind === "due-depart" ? "departures" : "arrivals"} returned for ${activityDate}.`}
           action={
-            <Button size="sm" variant="primary" leadingIcon={<RefreshCw size={11} />} onClick={() => refreshKind("due-arrive")}>
-              Pull arrivals now
+            <Button size="sm" variant="primary" leadingIcon={<RefreshCw size={11} />} onClick={() => refreshKind(emptyActionKind)}>
+              {emptyActionLabel}
             </Button>
           }
         />
@@ -115,7 +140,12 @@ export function PortsInspector() {
                   {evts.map((e) => (
                     <div key={e.id} className="row" style={{ padding: "6px 0", borderTop: "1px solid var(--gray-100)", fontSize: 12 }}>
                       <span className="pill info" style={{ fontSize: 10 }}>{e.event_type}</span>
-                      <span style={{ flex: 1 }}>Vessel #{e.vessel_id ?? "?"}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <strong>{e.vessel?.name ?? `Vessel #${e.vessel_id ?? "?"}`}</strong>
+                        <span className="t-faded mono" style={{ marginLeft: 6, fontSize: 11 }}>
+                          {[e.vessel?.imo, e.vessel?.call_sign, e.vessel?.flag_country_code].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
                       <span className="t-faded" style={{ fontSize: 11 }}>{formatDate(e.event_time ?? e.created_at)}</span>
                       <EvidenceLink id={e.evidence_id} variant="inline" />
                     </div>

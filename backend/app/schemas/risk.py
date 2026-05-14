@@ -16,3 +16,10 @@ class RiskFlagRead(BaseModel):
     status: str
     created_at: datetime
     resolved_at: datetime | None
+
+
+class RiskFeedItem(BaseModel):
+    flag: RiskFlagRead
+    subject: str
+    vessel_id: int | None = None
+    entity_id: int | None = None

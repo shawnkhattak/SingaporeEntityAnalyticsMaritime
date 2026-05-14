@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 function isTypingInField(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -21,16 +21,18 @@ function comboMatches(event: KeyboardEvent, combo: string): boolean {
   return event.key.toLowerCase() === key;
 }
 
-export function useHotkey(combo: string, handler: (e: KeyboardEvent) => void, deps: unknown[] = []) {
+export function useHotkey(combo: string, handler: (e: KeyboardEvent) => void) {
+  const handlerRef = useRef(handler);
+  handlerRef.current = handler;
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!comboMatches(e, combo)) return;
       const isEscape = combo.toLowerCase() === "escape";
       if (!isEscape && isTypingInField(e.target)) return;
-      handler(e);
+      handlerRef.current(e);
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [combo, ...deps]);
+  }, [combo]);
 }

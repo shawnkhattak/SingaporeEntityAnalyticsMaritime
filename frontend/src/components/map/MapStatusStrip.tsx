@@ -27,8 +27,8 @@ export function MapStatusStrip({ vesselCount, runJob }: MapStatusStripProps) {
 
   return (
     <div className="map-status glass" style={{ left: "50%", transform: "translateX(-50%)" }}>
-      <span>
-        Showing <strong>{vesselCount}</strong> {vesselCount === 1 ? "vessel" : "vessels"}
+      <span title="Vessels from the most recent OCEANS-X snapshot. Total in DB (including older snapshots) is shown in Operations.">
+        Showing <strong>{vesselCount}</strong> {vesselCount === 1 ? "vessel" : "vessels"} <span className="t-muted">· latest snapshot</span>
       </span>
       <span className="t-muted" style={{ fontSize: 11 }}>·</span>
       <span className="t-muted" style={{ fontSize: 11 }}>last refresh {formatRelative(newest)}</span>
@@ -50,7 +50,12 @@ export function MapStatusStrip({ vesselCount, runJob }: MapStatusStripProps) {
       {totalRisk > 0 && (
         <>
           <span className="t-muted" style={{ fontSize: 11 }}>·</span>
-          <span className="pill med">{totalRisk} active risk flag{totalRisk === 1 ? "" : "s"}</span>
+          <span
+            className="pill med"
+            title="Sum of cached active flags for vessels visited this session — open the Risk feed for the full count."
+          >
+            {totalRisk} cached risk flag{totalRisk === 1 ? "" : "s"}
+          </span>
         </>
       )}
     </div>

@@ -40,6 +40,7 @@ class VesselPositionLatest(UpdatedAtMixin, Base):
     navigational_status: Mapped[Optional[str]] = mapped_column(String(128))
     position_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     evidence_id: Mapped[Optional[int]] = mapped_column(ForeignKey("source_observations.id", ondelete="SET NULL"))
+    snapshot_job_id: Mapped[Optional[int]] = mapped_column(ForeignKey("ingestion_jobs.id", ondelete="SET NULL"), index=True)
 
 
 class PortEvent(CreatedAtMixin, Base):

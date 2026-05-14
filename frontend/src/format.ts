@@ -31,6 +31,62 @@ export function formatDate(value: string | null | undefined) {
   }).format(date);
 }
 
+/**
+ * Backend `source_record_id` is built as a pipe-delimited concatenation
+ * of `imo | mmsi | call_sign | observed_at.isoformat()` (see
+ * `backend/app/services/ingestion.py:176`). The Evidence tab used to
+ * render it raw, which is unreadable. This parser splits the string
+ * back into structured fields when it conforms, else returns `raw`
+ * for inputs that aren't pipe-delimited (sanctions/news/CSV ids).
+ */
+export type ParsedSourceRecordId =
+  | { kind: "structured"; imo: string | null; mmsi: string | null; callSign: string | null; observedAt: string | null; display: string }
+  | { kind: "raw"; raw: string };
+
+export function parseSourceRecordId(value: string | null | undefined): ParsedSourceRecordId | null {
+  if (!value) return null;
+  if (!value.includes("|")) return { kind: "raw", raw: value };
+  const parts = value.split("|");
+  if (parts.length < 2 || parts.length > 4) return { kind: "raw", raw: value };
+  // The ingestion code filters empty parts before joining, so we can't
+  // reliably tell which field is which by position. Use light heuristics:
+  // IMO is 6-9 digits, MMSI is 7-9 digits (usually 9), call_sign is alphanumeric,
+  // observed_at looks like an ISO timestamp.
+  let imo: string | null = null;
+  let mmsi: string | null = null;
+  let callSign: string | null = null;
+  let observedAt: string | null = null;
+  for (const p of parts) {
+    const t = p.trim();
+    if (!t) continue;
+    if (/^\d{4}-\d{2}-\d{2}T/.test(t)) {
+      observedAt = t;
+    } else if (/^\d{7}$/.test(t) && !imo) {
+      imo = t;
+    } else if (/^\d{8,9}$/.test(t)) {
+      // 9-digit numeric → likely MMSI (or rarely IMO without check digit).
+      if (mmsi) imo = t;
+      else mmsi = t;
+    } else {
+      callSign = t;
+    }
+  }
+  const displayParts = [
+    imo && `IMO ${imo}`,
+    mmsi && `MMSI ${mmsi}`,
+    callSign,
+    observedAt && formatRelative(observedAt),
+  ].filter(Boolean) as string[];
+  return {
+    kind: "structured",
+    imo,
+    mmsi,
+    callSign,
+    observedAt,
+    display: displayParts.join(" · ") || value,
+  };
+}
+
 export function formatRelative(value: string | null | undefined): string {
   if (!value) return "—";
   const date = parseBackendDate(value);

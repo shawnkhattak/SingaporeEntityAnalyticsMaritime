@@ -7,11 +7,24 @@ import { EmptyState } from "../primitives/EmptyState";
 
 const DOMAIN_COLOR: Record<string, string> = {
   maritime: "var(--ocean-500)",
+  entity: "var(--ocean-600)",
   evidence: "var(--cyan-400)",
   ingestion: "var(--navy-700)",
+  port: "var(--health-ok)",
+  news: "var(--risk-medium)",
   risk: "var(--risk-critical)",
   reference: "var(--slate-500)",
 };
+
+// Stable fallback for any unmapped domain — derived deterministically
+// from the domain name so legend swatches and node stripes match.
+function domainColor(domain: string): string {
+  if (DOMAIN_COLOR[domain]) return DOMAIN_COLOR[domain];
+  const palette = ["var(--ocean-500)", "var(--cyan-400)", "var(--navy-700)", "var(--risk-medium)", "var(--health-ok)", "var(--slate-500)"];
+  let hash = 0;
+  for (let i = 0; i < domain.length; i++) hash = (hash * 31 + domain.charCodeAt(i)) >>> 0;
+  return palette[hash % palette.length];
+}
 
 function routesForTable(name: string): string[] {
   const map: Record<string, string[]> = {
@@ -58,7 +71,7 @@ export function SchemaCanvas() {
         style: {
           background: "var(--white)",
           border: "1px solid var(--gray-200)",
-          borderLeft: `4px solid ${DOMAIN_COLOR[node.domain] ?? "var(--slate-500)"}`,
+          borderLeft: `4px solid ${domainColor(node.domain)}`,
           borderRadius: 8,
           padding: 10,
           fontSize: 12,
@@ -94,9 +107,9 @@ export function SchemaCanvas() {
         </select>
         <span className="spacer" />
         <div className="row" style={{ gap: 10, fontSize: 11, color: "var(--slate-500)" }}>
-          {domains.slice(0, 5).map((d) => (
+          {domains.map((d) => (
             <span key={d} className="row" style={{ gap: 4 }}>
-              <span style={{ width: 10, height: 10, borderRadius: 2, background: DOMAIN_COLOR[d] ?? "var(--slate-500)" }} />
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: domainColor(d) }} />
               {d}
             </span>
           ))}

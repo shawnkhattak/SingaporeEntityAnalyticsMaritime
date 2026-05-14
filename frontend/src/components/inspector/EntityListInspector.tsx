@@ -1,6 +1,6 @@
 import { Building2, RefreshCw, Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { runRefreshLive, searchEntities } from "../../api";
+import { getEntitiesList, runRefreshLive, searchEntities } from "../../api";
 import { useDebounce } from "../../hooks/useDebounce";
 import { navigateTo } from "../../hooks/useRoute";
 import { useJobRunner } from "../../state/AppState";
@@ -22,13 +22,12 @@ export function EntityListInspector() {
   const runJob = useJobRunner();
 
   useEffect(() => {
-    if (!debounced.trim()) {
-      setResults([]);
-      return;
-    }
     let cancelled = false;
     setLoading(true);
-    searchEntities(debounced)
+    // Empty query → show recent entities so the page isn't empty on
+    // first visit. `getEntitiesList` hits the new GET /api/entities.
+    const load = debounced.trim() ? searchEntities(debounced) : getEntitiesList(50);
+    load
       .then((r) => {
         if (!cancelled) setResults(r);
       })

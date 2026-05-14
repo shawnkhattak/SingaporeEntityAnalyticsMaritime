@@ -1,4 +1,4 @@
-import { GripVertical, X } from "lucide-react";
+import { ChevronsLeftRight, X } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { useInspectorState } from "../../state/AppState";
 import { Tabs, type TabItem } from "../primitives/Tabs";
@@ -37,10 +37,10 @@ export function InspectorShell({ title, breadcrumb, tabs, activeTab = 0, onTabCh
           <button
             className="btn ghost icon sm"
             onClick={() => resize(width === 480 ? 720 : 480)}
-            aria-label={width === 480 ? "Expand inspector" : "Collapse inspector"}
-            title={width === 480 ? "Expand" : "Collapse"}
+            aria-label={width === 480 ? "Expand inspector width to 720px" : "Collapse inspector width to 480px"}
+            title={width === 480 ? "Widen panel" : "Narrow panel"}
           >
-            <GripVertical size={14} />
+            <ChevronsLeftRight size={14} />
           </button>
           <button className="btn ghost icon sm" onClick={onClose} aria-label="Close inspector" title="Close">
             <X size={14} />

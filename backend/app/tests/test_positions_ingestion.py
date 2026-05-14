@@ -1,6 +1,9 @@
+import asyncio
 from datetime import UTC, datetime
 from unittest import TestCase
+from unittest.mock import patch
 
+from app.clients.oceansx import OceansXClient
 from app.services.ingestion import (
     PARTICULARS_ENTITY_FIELDS,
     _datetime_value,
@@ -67,3 +70,14 @@ class PositionsIngestionHelperTests(TestCase):
 
         self.assertEqual(_datetime_value("2026-04-26 08:30:00", fallback).hour, 8)
         self.assertEqual(_datetime_value("2026-04-26T08:30:00Z", fallback).tzinfo, UTC)
+
+    def test_oceansx_port_activity_uses_date_and_hours_paths(self) -> None:
+        client = OceansXClient(api_key="test-key", base_url="https://example.test", timeout_seconds=5)
+
+        with patch.object(client, "_fetch_json_sync", return_value=[]) as fetch_json:
+            asyncio.run(client.fetch_due_to_arrive("20250830", 24))
+            fetch_json.assert_called_once_with("/api/v1/vessel/duetoarrive/date/20250830/hours/24", "due-to-arrive")
+
+        with patch.object(client, "_fetch_json_sync", return_value=[]) as fetch_json:
+            asyncio.run(client.fetch_due_to_depart("20211216", 24))
+            fetch_json.assert_called_once_with("/api/v1/vessel/duetodepart/date/20211216/hours/24", "due-to-depart")

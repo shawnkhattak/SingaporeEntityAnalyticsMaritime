@@ -4,7 +4,7 @@ import { usePanelState } from "../../state/AppState";
 export function BrandHeader() {
   const { isCollapsed, toggle } = usePanelState();
   return (
-    <div className="row" style={{ padding: "14px 14px 10px", borderBottom: "1px solid var(--gray-200)" }}>
+    <div className={`brand-header row ${isCollapsed ? "collapsed" : ""}`}>
       <a href="/" className="row" style={{ gap: 8, color: "var(--navy-900)", textDecoration: "none", fontWeight: 700 }}>
         <Anchor size={20} strokeWidth={1.9} color="var(--ocean-500)" />
         {!isCollapsed && (
