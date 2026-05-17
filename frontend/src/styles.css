@@ -429,6 +429,29 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
   background: var(--white);
   padding: 12px;
 }
+.entity-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.entity-section.is-collapsed .entity-section-header {
+  margin-bottom: 0;
+}
+.entity-section-chevron {
+  color: var(--slate-400);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+.entity-section.is-collapsed .entity-section-chevron {
+  transform: rotate(-90deg);
+}
 .entity-metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

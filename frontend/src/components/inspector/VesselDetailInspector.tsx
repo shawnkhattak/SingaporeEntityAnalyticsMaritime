@@ -1,6 +1,6 @@
 import { Database, FileText, Network, RefreshCw, Ship } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getVessel, getVesselEvents, getVesselGraph, getVesselObservations, getVesselRiskFlags, runMovements, runParticulars, runRiskRecompute } from "../../api";
+import { getVessel, getVesselEvents, getVesselObservations, getVesselRiskFlags, runMovements, runParticulars, runRiskRecompute } from "../../api";
 import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
 import { requestMapCenter } from "../../hooks/useMapCenter";
 import { recordRecentVessel, useApp, useJobRunner, useSelection } from "../../state/AppState";
@@ -8,7 +8,7 @@ import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { ErrorState } from "../primitives/ErrorState";
 import { Skeleton } from "../primitives/Skeleton";
-import type { GraphRead, RiskFlag, VesselDetail, VesselEvent, VesselObservation } from "../../types";
+import type { RiskFlag, VesselDetail, VesselEvent, VesselObservation } from "../../types";
 import { formatDate, formatRelative, parseSourceRecordId } from "../../format";
 
 function evidenceSubtitle(value: string | null | undefined): string | null {
@@ -28,11 +28,8 @@ type Loaded = {
   risk: RiskFlag[];
 };
 
-const TABS = ["Overview", "Port calls", "Evidence", "Risk", "Graph"];
-
 export function VesselDetailInspector({ id }: { id: number }) {
   const [data, setData] = useState<Loaded | null>(null);
-  const [graph, setGraph] = useState<GraphRead | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
@@ -67,11 +64,6 @@ export function VesselDetailInspector({ id }: { id: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  useEffect(() => {
-    if (tab !== 4 || graph) return;
-    getVesselGraph(id).then(setGraph).catch(() => setGraph({ nodes: [], edges: [] }));
-  }, [tab, graph, id]);
-
   if (loading && !data) {
     return (
       <InspectorShell breadcrumb="Vessel" title="Loading…" onClose={closeInspectorRoute}>
@@ -97,9 +89,8 @@ export function VesselDetailInspector({ id }: { id: number }) {
   const tabItems = [
     { label: "Overview" },
     { label: "Port calls", count: data.events.length },
-    { label: "Evidence", count: data.observations.length },
+    { label: "Position History", count: data.observations.length },
     { label: "Risk", count: data.risk.length },
-    { label: "Graph" },
   ];
 
   // If we arrived from the Risk feed, surface a "Back to Risk feed"
@@ -193,7 +184,7 @@ export function VesselDetailInspector({ id }: { id: number }) {
               sub={`Type ${vesselTypeLabel(v.vessel_type_code)}`}
               icon={<Database size={14} />}
             />
-            <Metric label="Evidence" value={data.observations.length} sub="source observations" icon={<FileText size={14} />} />
+            <Metric label="Position records" value={data.observations.length} sub="recorded source observations" icon={<FileText size={14} />} />
             <Metric label="Open risk" value={data.risk.filter((f) => f.status !== "resolved").length} sub="active flags" icon={<RefreshCw size={14} />} />
           </div>
           {data.risk.length > 0 && (
@@ -261,7 +252,7 @@ export function VesselDetailInspector({ id }: { id: number }) {
       {tab === 2 && (
         <div className="col" style={{ gap: 6 }}>
           {data.observations.length === 0 ? (
-            <EmptyState title="No evidence observations" />
+            <EmptyState title="No position history" body="No recorded vessel source observations are available yet." />
           ) : (
             data.observations.map((obs) => (
               <a key={obs.id} href={`/evidence/${obs.id}`} className="card" style={{ padding: "10px 12px", textDecoration: "none", color: "inherit", display: "block" }}>
@@ -288,7 +279,6 @@ export function VesselDetailInspector({ id }: { id: number }) {
         </div>
       )}
 
-      {tab === 4 && <GraphPreview graph={graph} />}
     </InspectorShell>
   );
 }
@@ -346,33 +336,6 @@ function ConfidenceCell({ label, value, hint }: { label: string; value: number |
       <div className="mono" style={{ fontSize: 14, fontWeight: 700, color: typeof value === "number" && value > 0 ? "var(--ocean-500)" : "var(--slate-400)" }}>
         {value}
       </div>
-    </div>
-  );
-}
-
-function GraphPreview({ graph }: { graph: GraphRead | null }) {
-  if (!graph) return <Skeleton height={120} />;
-  if (graph.nodes.length === 0) return <EmptyState title="No graph data" body="Try refreshing particulars or movements." />;
-  const nodesByType = useMemo(() => {
-    const out: Record<string, number> = {};
-    graph.nodes.forEach((n) => {
-      out[n.type] = (out[n.type] ?? 0) + 1;
-    });
-    return out;
-  }, [graph]);
-  return (
-    <div className="col" style={{ gap: 10 }}>
-      <div className="card" style={{ padding: 12 }}>
-        <div className="t-caption">Graph summary</div>
-        <div className="row" style={{ flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-          {Object.entries(nodesByType).map(([type, count]) => (
-            <span key={type} className="pill">{type} · {count}</span>
-          ))}
-        </div>
-      </div>
-      <Button leadingIcon={<Network size={14} />} onClick={() => navigateTo(`/graph?subject=vessel&id=${graph.nodes[0]?.id?.split(":")[1] ?? ""}`)}>
-        Open full graph
-      </Button>
     </div>
   );
 }

@@ -1,4 +1,24 @@
-import { Activity, ClipboardList, Database, Map as MapIcon, Play, RefreshCw, Search, Ship, Upload } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
+  Database,
+  Globe,
+  Map as MapIcon,
+  Newspaper,
+  Play,
+  RefreshCw,
+  Scale,
+  Search,
+  Settings,
+  ShieldAlert,
+  Ship,
+  Sparkles,
+  Upload,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   browseDevVessels,
@@ -27,11 +47,126 @@ import { Button } from "../primitives/Button";
 import { classifyHealth, classifyJob, HealthPill, JobPill, RiskPill } from "../primitives/Pill";
 import { Modal } from "../primitives/Modal";
 import { Skeleton } from "../primitives/Skeleton";
-import type { DevVesselBrowseRow, IngestionJob, IngestionLog, SourceHealth, VesselObservation, VesselSearchResult } from "../../types";
-import { formatDate } from "../../format";
+import type {
+  DevVesselBrowseRow,
+  HealthStatus,
+  IngestionJob,
+  IngestionLog,
+  SourceHealth,
+  VesselObservation,
+  VesselSearchResult,
+} from "../../types";
+import { formatDate, formatRelative, parseBackendDate } from "../../format";
 import { countryName, flagEmoji, vesselTypeLabel } from "../../labels";
 
 const PAGE_SIZE = 25;
+
+/* ---------- Friendly-label maps -------------------------------------- */
+
+const TABLE_LABELS: Record<string, string> = {
+  vessels: "Vessels",
+  vessel_positions_latest: "Latest vessel positions",
+  vessel_positions: "Vessel position history",
+  port_events: "Port events",
+  entities: "Entities",
+  relationships: "Relationships",
+  risk_flags: "Risk flags",
+  sanctions_records: "Sanctions records",
+  news_articles: "News articles",
+  news_links: "News links",
+  reference_data: "Reference data",
+  ingestion_jobs: "Ingestion jobs",
+  ingestion_logs: "Ingestion logs",
+  source_health: "Source health",
+  source_observations: "Source observations",
+};
+
+const CORE_KEYS = ["vessels", "vessel_positions_latest", "port_events", "entities", "relationships"];
+const RISK_KEYS = ["risk_flags", "sanctions_records", "news_articles", "news_links"];
+const SYSTEM_KEYS = ["ingestion_jobs", "ingestion_logs", "source_health", "source_observations"];
+
+const JOB_TYPE_LABELS: Record<string, string> = {
+  "oceansx.positions_snapshot": "Vessel positions snapshot",
+  "oceansx.vessel_particulars": "OCEANS-X vessel particulars",
+  "oceansx.vessel_particulars_bulk": "Bulk vessel particulars",
+  "oceansx.vessel_movements": "OCEANS-X vessel movements",
+  "oceansx.port_activity": "OCEANS-X port activity",
+  "internal.test": "Internal test job",
+};
+
+const SOURCE_LABELS: Record<string, string> = {
+  oceansx: "OCEANS-X",
+  "oceansx.positions": "OCEANS-X positions",
+  "oceansx.particulars": "OCEANS-X vessel particulars",
+  "oceansx.movements": "OCEANS-X vessel movements",
+  "oceansx.port_activity": "OCEANS-X port activity",
+  "oceansx.geo": "OCEANS-X geo layers",
+  sanctions: "Sanctions",
+  opensanctions: "OpenSanctions",
+  news: "News (RSS)",
+};
+
+const SOURCE_AREA_HINTS: Record<string, string> = {
+  "oceansx.positions": "Vessel positions",
+  "oceansx.particulars": "Vessel particulars",
+  "oceansx.movements": "Vessel movements",
+  "oceansx.port_activity": "Port arrivals / departures",
+  "oceansx.geo": "Geo layers (ports, anchorages, fairways)",
+  oceansx: "OCEANS-X live feeds",
+  sanctions: "Sanctions list",
+  opensanctions: "Sanctions list",
+  news: "Maritime news",
+};
+
+function humanize(raw: string): string {
+  return raw
+    .replace(/[._\-]+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function tableLabel(key: string): string {
+  return TABLE_LABELS[key] ?? humanize(key);
+}
+
+function jobTypeLabel(jobType: string): string {
+  return JOB_TYPE_LABELS[jobType] ?? humanize(jobType);
+}
+
+function sourceLabel(source: string): string {
+  const key = source.toLowerCase();
+  if (SOURCE_LABELS[key]) return SOURCE_LABELS[key];
+  // Try parent (e.g. "oceansx.port_activity.due-arrive" → "oceansx.port_activity")
+  const parent = key.split(".").slice(0, 2).join(".");
+  if (SOURCE_LABELS[parent]) return SOURCE_LABELS[parent];
+  return humanize(source);
+}
+
+function sourceAreaHint(source: string): string {
+  const key = source.toLowerCase();
+  if (SOURCE_AREA_HINTS[key]) return SOURCE_AREA_HINTS[key];
+  const parent = key.split(".").slice(0, 2).join(".");
+  return SOURCE_AREA_HINTS[parent] ?? sourceLabel(source);
+}
+
+function suggestedActionForSource(source: string): string {
+  const key = source.toLowerCase();
+  if (key.includes("port_activity")) return "Check OCEANS-X subscription scope, then retry the port activity pull.";
+  if (key.includes("oceansx")) return "Verify OCEANS-X credentials and retry the source from the Action Center.";
+  if (key.includes("sanctions") || key.includes("opensanctions")) {
+    return "Sanctions API quota may be exhausted — submit a CSV in the meantime.";
+  }
+  if (key.includes("news")) return "Check RSS feed availability and retry the news refresh.";
+  return "Retry the source from the Action Center.";
+}
+
+function suggestedActionForJobType(jobType: string): string {
+  if (jobType === "oceansx.port_activity") return "Retry the port activity pull or check OCEANS-X scope.";
+  if (jobType.startsWith("oceansx.")) return "Retry from the Action Center.";
+  return "Retry from the Action Center.";
+}
+
+/* ---------- Component ----------------------------------------------- */
 
 export function OpsConsole() {
   const { state, dispatch } = useApp();
@@ -44,6 +179,10 @@ export function OpsConsole() {
   const [browseRows, setBrowseRows] = useState<DevVesselBrowseRow[]>([]);
   const [browseQuery, setBrowseQuery] = useState("");
   const [riskFilter, setRiskFilter] = useState<"all" | "flagged" | "critical" | "high" | "medium" | "low">("all");
+  const [flagFilter, setFlagFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [missingIdFilter, setMissingIdFilter] = useState<boolean>(false);
+  const [sortBy, setSortBy] = useState<"risk" | "updated" | "name" | "type">("risk");
   const [page, setPage] = useState(0);
   const [logLevel, setLogLevel] = useState<"all" | "info" | "warning" | "error">("all");
   const [confirmSanctions, setConfirmSanctions] = useState(false);
@@ -51,6 +190,8 @@ export function OpsConsole() {
   const [vesselQuery, setVesselQuery] = useState("");
   const [vesselSuggestions, setVesselSuggestions] = useState<VesselSearchResult[]>([]);
   const [selectedVessel, setSelectedVessel] = useState<VesselSearchResult | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showPortDetails, setShowPortDetails] = useState(false);
 
   async function refreshDev() {
     try {
@@ -105,33 +246,169 @@ export function OpsConsole() {
     return () => window.clearTimeout(id);
   }, [vesselQuery]);
 
+  /* ----- Derived datasets ------------------------------------------ */
+
+  const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+
+  const flagOptions = useMemo(() => {
+    const set = new Set<string>();
+    browseRows.forEach((r) => r.flag_country_code && set.add(r.flag_country_code));
+    return Array.from(set).sort();
+  }, [browseRows]);
+
+  const typeOptions = useMemo(() => {
+    const set = new Set<string>();
+    browseRows.forEach((r) => r.vessel_type_code && set.add(r.vessel_type_code));
+    return Array.from(set).sort();
+  }, [browseRows]);
+
   const filteredBrowse = useMemo(() => {
-    return browseRows.filter((row) => {
-      if (riskFilter === "all") return true;
-      if (riskFilter === "flagged") return row.risk_flags_count > 0;
-      return row.highest_risk_severity === riskFilter;
+    const filtered = browseRows.filter((row) => {
+      if (riskFilter === "flagged" && row.risk_flags_count <= 0) return false;
+      if (riskFilter !== "all" && riskFilter !== "flagged" && row.highest_risk_severity !== riskFilter) return false;
+      if (flagFilter !== "all" && row.flag_country_code !== flagFilter) return false;
+      if (typeFilter !== "all" && row.vessel_type_code !== typeFilter) return false;
+      if (missingIdFilter && row.imo && row.mmsi) return false;
+      return true;
     });
-  }, [browseRows, riskFilter]);
+    const sorted = filtered.slice();
+    if (sortBy === "risk") {
+      sorted.sort((a, b) => (SEVERITY_RANK[b.highest_risk_severity ?? ""] ?? 0) - (SEVERITY_RANK[a.highest_risk_severity ?? ""] ?? 0));
+    } else if (sortBy === "updated") {
+      sorted.sort((a, b) => timeOf(b.latest_position?.position_timestamp ?? b.source_updated_at) - timeOf(a.latest_position?.position_timestamp ?? a.source_updated_at));
+    } else if (sortBy === "name") {
+      sorted.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortBy === "type") {
+      sorted.sort((a, b) => vesselTypeLabel(a.vessel_type_code).localeCompare(vesselTypeLabel(b.vessel_type_code)));
+    }
+    return sorted;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [browseRows, riskFilter, flagFilter, typeFilter, missingIdFilter, sortBy]);
+
   const pageCount = Math.max(1, Math.ceil(filteredBrowse.length / PAGE_SIZE));
   const visible = filteredBrowse.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-
-  function logColor(level: string): "info" | "med" | "crit" | "default" {
-    const lvl = level.toLowerCase();
-    if (lvl === "error") return "crit";
-    if (lvl === "warning" || lvl === "warn") return "med";
-    if (lvl === "info") return "info";
-    return "default";
-  }
 
   const visibleLogs = useMemo(() => {
     if (logLevel === "all") return logs;
     return logs.filter((l) => l.level.toLowerCase() === logLevel);
   }, [logs, logLevel]);
+
+  // Group repeated error messages.
+  const groupedErrors = useMemo(() => {
+    const groups = new Map<string, { message: string; count: number; lastAt: string }>();
+    for (const l of logs) {
+      if (l.level.toLowerCase() !== "error") continue;
+      const key = l.message;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.count += 1;
+        if (parseBackendDate(l.created_at).getTime() > parseBackendDate(existing.lastAt).getTime()) {
+          existing.lastAt = l.created_at;
+        }
+      } else {
+        groups.set(key, { message: key, count: 1, lastAt: l.created_at });
+      }
+    }
+    return Array.from(groups.values()).sort((a, b) => b.count - a.count);
+  }, [logs]);
+
   const bulkParticularsJob = useMemo(
     () => state.jobs.find((job) => job.job_type === "oceansx.vessel_particulars_bulk") ?? null,
     [state.jobs],
   );
   const bulkParticularsActive = bulkParticularsJob?.status === "queued" || bulkParticularsJob?.status === "running";
+
+  /* ----- System status + active issues ----------------------------- */
+
+  const failingSources = useMemo(
+    () => state.health.filter((h) => classifyHealth(h.status) !== "ok"),
+    [state.health],
+  );
+  const healthySources = state.health.length - failingSources.length;
+  const recentFailedJobs = useMemo(
+    () => state.jobs.filter((j) => classifyJob(j.status) === "failure"),
+    [state.jobs],
+  );
+  const failedJobsByType = useMemo(() => {
+    const groups = new Map<string, { jobType: string; count: number; lastAt: string | null }>();
+    for (const j of recentFailedJobs) {
+      const existing = groups.get(j.job_type);
+      const at = j.finished_at ?? j.started_at;
+      if (existing) {
+        existing.count += 1;
+        if (at && (!existing.lastAt || timeOf(at) > timeOf(existing.lastAt))) existing.lastAt = at;
+      } else {
+        groups.set(j.job_type, { jobType: j.job_type, count: 1, lastAt: at });
+      }
+    }
+    return Array.from(groups.values()).sort((a, b) => b.count - a.count);
+  }, [recentFailedJobs]);
+
+  const lastSuccessfulLive = useMemo(() => {
+    // Prefer SourceHealth.last_success_at (authoritative); fall back to job history.
+    const fromHealth = state.health
+      .map((h) => h.last_success_at)
+      .filter((s): s is string => !!s)
+      .sort((a, b) => timeOf(b) - timeOf(a))[0];
+    if (fromHealth) return fromHealth;
+    const fromJobs = state.jobs
+      .filter((j) => classifyJob(j.status) === "success")
+      .map((j) => j.finished_at)
+      .filter((s): s is string => !!s)
+      .sort((a, b) => timeOf(b) - timeOf(a))[0];
+    return fromJobs ?? null;
+  }, [state.health, state.jobs]);
+
+  const overall: "healthy" | "partial" | "attention" = useMemo(() => {
+    if (failingSources.length === 0 && failedJobsByType.length === 0) return "healthy";
+    if (failingSources.length > 1 || failedJobsByType.some((g) => g.count >= 3)) return "attention";
+    return "partial";
+  }, [failingSources, failedJobsByType]);
+
+  const topIssue = failingSources[0] ?? null;
+  const topIssueSummary = topIssue
+    ? `${sourceLabel(topIssue.source)} is failing.`
+    : failedJobsByType[0]
+      ? `${jobTypeLabel(failedJobsByType[0].jobType)} failed ${failedJobsByType[0].count} time${failedJobsByType[0].count === 1 ? "" : "s"}.`
+      : "All ingestion sources nominal.";
+
+  /* ----- Timeline ---------------------------------------------------- */
+
+  type TimelineEvent = {
+    id: string;
+    at: string;
+    kind: "job-success" | "job-failure" | "job-running" | "log-error";
+    title: string;
+    detail?: string;
+  };
+
+  const timeline: TimelineEvent[] = useMemo(() => {
+    const events: TimelineEvent[] = [];
+    for (const j of state.jobs.slice(0, 25)) {
+      const at = j.finished_at ?? j.started_at ?? j.created_at;
+      if (!at) continue;
+      const kind = classifyJob(j.status);
+      events.push({
+        id: `job-${j.id}`,
+        at,
+        kind: kind === "success" ? "job-success" : kind === "failure" ? "job-failure" : "job-running",
+        title: `${jobTypeLabel(j.job_type)} ${kind === "success" ? "completed" : kind === "failure" ? "failed" : kind}`,
+      });
+    }
+    for (const l of logs.slice(0, 15)) {
+      if (l.level.toLowerCase() !== "error") continue;
+      events.push({
+        id: `log-${l.id}`,
+        at: l.created_at,
+        kind: "log-error",
+        title: l.message,
+      });
+    }
+    events.sort((a, b) => timeOf(b.at) - timeOf(a.at));
+    return events.slice(0, 12);
+  }, [state.jobs, logs]);
+
+  /* ----- Handlers --------------------------------------------------- */
 
   async function handleSanctionsCsvFile(file: File) {
     const text = await file.text();
@@ -165,302 +442,483 @@ export function OpsConsole() {
     URL.revokeObjectURL(link.href);
   }
 
+  /* ----- Render ----------------------------------------------------- */
+
   return (
-    <div className="col" style={{ gap: 12, paddingBottom: 30 }}>
-      <header className="row" style={{ marginBottom: 4 }}>
+    <div className="col" style={{ gap: 14, paddingBottom: 30 }}>
+      {/* ===== Header =============================================== */}
+      <header className="row" style={{ marginBottom: 4, alignItems: "flex-start" }}>
         <div style={{ flex: 1 }}>
           <div className="t-caption">Data operations</div>
-          <h1 className="t-display" style={{ margin: 0, fontSize: 22 }}>Ingestion console</h1>
+          <h1 className="t-display" style={{ margin: 0, fontSize: 22 }}>Operations Center</h1>
           <p className="t-sm" style={{ margin: "6px 0 0", color: "var(--slate-500)" }}>
-            Manual control surface for OCEANS-X, sanctions, news, and risk ingestion. Live sources only — fixture replay was removed.
+            Monitor live maritime data, refresh sources, review ingestion issues, and manage risk intelligence.
+          </p>
+          <p className="t-faded" style={{ margin: "4px 0 0", fontSize: 11 }}>
+            Live sources only. Fixture replay removed.
           </p>
         </div>
         <Button leadingIcon={<RefreshCw size={14} />} onClick={refreshDev}>Refresh</Button>
         <Button
           variant="primary"
           leadingIcon={<Play size={14} />}
-          onClick={() => runJob("refresh-live", runRefreshLive, { successTitle: "All live sources refreshed", errorTitle: "Refresh all failed" }).then(refreshDev)}
+          onClick={() =>
+            runJob("refresh-live", runRefreshLive, {
+              successTitle: "All live sources refreshed",
+              errorTitle: "Refresh all failed",
+            }).then(refreshDev)
+          }
         >
           Refresh all live
         </Button>
       </header>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr)", gap: 12 }}>
-        {/* ===== Column 1: Source health + jobs + logs ===== */}
-        <div className="col" style={{ gap: 12 }}>
-          <Panel title="Source health" icon={<Activity size={14} />}>
-            {state.health.length === 0 ? <p className="t-faded">No health rows yet. Run a test job to seed.</p> : (
-              <div className="col" style={{ gap: 4 }}>
-                {state.health.map((h: SourceHealth) => (
-                  <div key={h.id} className="row" style={{ padding: "8px 10px", borderTop: "1px solid var(--gray-100)" }}>
-                    <span className="mono" style={{ flex: 1 }}>{h.source}</span>
-                    <HealthPill status={classifyHealth(h.status)} />
-                    <span className="t-faded" style={{ fontSize: 11 }}>{formatDate(h.last_checked_at)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Panel>
+      {/* ===== System status strip ================================== */}
+      <SystemStatusStrip
+        overall={overall}
+        healthyCount={healthySources}
+        totalSources={state.health.length}
+        failedJobs={recentFailedJobs.length}
+        lastSuccess={lastSuccessfulLive}
+        topIssueSummary={topIssueSummary}
+      />
 
-          <Panel title="Recent jobs" icon={<ClipboardList size={14} />} shimmer={Object.keys(state.runningJobs).length > 0}>
-            <div className="table-wrap scroll" style={{ maxHeight: 260, overflow: "auto" }}>
-              <table className="table">
-                <thead>
-                  <tr><th>ID</th><th>Type</th><th>Status</th><th>Mode</th><th>Started</th></tr>
-                </thead>
-                <tbody>
-                  {state.jobs.map((job: IngestionJob) => (
-                    <tr key={job.id}>
-                      <td className="mono" style={{ fontSize: 11 }}>{job.id}</td>
-                      <td className="mono" style={{ fontSize: 11 }}>{job.job_type}</td>
+      {/* ===== Source health + Active issues ======================== */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 12 }}>
+        <Panel title="Source health" icon={<Activity size={14} />}>
+          {state.health.length === 0 ? (
+            <p className="t-faded">No source health rows yet.</p>
+          ) : (
+            <div className="col" style={{ gap: 4 }}>
+              {state.health.map((h: SourceHealth) => (
+                <div
+                  key={h.id}
+                  className="row"
+                  style={{ padding: "8px 10px", borderTop: "1px solid var(--gray-100)", alignItems: "flex-start" }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, fontSize: 13 }}>{sourceLabel(h.source)}</div>
+                    <div className="t-faded" style={{ fontSize: 11 }}>
+                      {h.last_success_at
+                        ? `Last success ${formatRelative(h.last_success_at)}`
+                        : "No successful run yet"}
+                    </div>
+                    {showAdvanced && (
+                      <div className="mono t-faded" style={{ fontSize: 10, marginTop: 2 }}>{h.source}</div>
+                    )}
+                  </div>
+                  <HealthPill status={classifyHealth(h.status)} />
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+
+        <ActiveIssuesCard
+          failingSources={failingSources}
+          failedJobGroups={failedJobsByType}
+        />
+      </div>
+
+      {/* ===== Action center ======================================== */}
+      <ActionCenter
+        runJob={runJob}
+        refreshDev={refreshDev}
+        isRunning={isRunning}
+        bulkParticularsJob={bulkParticularsJob}
+        bulkParticularsActive={bulkParticularsActive}
+        onOpenSanctionsConfirm={() => setConfirmSanctions(true)}
+        csvText={csvText}
+        setCsvText={setCsvText}
+        onCsvFile={handleSanctionsCsvFile}
+        vesselQuery={vesselQuery}
+        setVesselQuery={setVesselQuery}
+        vesselSuggestions={vesselSuggestions}
+        setVesselSuggestions={setVesselSuggestions}
+        selectedVessel={selectedVessel}
+        setSelectedVessel={setSelectedVessel}
+        showPortDetails={showPortDetails}
+        setShowPortDetails={setShowPortDetails}
+      />
+
+      {/* ===== Data overview ======================================== */}
+      <DataOverview
+        tableCounts={tableCounts}
+        lastSuccess={lastSuccessfulLive}
+        referenceSummary={referenceSummary}
+      />
+
+      {/* ===== Recent activity ====================================== */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr)", gap: 12 }}>
+        <Panel title="Operations timeline" icon={<Sparkles size={14} />}>
+          {timeline.length === 0 ? (
+            <p className="t-faded">No recent activity.</p>
+          ) : (
+            <div className="col" style={{ gap: 6 }}>
+              {timeline.map((ev) => (
+                <TimelineRow key={ev.id} ev={ev} />
+              ))}
+            </div>
+          )}
+        </Panel>
+
+        <Panel
+          title="Recent jobs"
+          icon={<ClipboardList size={14} />}
+          shimmer={Object.keys(state.runningJobs).length > 0}
+        >
+          <div className="table-wrap scroll" style={{ maxHeight: 260, overflow: "auto" }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Job</th>
+                  <th>Status</th>
+                  <th>Mode</th>
+                  <th>Started</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortJobsFailFirst(state.jobs).map((job: IngestionJob) => {
+                  const isFail = classifyJob(job.status) === "failure";
+                  return (
+                    <tr key={job.id} className={isFail ? "stripe-crit" : undefined}>
+                      <td>
+                        <div style={{ fontSize: 12, fontWeight: 500 }}>{jobTypeLabel(job.job_type)}</div>
+                        {showAdvanced && (
+                          <div className="mono t-faded" style={{ fontSize: 10 }}>#{job.id} · {job.job_type}</div>
+                        )}
+                      </td>
                       <td><JobPill status={classifyJob(job.status)} label={job.status} /></td>
                       <td className="t-faded" style={{ fontSize: 11 }}>{String(job.parameters?.mode ?? "—")}</td>
                       <td className="t-faded" style={{ fontSize: 11 }}>{formatDate(job.started_at)}</td>
                     </tr>
-                  ))}
-                  {state.jobs.length === 0 && <tr><td colSpan={5} className="t-faded">No jobs yet.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
+                  );
+                })}
+                {state.jobs.length === 0 && <tr><td colSpan={4} className="t-faded">No jobs yet.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
 
-          <Panel title="Recent logs">
-            <div className="row" style={{ gap: 4, paddingBottom: 8 }}>
-              {(["all", "info", "warning", "error"] as const).map((lvl) => (
-                <button key={lvl} type="button" className={`chip ${logLevel === lvl ? "selected" : ""}`} onClick={() => setLogLevel(lvl)}>
-                  {lvl}
-                </button>
-              ))}
-            </div>
-            <div className="scroll" style={{ maxHeight: 240, overflow: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-              {visibleLogs.length === 0 ? <p className="t-faded">No logs.</p> : visibleLogs.map((log) => (
-                <div key={log.id} className="row" style={{ padding: "6px 8px", fontSize: 11, borderBottom: "1px solid var(--gray-100)" }}>
-                  <span className={`pill ${logColor(log.level) === "default" ? "none" : logColor(log.level)}`}>{log.level}</span>
-                  <span className="mono" style={{ flex: 1 }}>{log.message}</span>
-                  <span className="t-faded">{formatDate(log.created_at)}</span>
+        <Panel title="Recent logs">
+          <div className="row" style={{ gap: 4, paddingBottom: 8 }}>
+            {(["all", "info", "warning", "error"] as const).map((lvl) => (
+              <button
+                key={lvl}
+                type="button"
+                className={`chip ${logLevel === lvl ? "selected" : ""}`}
+                onClick={() => setLogLevel(lvl)}
+              >
+                {lvl}
+              </button>
+            ))}
+          </div>
+
+          {groupedErrors.length > 1 && logLevel !== "info" && logLevel !== "warning" && (
+            <div className="col" style={{ gap: 4, marginBottom: 8 }}>
+              <div className="t-caption" style={{ fontSize: 10 }}>Repeated errors</div>
+              {groupedErrors.slice(0, 3).map((g) => (
+                <div
+                  key={g.message}
+                  className="row"
+                  style={{
+                    padding: "6px 8px",
+                    fontSize: 11,
+                    background: "rgba(198,40,40,.06)",
+                    border: "1px solid rgba(198,40,40,.16)",
+                    borderRadius: "var(--r-card)",
+                  }}
+                >
+                  <AlertTriangle size={12} color="var(--risk-critical)" />
+                  <span style={{ flex: 1 }}>{g.message}</span>
+                  <span className="pill crit" style={{ fontSize: 10 }}>{g.count}×</span>
                 </div>
               ))}
             </div>
-          </Panel>
-        </div>
+          )}
 
-        {/* ===== Column 2: DB state ===== */}
-        <div className="col" style={{ gap: 12 }}>
-          <Panel title="Table counts">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {Object.keys(tableCounts).length === 0
-                ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} height={56} />)
-                : Object.entries(tableCounts).map(([name, count]) => (
-                    <div key={name} className="metric">
-                      <div className="metric-label">{name}</div>
-                      <div className="metric-value">{count}</div>
-                    </div>
-                  ))}
-            </div>
-          </Panel>
-
-          <Panel title="Recent observations">
-            <div className="col scroll" style={{ maxHeight: 260, overflow: "auto", gap: 4 }}>
-              {observations.length === 0 ? <p className="t-faded">No observations yet.</p> : observations.map((obs) => (
-                <a key={obs.id} href={`/evidence/${obs.id}`} className="row" style={{ padding: "6px 8px", textDecoration: "none", color: "inherit", borderBottom: "1px solid var(--gray-100)", fontSize: 12 }}>
-                  <span className="mono" style={{ flex: 1 }}>{obs.source} · {obs.observation_type}</span>
-                  <span className="t-faded" style={{ fontSize: 11 }}>{formatDate(obs.fetched_at)}</span>
-                </a>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel title="Reference data">
-            {Object.keys(referenceSummary).length === 0 ? <p className="t-faded">No reference data loaded.</p> : (
-              <div className="col" style={{ gap: 4 }}>
-                {Object.entries(referenceSummary).map(([domain, n]) => (
-                  <div key={domain} className="row" style={{ padding: "6px 8px", fontSize: 12, borderBottom: "1px solid var(--gray-100)" }}>
-                    <span className="mono" style={{ flex: 1 }}>{domain}</span>
-                    <span className="mono">{n}</span>
-                  </div>
-                ))}
-              </div>
+          <div
+            className="scroll"
+            style={{ maxHeight: 220, overflow: "auto", display: "flex", flexDirection: "column", gap: 4 }}
+          >
+            {visibleLogs.length === 0 ? (
+              <p className="t-faded">No logs.</p>
+            ) : (
+              visibleLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className="row"
+                  style={{ padding: "6px 8px", fontSize: 11, borderBottom: "1px solid var(--gray-100)" }}
+                >
+                  <span className={`pill ${logColor(log.level)}`}>{log.level}</span>
+                  <span className="mono" style={{ flex: 1 }}>{log.message}</span>
+                  <span className="t-faded">{formatDate(log.created_at)}</span>
+                </div>
+              ))
             )}
-          </Panel>
-        </div>
-
-        {/* ===== Column 3: Ingestion controls ===== */}
-        <div className="col" style={{ gap: 12 }}>
-          <Panel title="Live ingestion">
-            <div className="col" style={{ gap: 6 }}>
-              <RunButton label="Positions snapshot" running={isRunning("positions-snapshot")} onClick={() => runJob("positions-snapshot", runPositionsSnapshot, { successTitle: "Snapshot complete", errorTitle: "Snapshot failed" }).then(refreshDev)} />
-              <RunButton
-                label="SG map vessel particulars"
-                running={bulkParticularsActive || isRunning("map-particulars")}
-                onClick={() =>
-                  runJob("map-particulars", () => runMapParticulars(0.1), {
-                    successTitle: "Bulk particulars started",
-                    errorTitle: "Bulk particulars failed",
-                    successBody: (job) => `${Number(job.parameters.total ?? 0).toLocaleString()} Singapore-flagged map vessels queued.`,
-                  }).then(refreshDev)
-                }
-              />
-              {bulkParticularsJob && <BulkParticularsProgress job={bulkParticularsJob} />}
-              <RunButton label="Geo layers" running={isRunning("geo-layers")} onClick={() => runJob("geo-layers", runGeoLive, { successTitle: "Geo layers refreshed", errorTitle: "Geo layers failed" }).then(refreshDev)} />
-              <RunButton label="News (RSS)" running={isRunning("news")} onClick={() => runJob("news", runNewsLive, { successTitle: "News refreshed", errorTitle: "News failed" }).then(refreshDev)} />
-              <RunButton label="Risk recompute" running={isRunning("risk-recompute")} onClick={() => runJob("risk-recompute", () => runRiskRecompute(), { successTitle: "Risk recomputed", errorTitle: "Risk failed" }).then(refreshDev)} />
-              <RunButton label="Test job" running={isRunning("test")} onClick={() => runJob("test", runTestJob, { successTitle: "Test job done", errorTitle: "Test failed" }).then(refreshDev)} icon={<Play size={12} />} />
-              <Button variant="danger" leadingIcon={<RefreshCw size={12} />} onClick={() => setConfirmSanctions(true)}>Refresh sanctions API…</Button>
-            </div>
-          </Panel>
-
-          <Panel title="Sanctions CSV" icon={<Upload size={14} />}>
-            <CsvDropZone onFile={handleSanctionsCsvFile} />
-            <div className="t-caption" style={{ marginTop: 10 }}>Or paste CSV</div>
-            <textarea className="textarea" rows={4} value={csvText} onChange={(e) => setCsvText(e.target.value)} placeholder="entity,name,country,..." />
-            <div className="row" style={{ marginTop: 8, gap: 6 }}>
-              <Button
-                size="sm"
-                variant="primary"
-                disabled={!csvText.trim()}
-                onClick={() =>
-                  runJob("sanctions-csv-paste", () => runSanctionsCsv(csvText), { successTitle: "CSV ingested", errorTitle: "CSV failed" }).then(() => {
-                    setCsvText("");
-                    refreshDev();
-                  })
-                }
-              >
-                Submit pasted CSV
-              </Button>
-              <Button size="sm" onClick={() => runJob("sanctions-csv-url", runSanctionsCsvUrl, { successTitle: "CSV URL ingested", errorTitle: "CSV URL failed" }).then(refreshDev)}>
-                Pull configured URL
-              </Button>
-            </div>
-          </Panel>
-
-          <Panel title="Manual vessel actions" icon={<Ship size={14} />}>
-            <label className="input">
-              <Search />
-              <input value={vesselQuery} onChange={(e) => setVesselQuery(e.target.value)} placeholder="Search vessel by name / IMO / MMSI" />
-            </label>
-            {vesselSuggestions.length > 0 && (
-              <div className="col" style={{ marginTop: 6, gap: 4 }}>
-                {vesselSuggestions.map((v) => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    className="card row"
-                    style={{ padding: "6px 8px", textAlign: "left", background: selectedVessel?.id === v.id ? "var(--ocean-50)" : "var(--white)", cursor: "pointer", border: "1px solid var(--gray-200)" }}
-                    onClick={() => {
-                      setSelectedVessel(v);
-                      setVesselSuggestions([]);
-                      setVesselQuery(v.name);
-                    }}
-                  >
-                    <span style={{ flex: 1 }}>{v.name}</span>
-                    <span className="mono t-faded" style={{ fontSize: 10 }}>{v.imo ?? v.mmsi ?? ""}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="row" style={{ marginTop: 8, gap: 6 }}>
-              <Button
-                size="sm"
-                disabled={!selectedVessel}
-                onClick={() =>
-                  selectedVessel &&
-                  runJob(`particulars-${selectedVessel.id}`, () => runParticulars(selectedVessel.id), {
-                    successTitle: "Particulars refreshed",
-                    errorTitle: "Particulars failed",
-                  })
-                }
-              >
-                Refresh particulars
-              </Button>
-              <Button
-                size="sm"
-                disabled={!selectedVessel}
-                onClick={() =>
-                  selectedVessel &&
-                  runJob(`movements-${selectedVessel.id}`, () => runMovements(selectedVessel.id), {
-                    successTitle: "Movements refreshed",
-                    errorTitle: "Movements failed",
-                  })
-                }
-              >
-                Refresh movements
-              </Button>
-            </div>
-          </Panel>
-
-          <Panel title="Port activity">
-            <div className="row" style={{ gap: 6 }}>
-              <Button size="sm" onClick={() => runJob("ports-arrive", () => runPortActivity("due-arrive"), { successTitle: "Arrivals updated", errorTitle: "Arrivals failed" }).then(refreshDev)}>Pull due-arrive</Button>
-              <Button size="sm" onClick={() => runJob("ports-depart", () => runPortActivity("due-depart"), { successTitle: "Departures updated", errorTitle: "Departures failed" }).then(refreshDev)}>Pull due-depart</Button>
-            </div>
-            <p className="t-faded" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>
-              If these return HTTP 400, your OCEANS-X subscription likely doesn't
-              include the <code className="mono">duetoarrive</code> /
-              <code className="mono"> duetodepart</code> endpoints. Positions,
-              particulars, and movements use a different scope and continue to
-              work independently.
-            </p>
-          </Panel>
-        </div>
+          </div>
+        </Panel>
       </div>
 
+      {/* ===== Vessel browser ======================================= */}
       <Panel title="Vessel browser" icon={<Database size={14} />}>
-        <div className="row" style={{ gap: 8, marginBottom: 10 }}>
-          <label className="input search" style={{ flex: 1 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+          <label className="input search" style={{ flex: "1 1 240px" }}>
             <Search />
-            <input value={browseQuery} onChange={(e) => setBrowseQuery(e.target.value)} placeholder="Search name, IMO, MMSI, call sign" />
+            <input
+              value={browseQuery}
+              onChange={(e) => setBrowseQuery(e.target.value)}
+              placeholder="Search name, IMO, MMSI, call sign"
+            />
           </label>
-          <select className="select" value={riskFilter} onChange={(e) => { setRiskFilter(e.target.value as typeof riskFilter); setPage(0); }}>
-            <option value="all">All vessels</option>
-            <option value="flagged">Any risk flag</option>
+          <select
+            className="select"
+            value={riskFilter}
+            onChange={(e) => {
+              setRiskFilter(e.target.value as typeof riskFilter);
+              setPage(0);
+            }}
+            title="Risk level"
+          >
+            <option value="all">Any risk</option>
+            <option value="flagged">Any flag</option>
             <option value="critical">Critical</option>
             <option value="high">High</option>
             <option value="medium">Medium</option>
             <option value="low">Low</option>
           </select>
+          <select
+            className="select"
+            value={flagFilter}
+            onChange={(e) => {
+              setFlagFilter(e.target.value);
+              setPage(0);
+            }}
+            title="Flag country"
+          >
+            <option value="all">Any flag country</option>
+            {flagOptions.map((code) => (
+              <option key={code} value={code}>
+                {flagEmoji(code)} {countryName(code) || code}
+              </option>
+            ))}
+          </select>
+          <select
+            className="select"
+            value={typeFilter}
+            onChange={(e) => {
+              setTypeFilter(e.target.value);
+              setPage(0);
+            }}
+            title="Vessel type"
+          >
+            <option value="all">Any type</option>
+            {typeOptions.map((code) => (
+              <option key={code} value={code}>{vesselTypeLabel(code)}</option>
+            ))}
+          </select>
+          <select
+            className="select"
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(e.target.value as typeof sortBy);
+              setPage(0);
+            }}
+            title="Sort by"
+          >
+            <option value="risk">Sort: Risk</option>
+            <option value="updated">Sort: Updated</option>
+            <option value="name">Sort: Name</option>
+            <option value="type">Sort: Type</option>
+          </select>
+          <label className="row" style={{ gap: 4, fontSize: 12, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={missingIdFilter}
+              onChange={(e) => {
+                setMissingIdFilter(e.target.checked);
+                setPage(0);
+              }}
+            />
+            Missing IMO/MMSI
+          </label>
           <Button size="sm" onClick={exportBrowseCsv}>Export CSV</Button>
         </div>
-        <div className="table-wrap scroll" style={{ maxHeight: 360, overflow: "auto" }}>
+        <div className="table-wrap scroll" style={{ maxHeight: 420, overflow: "auto" }}>
           <table className="table">
             <thead>
               <tr>
-                <th>Vessel</th><th>IMO/MMSI</th><th>Position</th><th>Flag</th><th>Type</th><th>Risk</th><th>Flags</th><th>Updated</th><th></th>
+                <th>Vessel</th>
+                <th>IMO/MMSI</th>
+                <th>Position</th>
+                <th>Flag</th>
+                <th>Type</th>
+                <th>Risk</th>
+                <th>Flags</th>
+                <th>Updated</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
-              {visible.length === 0 ? <tr><td colSpan={9} className="t-faded">No vessels.</td></tr> : visible.map((row) => (
-                <tr key={row.vessel_id}>
-                  <td><a href={`/vessels/${row.vessel_id}`}>{row.name}</a></td>
-                  <td className="mono" style={{ fontSize: 11 }}>{row.imo ?? row.mmsi ?? row.call_sign ?? "—"}</td>
-                  <td className="mono" style={{ fontSize: 11 }}>{row.latest_position ? `${row.latest_position.latitude.toFixed(2)}, ${row.latest_position.longitude.toFixed(2)}` : "—"}</td>
-                  <td className="t-sm">
-                    {row.flag_country_code ? (
-                      <span
-                        title={countryName(row.flag_country_code) || row.flag_country_code}
-                        aria-label={countryName(row.flag_country_code) || row.flag_country_code}
-                        style={{ fontSize: 16, lineHeight: 1, cursor: "help" }}
-                      >
-                        {flagEmoji(row.flag_country_code) || row.flag_country_code}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
+              {visible.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="t-faded" style={{ padding: 20, textAlign: "center" }}>
+                    {browseQuery || riskFilter !== "all" || flagFilter !== "all" || typeFilter !== "all" || missingIdFilter
+                      ? "No vessels match these filters. Try clearing one."
+                      : "No vessels loaded yet."}
                   </td>
-                  <td className="t-sm">{vesselTypeLabel(row.vessel_type_code)}</td>
-                  <td>{row.highest_risk_severity ? <RiskPill severity={row.highest_risk_severity as never} /> : <span className="t-faded">—</span>}</td>
-                  <td className="t-sm">{row.risk_flag_types.join(", ") || "—"}</td>
-                  <td className="t-faded" style={{ fontSize: 11 }}>{formatDate(row.latest_position?.position_timestamp ?? row.source_updated_at)}</td>
-                  <td><a href={`/vessels/${row.vessel_id}`} className="row" style={{ gap: 4, fontSize: 11 }}><MapIcon size={11} /> Open</a></td>
                 </tr>
-              ))}
+              ) : (
+                visible.map((row) => (
+                  <tr key={row.vessel_id}>
+                    <td><a href={`/vessels/${row.vessel_id}`}>{row.name}</a></td>
+                    <td className="mono" style={{ fontSize: 11 }}>
+                      {row.imo ?? row.mmsi ?? row.call_sign ?? "—"}
+                    </td>
+                    <td className="mono" style={{ fontSize: 11 }}>
+                      {row.latest_position
+                        ? `${row.latest_position.latitude.toFixed(2)}, ${row.latest_position.longitude.toFixed(2)}`
+                        : "—"}
+                    </td>
+                    <td className="t-sm">
+                      {row.flag_country_code ? (
+                        <span
+                          title={countryName(row.flag_country_code) || row.flag_country_code}
+                          aria-label={countryName(row.flag_country_code) || row.flag_country_code}
+                          style={{ fontSize: 16, lineHeight: 1, cursor: "help" }}
+                        >
+                          {flagEmoji(row.flag_country_code) || row.flag_country_code}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="t-sm">{vesselTypeLabel(row.vessel_type_code)}</td>
+                    <td>
+                      {row.highest_risk_severity ? (
+                        <RiskPill severity={row.highest_risk_severity as never} />
+                      ) : (
+                        <span className="t-faded">—</span>
+                      )}
+                    </td>
+                    <td className="t-sm">{row.risk_flag_types.join(", ") || "—"}</td>
+                    <td className="t-faded" style={{ fontSize: 11 }}>
+                      {formatDate(row.latest_position?.position_timestamp ?? row.source_updated_at)}
+                    </td>
+                    <td>
+                      <a href={`/vessels/${row.vessel_id}`} className="row" style={{ gap: 4, fontSize: 11 }}>
+                        <MapIcon size={11} /> View profile
+                      </a>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
         <div className="row" style={{ marginTop: 10, justifyContent: "space-between" }}>
-          <Button size="sm" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>Previous</Button>
+          <Button size="sm" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
+            Previous
+          </Button>
           <span className="t-muted">{filteredBrowse.length} vessels · page {page + 1} / {pageCount}</span>
-          <Button size="sm" disabled={page + 1 >= pageCount} onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}>Next</Button>
+          <Button
+            size="sm"
+            disabled={page + 1 >= pageCount}
+            onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+          >
+            Next
+          </Button>
         </div>
+      </Panel>
+
+      {/* ===== Advanced / developer ================================ */}
+      <Panel
+        title={
+          <button
+            type="button"
+            className="row"
+            onClick={() => setShowAdvanced((v) => !v)}
+            style={{
+              gap: 6,
+              border: 0,
+              background: "transparent",
+              padding: 0,
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--navy-900)",
+            }}
+          >
+            {showAdvanced ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            <Settings size={14} />
+            Advanced / Developer
+          </button>
+        }
+      >
+        {showAdvanced ? (
+          <div className="col" style={{ gap: 12 }}>
+            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+              <Button
+                size="sm"
+                leadingIcon={<Play size={12} />}
+                onClick={() =>
+                  runJob("test", runTestJob, {
+                    successTitle: "Test job done",
+                    errorTitle: "Test failed",
+                  }).then(refreshDev)
+                }
+              >
+                Run test job
+              </Button>
+              <span className="t-faded" style={{ fontSize: 11, alignSelf: "center" }}>
+                Seeds an `internal.test` job for hook smoke-testing.
+              </span>
+            </div>
+
+            <div>
+              <div className="t-caption" style={{ paddingBottom: 6 }}>Raw table counts</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
+                {Object.entries(tableCounts).map(([name, count]) => (
+                  <div key={name} className="metric">
+                    <div className="metric-label mono" style={{ textTransform: "none" }}>{name}</div>
+                    <div className="metric-value" style={{ fontSize: 18 }}>{count}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="t-caption" style={{ paddingBottom: 6 }}>Recent observations</div>
+              <div className="col scroll" style={{ maxHeight: 220, overflow: "auto", gap: 4 }}>
+                {observations.length === 0 ? (
+                  <p className="t-faded">No observations yet.</p>
+                ) : (
+                  observations.map((obs) => (
+                    <a
+                      key={obs.id}
+                      href={`/evidence/${obs.id}`}
+                      className="row"
+                      style={{
+                        padding: "6px 8px",
+                        textDecoration: "none",
+                        color: "inherit",
+                        borderBottom: "1px solid var(--gray-100)",
+                        fontSize: 12,
+                      }}
+                    >
+                      <span className="mono" style={{ flex: 1 }}>{obs.source} · {obs.observation_type}</span>
+                      <span className="t-faded" style={{ fontSize: 11 }}>{formatDate(obs.fetched_at)}</span>
+                    </a>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="t-faded" style={{ fontSize: 12, margin: 0 }}>
+            Hidden: raw table names, job IDs, source observations, and the test-job control.
+          </p>
+        )}
       </Panel>
 
       <Modal
@@ -473,7 +931,10 @@ export function OpsConsole() {
           variant: "danger",
           onClick: () => {
             setConfirmSanctions(false);
-            runJob("sanctions", runSanctionsLive, { successTitle: "Sanctions refreshed", errorTitle: "Sanctions failed" }).then(refreshDev);
+            runJob("sanctions", runSanctionsLive, {
+              successTitle: "Sanctions refreshed",
+              errorTitle: "Sanctions failed",
+            }).then(refreshDev);
           },
         }}
       >
@@ -483,12 +944,616 @@ export function OpsConsole() {
   );
 }
 
-function Panel({ title, icon, children, shimmer }: { title: string; icon?: React.ReactNode; shimmer?: boolean; children: React.ReactNode }) {
+/* ====== Sub-components ============================================== */
+
+function SystemStatusStrip({
+  overall,
+  healthyCount,
+  totalSources,
+  failedJobs,
+  lastSuccess,
+  topIssueSummary,
+}: {
+  overall: "healthy" | "partial" | "attention";
+  healthyCount: number;
+  totalSources: number;
+  failedJobs: number;
+  lastSuccess: string | null;
+  topIssueSummary: string;
+}) {
+  const tone: HealthStatus = overall === "healthy" ? "ok" : overall === "partial" ? "stale" : "fail";
+  const headline =
+    overall === "healthy" ? "System status: Healthy" :
+      overall === "partial" ? "System status: Partial issue" :
+        "System status: Needs attention";
+  const accent =
+    overall === "healthy" ? "var(--health-ok, #2E8F5B)" :
+      overall === "partial" ? "var(--risk-medium)" :
+        "var(--risk-critical)";
+
+  return (
+    <section
+      className="panel-solid"
+      style={{
+        padding: 16,
+        borderLeft: `4px solid ${accent}`,
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1.6fr) repeat(3, minmax(0, 1fr))",
+        gap: 16,
+        alignItems: "center",
+      }}
+    >
+      <div>
+        <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+          <HealthPill status={tone} label={headline.replace("System status: ", "")} />
+          <span style={{ fontWeight: 600, fontSize: 14 }}>{headline}</span>
+        </div>
+        <p className="t-sm" style={{ margin: 0, color: "var(--slate-500)" }}>{topIssueSummary}</p>
+      </div>
+      <StatusMetric label="Healthy sources" value={`${healthyCount} / ${totalSources || "—"}`} />
+      <StatusMetric label="Recent failed jobs" value={String(failedJobs)} tone={failedJobs > 0 ? "fail" : undefined} />
+      <StatusMetric
+        label="Last successful update"
+        value={lastSuccess ? formatRelative(lastSuccess) : "—"}
+        sub={lastSuccess ? formatDate(lastSuccess) : "No successful run yet"}
+      />
+    </section>
+  );
+}
+
+function StatusMetric({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "fail" }) {
+  return (
+    <div>
+      <div className="metric-label">{label}</div>
+      <div
+        className="metric-value"
+        style={{ fontSize: 20, color: tone === "fail" ? "var(--risk-critical)" : undefined }}
+      >
+        {value}
+      </div>
+      {sub && <div className="metric-sub">{sub}</div>}
+    </div>
+  );
+}
+
+function ActiveIssuesCard({
+  failingSources,
+  failedJobGroups,
+}: {
+  failingSources: SourceHealth[];
+  failedJobGroups: { jobType: string; count: number; lastAt: string | null }[];
+}) {
+  const empty = failingSources.length === 0 && failedJobGroups.length === 0;
+  return (
+    <Panel title="Active issues" icon={<AlertTriangle size={14} />}>
+      {empty ? (
+        <div className="row" style={{ gap: 8, padding: "12px 4px", color: "var(--health-ok, #2E8F5B)" }}>
+          <CheckCircle2 size={16} />
+          <span style={{ fontSize: 13 }}>No active ingestion issues detected.</span>
+        </div>
+      ) : (
+        <div className="col" style={{ gap: 8 }}>
+          {failingSources.map((h) => (
+            <IssueRow
+              key={`src-${h.id}`}
+              tone={classifyHealth(h.status) === "fail" ? "crit" : "med"}
+              title={`${sourceLabel(h.source)} is ${classifyHealth(h.status) === "fail" ? "failing" : "stale"}`}
+              when={h.last_checked_at ?? h.last_success_at}
+              area={sourceAreaHint(h.source)}
+              suggestion={suggestedActionForSource(h.source)}
+            />
+          ))}
+          {failedJobGroups.map((g) => (
+            <IssueRow
+              key={`job-${g.jobType}`}
+              tone="crit"
+              title={`${jobTypeLabel(g.jobType)} failed${g.count > 1 ? ` (${g.count} times)` : ""}`}
+              when={g.lastAt}
+              area={sourceAreaHint(g.jobType)}
+              suggestion={suggestedActionForJobType(g.jobType)}
+            />
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function IssueRow({
+  tone,
+  title,
+  when,
+  area,
+  suggestion,
+}: {
+  tone: "crit" | "med";
+  title: string;
+  when: string | null | undefined;
+  area: string;
+  suggestion: string;
+}) {
+  const accent = tone === "crit" ? "var(--risk-critical)" : "var(--risk-medium)";
+  const bg = tone === "crit" ? "rgba(198,40,40,.05)" : "rgba(229,148,19,.06)";
+  return (
+    <div
+      style={{
+        padding: 10,
+        background: bg,
+        borderLeft: `3px solid ${accent}`,
+        borderRadius: "var(--r-card)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+      }}
+    >
+      <div style={{ fontWeight: 600, fontSize: 13, color: "var(--navy-900)" }}>{title}</div>
+      <div className="t-faded" style={{ fontSize: 11 }}>
+        Last seen {when ? formatDate(when) : "unknown"} · Affects {area}
+      </div>
+      <div style={{ fontSize: 12, color: "var(--slate-500)" }}>
+        <strong style={{ color: "var(--navy-700)" }}>Suggested action:</strong> {suggestion}
+      </div>
+    </div>
+  );
+}
+
+type ActionCenterProps = {
+  runJob: ReturnType<typeof useJobRunner>;
+  refreshDev: () => void;
+  isRunning: (slug: string) => boolean;
+  bulkParticularsJob: IngestionJob | null;
+  bulkParticularsActive: boolean;
+  onOpenSanctionsConfirm: () => void;
+  csvText: string;
+  setCsvText: (v: string) => void;
+  onCsvFile: (file: File) => void;
+  vesselQuery: string;
+  setVesselQuery: (v: string) => void;
+  vesselSuggestions: VesselSearchResult[];
+  setVesselSuggestions: (v: VesselSearchResult[]) => void;
+  selectedVessel: VesselSearchResult | null;
+  setSelectedVessel: (v: VesselSearchResult | null) => void;
+  showPortDetails: boolean;
+  setShowPortDetails: (v: boolean) => void;
+};
+
+function ActionCenter(props: ActionCenterProps) {
+  const {
+    runJob,
+    refreshDev,
+    isRunning,
+    bulkParticularsJob,
+    bulkParticularsActive,
+    onOpenSanctionsConfirm,
+    csvText,
+    setCsvText,
+    onCsvFile,
+    vesselQuery,
+    setVesselQuery,
+    vesselSuggestions,
+    setVesselSuggestions,
+    selectedVessel,
+    setSelectedVessel,
+    showPortDetails,
+    setShowPortDetails,
+  } = props;
+
+  return (
+    <Panel title="Action center" icon={<Play size={14} />}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr)", gap: 14 }}>
+        {/* --- Refresh live --- */}
+        <div className="col" style={{ gap: 8 }}>
+          <div className="t-caption">Refresh live sources</div>
+          <RunButton
+            label="Vessel positions snapshot"
+            icon={<Ship size={12} />}
+            running={isRunning("positions-snapshot")}
+            onClick={() =>
+              runJob("positions-snapshot", runPositionsSnapshot, {
+                successTitle: "Snapshot complete",
+                errorTitle: "Snapshot failed",
+              }).then(refreshDev)
+            }
+          />
+          <RunButton
+            label="Singapore vessel particulars"
+            icon={<Ship size={12} />}
+            running={bulkParticularsActive || isRunning("map-particulars")}
+            onClick={() =>
+              runJob("map-particulars", () => runMapParticulars(0.1), {
+                successTitle: "Bulk particulars started",
+                errorTitle: "Bulk particulars failed",
+                successBody: (job) => `${Number(job.parameters.total ?? 0).toLocaleString()} Singapore-flagged map vessels queued.`,
+              }).then(refreshDev)
+            }
+          />
+          {bulkParticularsJob && <BulkParticularsProgress job={bulkParticularsJob} />}
+          <RunButton
+            label="Geo layers"
+            icon={<Globe size={12} />}
+            running={isRunning("geo-layers")}
+            onClick={() =>
+              runJob("geo-layers", runGeoLive, {
+                successTitle: "Geo layers refreshed",
+                errorTitle: "Geo layers failed",
+              }).then(refreshDev)
+            }
+          />
+          <RunButton
+            label="News (RSS)"
+            icon={<Newspaper size={12} />}
+            running={isRunning("news")}
+            onClick={() =>
+              runJob("news", runNewsLive, {
+                successTitle: "News refreshed",
+                errorTitle: "News failed",
+              }).then(refreshDev)
+            }
+          />
+          <RunButton
+            label="Recompute risk"
+            icon={<ShieldAlert size={12} />}
+            running={isRunning("risk-recompute")}
+            onClick={() =>
+              runJob("risk-recompute", () => runRiskRecompute(), {
+                successTitle: "Risk recomputed",
+                errorTitle: "Risk failed",
+              }).then(refreshDev)
+            }
+          />
+        </div>
+
+        {/* --- Sanctions --- */}
+        <div className="col" style={{ gap: 8 }}>
+          <div className="t-caption row" style={{ gap: 6 }}>
+            <Scale size={11} /> Sanctions
+          </div>
+          <Button
+            variant="danger"
+            size="sm"
+            leadingIcon={<RefreshCw size={12} />}
+            onClick={onOpenSanctionsConfirm}
+          >
+            Pull configured sanctions API…
+          </Button>
+          <Button
+            size="sm"
+            onClick={() =>
+              runJob("sanctions-csv-url", runSanctionsCsvUrl, {
+                successTitle: "CSV URL ingested",
+                errorTitle: "CSV URL failed",
+              }).then(refreshDev)
+            }
+          >
+            Pull configured sanctions URL
+          </Button>
+          <CsvDropZone onFile={onCsvFile} />
+          <textarea
+            className="textarea"
+            rows={3}
+            value={csvText}
+            onChange={(e) => setCsvText(e.target.value)}
+            placeholder="Or paste CSV: entity,name,country,..."
+            style={{ fontSize: 11 }}
+          />
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={!csvText.trim()}
+            onClick={() =>
+              runJob("sanctions-csv-paste", () => runSanctionsCsv(csvText), {
+                successTitle: "CSV ingested",
+                errorTitle: "CSV failed",
+              }).then(() => {
+                setCsvText("");
+                refreshDev();
+              })
+            }
+          >
+            Submit pasted CSV
+          </Button>
+        </div>
+
+        {/* --- Per-vessel + port activity --- */}
+        <div className="col" style={{ gap: 8 }}>
+          <div className="t-caption row" style={{ gap: 6 }}>
+            <Ship size={11} /> Per-vessel actions
+          </div>
+          <label className="input">
+            <Search />
+            <input
+              value={vesselQuery}
+              onChange={(e) => setVesselQuery(e.target.value)}
+              placeholder="Search vessel by name / IMO / MMSI"
+            />
+          </label>
+          {vesselSuggestions.length > 0 && (
+            <div className="col" style={{ gap: 4 }}>
+              {vesselSuggestions.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  className="card row"
+                  style={{
+                    padding: "6px 8px",
+                    textAlign: "left",
+                    background: selectedVessel?.id === v.id ? "var(--ocean-50)" : "var(--white)",
+                    cursor: "pointer",
+                    border: "1px solid var(--gray-200)",
+                  }}
+                  onClick={() => {
+                    setSelectedVessel(v);
+                    setVesselSuggestions([]);
+                    setVesselQuery(v.name);
+                  }}
+                >
+                  <span style={{ flex: 1 }}>{v.name}</span>
+                  <span className="mono t-faded" style={{ fontSize: 10 }}>{v.imo ?? v.mmsi ?? ""}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="row" style={{ gap: 6 }}>
+            <Button
+              size="sm"
+              disabled={!selectedVessel}
+              onClick={() =>
+                selectedVessel &&
+                runJob(`particulars-${selectedVessel.id}`, () => runParticulars(selectedVessel.id), {
+                  successTitle: "Particulars refreshed",
+                  errorTitle: "Particulars failed",
+                })
+              }
+            >
+              Refresh particulars
+            </Button>
+            <Button
+              size="sm"
+              disabled={!selectedVessel}
+              onClick={() =>
+                selectedVessel &&
+                runJob(`movements-${selectedVessel.id}`, () => runMovements(selectedVessel.id), {
+                  successTitle: "Movements refreshed",
+                  errorTitle: "Movements failed",
+                })
+              }
+            >
+              Refresh movements
+            </Button>
+          </div>
+
+          <div className="t-caption row" style={{ gap: 6, marginTop: 8 }}>
+            <MapIcon size={11} /> Port activity
+          </div>
+          <div className="row" style={{ gap: 6 }}>
+            <Button
+              size="sm"
+              onClick={() =>
+                runJob("ports-arrive", () => runPortActivity("due-arrive"), {
+                  successTitle: "Arrivals updated",
+                  errorTitle: "Arrivals failed",
+                }).then(refreshDev)
+              }
+            >
+              Pull arrivals
+            </Button>
+            <Button
+              size="sm"
+              onClick={() =>
+                runJob("ports-depart", () => runPortActivity("due-depart"), {
+                  successTitle: "Departures updated",
+                  errorTitle: "Departures failed",
+                }).then(refreshDev)
+              }
+            >
+              Pull departures
+            </Button>
+          </div>
+          <p className="t-faded" style={{ fontSize: 11, margin: 0, lineHeight: 1.5 }}>
+            Port activity availability may be limited by your OCEANS-X subscription. Vessel positions,
+            particulars, and movements can continue working independently.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowPortDetails(!showPortDetails)}
+            style={{
+              background: "transparent",
+              border: 0,
+              padding: 0,
+              fontSize: 11,
+              color: "var(--ocean-500)",
+              cursor: "pointer",
+              alignSelf: "flex-start",
+            }}
+          >
+            {showPortDetails ? "Hide" : "Show"} technical details
+          </button>
+          {showPortDetails && (
+            <p className="t-faded" style={{ fontSize: 11, margin: 0, lineHeight: 1.5 }}>
+              These actions hit <code className="mono">duetoarrive</code> /{" "}
+              <code className="mono">duetodepart</code> endpoints. HTTP 400 from OCEANS-X usually
+              means your subscription does not include these endpoints.
+            </p>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function DataOverview({
+  tableCounts,
+  lastSuccess,
+  referenceSummary,
+}: {
+  tableCounts: Record<string, number>;
+  lastSuccess: string | null;
+  referenceSummary: Record<string, number>;
+}) {
+  const loaded = Object.keys(tableCounts).length > 0;
+  return (
+    <Panel title="Data overview" icon={<Database size={14} />}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
+        <DataGroup
+          title="Core maritime data"
+          keys={CORE_KEYS}
+          tableCounts={tableCounts}
+          loaded={loaded}
+          freshness={lastSuccess}
+        />
+        <DataGroup
+          title="Risk intelligence"
+          keys={RISK_KEYS}
+          tableCounts={tableCounts}
+          loaded={loaded}
+          freshness={lastSuccess}
+        />
+        <DataGroup
+          title="System data"
+          keys={SYSTEM_KEYS}
+          tableCounts={tableCounts}
+          loaded={loaded}
+        />
+      </div>
+
+      {Object.keys(referenceSummary).length > 0 && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--gray-100)" }}>
+          <div className="t-caption" style={{ paddingBottom: 6 }}>Reference data</div>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            {Object.entries(referenceSummary).map(([domain, n]) => (
+              <span key={domain} className="pill none" style={{ fontSize: 11 }}>
+                {humanize(domain)} · <strong style={{ marginLeft: 4 }}>{n}</strong>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function DataGroup({
+  title,
+  keys,
+  tableCounts,
+  loaded,
+  freshness,
+}: {
+  title: string;
+  keys: string[];
+  tableCounts: Record<string, number>;
+  loaded: boolean;
+  freshness?: string | null;
+}) {
+  return (
+    <div className="col" style={{ gap: 6 }}>
+      <div className="t-caption">{title}</div>
+      <div className="col" style={{ gap: 4 }}>
+        {keys.map((key) => (
+          <div
+            key={key}
+            className="row"
+            style={{
+              padding: "8px 10px",
+              border: "1px solid var(--gray-100)",
+              borderRadius: "var(--r-card)",
+              background: "var(--white)",
+            }}
+          >
+            <span style={{ flex: 1, fontSize: 12 }}>{tableLabel(key)}</span>
+            <span
+              className="mono"
+              style={{ fontWeight: 700, fontSize: 13, color: "var(--navy-900)" }}
+            >
+              {loaded ? (tableCounts[key] ?? 0).toLocaleString() : <Skeleton width={32} height={14} rounded={3} />}
+            </span>
+          </div>
+        ))}
+      </div>
+      {freshness && (
+        <div className="t-faded" style={{ fontSize: 11 }}>
+          Last update {formatRelative(freshness)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TimelineRow({ ev }: { ev: { id: string; at: string; kind: string; title: string } }) {
+  const palette: Record<string, { color: string; bg: string; dotIcon?: React.ReactNode }> = {
+    "job-success": { color: "var(--health-ok, #2E8F5B)", bg: "rgba(46,143,91,.10)" },
+    "job-failure": { color: "var(--risk-critical)", bg: "rgba(198,40,40,.10)" },
+    "job-running": { color: "var(--ocean-500)", bg: "rgba(58,127,184,.10)" },
+    "log-error": { color: "var(--risk-critical)", bg: "rgba(198,40,40,.10)" },
+  };
+  const tone = palette[ev.kind] ?? palette["job-running"];
+  return (
+    <div className="row" style={{ gap: 8, alignItems: "flex-start" }}>
+      <div
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 999,
+          background: tone.color,
+          marginTop: 6,
+          flex: "0 0 auto",
+        }}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, color: "var(--navy-900)" }}>{ev.title}</div>
+        <div className="t-faded" style={{ fontSize: 10 }}>
+          {formatRelative(ev.at)} · {formatDate(ev.at)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ====== Helpers ===================================================== */
+
+function timeOf(s: string | null | undefined): number {
+  if (!s) return 0;
+  const t = parseBackendDate(s).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+function sortJobsFailFirst(jobs: IngestionJob[]): IngestionJob[] {
+  return jobs.slice().sort((a, b) => {
+    const af = classifyJob(a.status) === "failure" ? 0 : 1;
+    const bf = classifyJob(b.status) === "failure" ? 0 : 1;
+    if (af !== bf) return af - bf;
+    return timeOf(b.started_at) - timeOf(a.started_at);
+  });
+}
+
+function logColor(level: string): "info" | "med" | "crit" | "none" {
+  const lvl = level.toLowerCase();
+  if (lvl === "error") return "crit";
+  if (lvl === "warning" || lvl === "warn") return "med";
+  if (lvl === "info") return "info";
+  return "none";
+}
+
+function Panel({
+  title,
+  icon,
+  children,
+  shimmer,
+}: {
+  title: React.ReactNode;
+  icon?: React.ReactNode;
+  shimmer?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <section className={`panel-solid ${shimmer ? "shimmer" : ""}`.trim()} style={{ padding: 14 }}>
       <div className="row" style={{ paddingBottom: 8 }}>
         {icon}
-        <strong style={{ flex: 1, fontSize: 13 }}>{title}</strong>
+        {typeof title === "string" ? (
+          <strong style={{ flex: 1, fontSize: 13 }}>{title}</strong>
+        ) : (
+          <div style={{ flex: 1 }}>{title}</div>
+        )}
       </div>
       {children}
     </section>
@@ -504,9 +1569,19 @@ function BulkParticularsProgress({ job }: { job: IngestionJob }) {
   const pct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
   const active = job.status === "queued" || job.status === "running";
   return (
-    <div style={{ padding: 10, borderRadius: "var(--r-card)", marginBottom: 4, background: "var(--gray-50)", border: "1px solid var(--gray-100)" }}>
+    <div
+      style={{
+        padding: 10,
+        borderRadius: "var(--r-card)",
+        marginBottom: 4,
+        background: "var(--gray-50)",
+        border: "1px solid var(--gray-100)",
+      }}
+    >
       <div className="row" style={{ gap: 8, fontSize: 11 }}>
-        <span className="mono" style={{ flex: 1 }}>Particulars {completed.toLocaleString()} / {total.toLocaleString()}</span>
+        <span className="mono" style={{ flex: 1 }}>
+          Particulars {completed.toLocaleString()} / {total.toLocaleString()}
+        </span>
         <JobPill status={classifyJob(job.status)} label={job.status} />
       </div>
       <div
@@ -515,7 +1590,13 @@ function BulkParticularsProgress({ job }: { job: IngestionJob }) {
         aria-valuemax={total}
         aria-valuenow={completed}
         role="progressbar"
-        style={{ height: 8, background: "var(--gray-100)", borderRadius: 999, overflow: "hidden", marginTop: 8 }}
+        style={{
+          height: 8,
+          background: "var(--gray-100)",
+          borderRadius: 999,
+          overflow: "hidden",
+          marginTop: 8,
+        }}
       >
         <div
           className={active ? "shimmer" : ""}
@@ -529,7 +1610,9 @@ function BulkParticularsProgress({ job }: { job: IngestionJob }) {
       </div>
       <div className="row t-faded" style={{ marginTop: 6, gap: 8, fontSize: 11 }}>
         <span>{pct}%</span>
-        <span style={{ flex: 1 }}>{succeeded.toLocaleString()} saved · {failed.toLocaleString()} failed · {skipped.toLocaleString()} skipped</span>
+        <span style={{ flex: 1 }}>
+          {succeeded.toLocaleString()} saved · {failed.toLocaleString()} failed · {skipped.toLocaleString()} skipped
+        </span>
       </div>
     </div>
   );
@@ -540,7 +1623,17 @@ function numberParam(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function RunButton({ label, onClick, running, icon }: { label: string; onClick: () => void; running: boolean; icon?: React.ReactNode }) {
+function RunButton({
+  label,
+  onClick,
+  running,
+  icon,
+}: {
+  label: string;
+  onClick: () => void;
+  running: boolean;
+  icon?: React.ReactNode;
+}) {
   return (
     <button
       type="button"
@@ -549,8 +1642,11 @@ function RunButton({ label, onClick, running, icon }: { label: string; onClick: 
       style={{ justifyContent: "space-between" }}
       disabled={running}
     >
-      <span>{label}</span>
-      {icon ?? <RefreshCw size={12} />}
+      <span className="row" style={{ gap: 6 }}>
+        {icon}
+        {label}
+      </span>
+      <RefreshCw size={12} />
     </button>
   );
 }
@@ -575,17 +1671,17 @@ function CsvDropZone({ onFile }: { onFile: (file: File) => void }) {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: 6,
-        padding: 18,
+        gap: 4,
+        padding: 12,
         background: hover ? "var(--ocean-50)" : "var(--gray-50)",
         border: `1.5px dashed ${hover ? "var(--ocean-500)" : "var(--gray-300)"}`,
         borderRadius: "var(--r-card)",
         textAlign: "center",
         cursor: "pointer",
-        fontSize: 12,
+        fontSize: 11,
       }}
     >
-      <Upload size={18} color="var(--slate-500)" />
+      <Upload size={16} color="var(--slate-500)" />
       <span>Drop CSV here or click to upload</span>
       <input
         type="file"

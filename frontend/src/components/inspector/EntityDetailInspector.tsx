@@ -1,4 +1,4 @@
-import { Building2, Database, Network, Ship } from "lucide-react";
+import { Building2, ChevronDown, Database, Network, Ship } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getEntity, getEntityRelationships, getEntityRiskFlags, getEntityVessels } from "../../api";
 import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
@@ -155,7 +155,7 @@ export function EntityDetailInspector({ id }: { id: number }) {
           )}
         </EntitySection>
 
-        <EntitySection title="Relationships" count={data.relationships.length}>
+        <EntitySection title="Relationships" count={data.relationships.length} collapsedByDefault>
           {data.relationships.length === 0 ? (
             <EmptyState compact title="No relationships" />
           ) : (
@@ -198,14 +198,21 @@ export function EntityDetailInspector({ id }: { id: number }) {
   );
 }
 
-function EntitySection({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
+function EntitySection({ title, count, children, collapsedByDefault = false }: { title: string; count?: number; children: React.ReactNode; collapsedByDefault?: boolean }) {
+  const [collapsed, setCollapsed] = useState(collapsedByDefault);
   return (
-    <section className="entity-section">
-      <div className="row" style={{ marginBottom: 8 }}>
+    <section className={`entity-section ${collapsed ? "is-collapsed" : ""}`}>
+      <button
+        type="button"
+        onClick={() => setCollapsed((value) => !value)}
+        className="entity-section-header"
+        aria-expanded={!collapsed}
+      >
         <h3 className="t-h2" style={{ margin: 0, flex: 1 }}>{title}</h3>
         {count != null && <span className="t-faded" style={{ fontSize: 11 }}>{count}</span>}
-      </div>
-      {children}
+        <ChevronDown size={14} className="entity-section-chevron" />
+      </button>
+      {!collapsed && children}
     </section>
   );
 }

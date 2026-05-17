@@ -9,7 +9,6 @@ import { GlobalSearch } from "./GlobalSearch";
 import { PrimaryNav } from "./PrimaryNav";
 import { MapFilters } from "./MapFilters";
 import { SourceRefreshControls } from "./SourceRefreshControls";
-import { KeyStatsStrip } from "./KeyStatsStrip";
 import { FooterStrip } from "./FooterStrip";
 
 export function CommandPanel() {
@@ -55,7 +54,6 @@ export function CommandPanel() {
         <PrimaryNav />
         {!isCollapsed && !fullCanvas && <MapFilters />}
         {!isCollapsed && <SourceRefreshControls />}
-        {!isCollapsed && <KeyStatsStrip />}
       </div>
       {!isCollapsed && <FooterStrip />}
     </aside>
