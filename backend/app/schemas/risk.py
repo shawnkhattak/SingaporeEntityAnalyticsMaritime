@@ -23,3 +23,5 @@ class RiskFeedItem(BaseModel):
     subject: str
     vessel_id: int | None = None
     entity_id: int | None = None
+    evidence_payload: dict | None = None
+    conflict_details: list[dict] | None = None

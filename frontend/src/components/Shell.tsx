@@ -16,7 +16,6 @@ const EntityDetailInspector = lazy(() => import("./inspector/EntityDetailInspect
 const PortsInspector = lazy(() => import("./inspector/PortsInspector").then((m) => ({ default: m.PortsInspector })));
 const RiskFeedInspector = lazy(() => import("./inspector/RiskFeedInspector").then((m) => ({ default: m.RiskFeedInspector })));
 const NewsInspector = lazy(() => import("./inspector/NewsInspector").then((m) => ({ default: m.NewsInspector })));
-const SanctionsInspector = lazy(() => import("./inspector/SanctionsInspector").then((m) => ({ default: m.SanctionsInspector })));
 const EvidenceInspector = lazy(() => import("./inspector/EvidenceInspector").then((m) => ({ default: m.EvidenceInspector })));
 
 const GraphCanvas = lazy(() => import("./canvas/GraphCanvas").then((m) => ({ default: m.GraphCanvas })));
@@ -40,8 +39,6 @@ function renderInspector(route: RouteState) {
       return <RiskFeedInspector />;
     case "news":
       return <NewsInspector />;
-    case "sanctions":
-      return <SanctionsInspector />;
     case "evidence":
       return <EvidenceInspector id={route.id} />;
     default:
@@ -121,9 +118,8 @@ export function Shell() {
       case "entities-list": label = "Entities"; break;
       case "entity-detail": label = `Entity #${route.id}`; break;
       case "ports": label = "Ports"; break;
-      case "risk": label = "Risk feed"; break;
+      case "risk": label = "Risk & Sanctions"; break;
       case "news": label = "News"; break;
-      case "sanctions": label = "Sanctions"; break;
       case "evidence": label = `Evidence #${route.id}`; break;
       case "graph": label = "Graph"; break;
       case "schema": label = "Schema"; break;

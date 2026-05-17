@@ -1,4 +1,4 @@
-import { ExternalLink, Globe2, Landmark, Newspaper, RefreshCw, Rss } from "lucide-react";
+import { ExternalLink, Globe2, Newspaper, RefreshCw, Rss } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { getNewsList, runNewsLive, type NewsArticleItem } from "../../api";
@@ -24,7 +24,17 @@ const NEWS_TABS = [
   { label: "Intel", bundle: "SEAM Singapore Maritime Intel" },
 ] as const;
 
-function XIcon() {
+function SourceLogo({ src, alt, fallback }: { src: string; alt: string; fallback: ReactNode }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <>{fallback}</>;
+  return <img src={src} alt="" aria-hidden="true" loading="lazy" decoding="async" onError={() => setFailed(true)} />;
+}
+
+function LogoIcon({ src, label, fallback }: { src: string; label: string; fallback?: ReactNode }) {
+  return <SourceLogo src={src} alt={label} fallback={fallback ?? <Globe2 size={11} />} />;
+}
+
+function XFallbackIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M14.4 10.6 22.1 2h-1.8l-6.7 7.5L8.3 2H2.1l8.1 11.6L2.1 22h1.8l7.1-7.9 5.7 7.9h6.2l-8.5-11.4Zm-2.5 2.8-.8-1.2L4.6 3.4h2.8l5.2 7.1.8 1.2 6.9 9h-2.8l-5.6-7.3Z" />
@@ -38,31 +48,31 @@ function getSourceMeta(sourceBadge: string | null, source: string): SourceMeta {
   const rawSource = source.toLowerCase();
 
   if (key.includes("twitter") || key === "x" || rawSource.includes("twitter")) {
-    return { label: "Twitter/X", icon: <XIcon />, className: "news-source-badge source-x" };
+    return { label: "Twitter/X", icon: <LogoIcon src="https://x.com/favicon.ico" label="Twitter/X" fallback={<XFallbackIcon />} />, className: "news-source-badge source-x" };
   }
   if (key.includes("gcaptain") || rawSource.includes("gcaptain")) {
-    return { label: "gCaptain", icon: <Globe2 size={11} />, className: "news-source-badge source-gcaptain" };
+    return { label: "gCaptain", icon: <LogoIcon src="https://gcaptain.com/favicon.ico" label="gCaptain" />, className: "news-source-badge source-gcaptain" };
   }
   if (key.includes("maritime executive") || rawSource.includes("maritime executive")) {
-    return { label: "The Maritime Executive", icon: <Newspaper size={11} />, className: "news-source-badge source-maritime-executive" };
+    return { label: "The Maritime Executive", icon: <LogoIcon src="https://maritime-executive.com/favicon.ico" label="The Maritime Executive" fallback={<Newspaper size={11} />} />, className: "news-source-badge source-maritime-executive" };
   }
   if (key.includes("government") || rawSource.includes("mpa singapore")) {
-    return { label: "Government Source", icon: <Landmark size={11} />, className: "news-source-badge source-government" };
+    return { label: "Government Source", icon: <LogoIcon src="https://www.mpa.gov.sg/favicon.ico" label="MPA Singapore" />, className: "news-source-badge source-government" };
   }
   if (key.includes("lloyd")) {
-    return { label: "Lloyd’s List", icon: <Newspaper size={11} />, className: "news-source-badge source-lloyds" };
+    return { label: "Lloyd’s List", icon: <LogoIcon src="https://www.lloydslist.com/favicon.ico" label="Lloyd’s List" fallback={<Newspaper size={11} />} />, className: "news-source-badge source-lloyds" };
   }
   if (key.includes("tradewinds")) {
-    return { label: "TradeWinds", icon: <Globe2 size={11} />, className: "news-source-badge source-tradewinds" };
+    return { label: "TradeWinds", icon: <LogoIcon src="https://www.tradewindsnews.com/favicon.ico" label="TradeWinds" />, className: "news-source-badge source-tradewinds" };
   }
   if (key.includes("splash")) {
-    return { label: "Splash 24/7", icon: <Globe2 size={11} />, className: "news-source-badge source-splash" };
+    return { label: "Splash 24/7", icon: <LogoIcon src="https://splash247.com/favicon.ico" label="Splash 24/7" />, className: "news-source-badge source-splash" };
   }
   if (key.includes("rss") || key.includes("search feed")) {
-    return { label: label === "RSS.app Search Feed" ? "RSS.app Search" : label, icon: <Rss size={11} />, className: "news-source-badge source-rss" };
+    return { label: label === "RSS.app Search Feed" ? "RSS.app Search" : label, icon: <LogoIcon src="https://rss.app/favicon.ico" label="RSS.app" fallback={<Rss size={11} />} />, className: "news-source-badge source-rss" };
   }
   if (key.includes("maritime news")) {
-    return { label: "Maritime News", icon: <Newspaper size={11} />, className: "news-source-badge source-maritime-news" };
+    return { label: "Maritime News", icon: <LogoIcon src="https://www.marinelink.com/favicon.ico" label="MarineLink" fallback={<Newspaper size={11} />} />, className: "news-source-badge source-maritime-news" };
   }
   return { label, icon: <Globe2 size={11} />, className: "news-source-badge source-unknown" };
 }

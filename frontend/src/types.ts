@@ -148,11 +148,19 @@ export type RiskFlag = {
   resolved_at: string | null;
 };
 
+export type IdentityConflictDetail = {
+  field: string;
+  label: string;
+  values: string[];
+};
+
 export type RiskFeedItem = {
   flag: RiskFlag;
   subject: string;
   vessel_id: number | null;
   entity_id: number | null;
+  evidence_payload: Record<string, unknown> | null;
+  conflict_details: IdentityConflictDetail[] | null;
 };
 
 export type GraphNode = { id: string; type: string; label: string; summary: Record<string, unknown> };
@@ -225,7 +233,6 @@ export type RouteState =
   | { name: "ports" }
   | { name: "risk" }
   | { name: "news" }
-  | { name: "sanctions" }
   | { name: "evidence"; id: number }
   | { name: "graph"; subject?: { type: "vessel" | "entity"; id: number } }
   | { name: "schema" }
@@ -245,7 +252,6 @@ export function isInspectorRoute(route: RouteState): boolean {
     case "ports":
     case "risk":
     case "news":
-    case "sanctions":
     case "evidence":
       return true;
     default:

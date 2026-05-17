@@ -59,7 +59,7 @@ const SEVERITY_COLOR: Record<string, string> = {
   critical: "#C62828",
   high: "#E04A1F",
   medium: "#E59413",
-  low: "#E5C100",
+  low: "#D8C76B",
   none: "#3FB6C9",
 };
 
@@ -141,8 +141,29 @@ function vesselFocusOpacity(selectedId: number): number | maplibregl.ExpressionS
 }
 
 function riskHaloFocusOpacity(selectedId: number): number | maplibregl.ExpressionSpecification {
-  if (selectedId === -1) return 0.18;
-  return ["case", ["==", ["get", "vessel_id"], selectedId], 0.34, 0.025];
+  const normalOpacity: maplibregl.ExpressionSpecification = [
+    "match",
+    ["get", "severity"],
+    "low",
+    0.035,
+    0.18,
+  ];
+  const dimmedOpacity: maplibregl.ExpressionSpecification = [
+    "match",
+    ["get", "severity"],
+    "low",
+    0.008,
+    0.025,
+  ];
+  const selectedOpacity: maplibregl.ExpressionSpecification = [
+    "match",
+    ["get", "severity"],
+    "low",
+    0.08,
+    0.34,
+  ];
+  if (selectedId === -1) return normalOpacity;
+  return ["case", ["==", ["get", "vessel_id"], selectedId], selectedOpacity, dimmedOpacity];
 }
 
 function vesselSortKey(selectedId: number): maplibregl.ExpressionSpecification {
@@ -245,7 +266,7 @@ export function MapCanvas() {
             SEVERITY_COLOR.low,
             SEVERITY_COLOR.none,
           ],
-          "circle-opacity": 0.18,
+          "circle-opacity": riskHaloFocusOpacity(-1),
           "circle-blur": 0.4,
         },
       });

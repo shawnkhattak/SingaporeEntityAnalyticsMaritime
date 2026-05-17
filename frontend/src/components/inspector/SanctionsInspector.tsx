@@ -10,6 +10,7 @@ import type { RiskFeedItem } from "../../types";
 import { EvidenceLink } from "../primitives/EvidenceLink";
 import { Skeleton } from "../primitives/Skeleton";
 import { formatDate } from "../../format";
+import { getHumanReadableSanctionSource } from "../../sanctionsSource";
 import { InspectorShell } from "./InspectorShell";
 
 const SANCTIONS_FLAG_TYPES = ["sanctions_match", "sanctions"];
@@ -83,6 +84,7 @@ export function SanctionsInspector() {
       )}
       <div className="col" style={{ gap: 6 }}>
         {matches?.map((m) => {
+          const sourceList = getHumanReadableSanctionSource(m.evidence_payload);
           const href = m.vessel_id != null
             ? `/vessels/${m.vessel_id}`
             : m.entity_id != null
@@ -94,8 +96,14 @@ export function SanctionsInspector() {
                 <strong style={{ flex: 1 }}>{m.subject}</strong>
                 <span className="t-faded" style={{ fontSize: 11 }}>{formatDate(m.flag.created_at)}</span>
               </div>
-              <div className="t-sm" style={{ marginTop: 4 }}>{m.flag.summary}</div>
-              <EvidenceLink id={m.flag.evidence_id} variant="chip" />
+              <div className="t-sm" style={{ marginTop: 4 }}>{sanctionsSummary(m.flag.summary)}</div>
+              <div className="source-list-row">
+                <span className="t-faded">Source list:</span>
+                <span className="source-list-badge">{sourceList}</span>
+              </div>
+              <div className="row" style={{ marginTop: 7 }}>
+                <EvidenceLink id={m.flag.evidence_id} variant="chip" />
+              </div>
             </a>
           );
         })}
@@ -122,4 +130,8 @@ export function SanctionsInspector() {
       </Modal>
     </InspectorShell>
   );
+}
+
+function sanctionsSummary(summary: string): string {
+  return summary.replace(/:\s*.+$/, "").replace(/\s*\(.+\)\s*$/, "");
 }

@@ -31,6 +31,7 @@ A hand-rolled SPA over a fixed-position layout. See `frontend/src/`:
 SEAM has no backend scheduler. Auto-refresh is a frontend `usePoll` cadence anchored in `App.tsx`:
 
 - OCEANS-X positions snapshot every 10 min.
+- RSS/news feeds every 60 min.
 - Backend health every 15 s.
 - Map vessel list every 30 s while the time-window filter is `live`; it requests `/api/map/vessels?limit=5000&scope=latest-snapshot`.
 - `loadDevState()` every 60 s outside `/operations`, every 10 s inside.

@@ -76,19 +76,26 @@ class EntityService:
             .where(Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES))
             .order_by(Vessel.name)
         )
-        return [
-            VesselSummary(
-                id=row.id,
-                imo=row.imo,
-                mmsi=row.mmsi,
-                name=row.name,
-                call_sign=row.call_sign,
-                flag_country_code=row.flag_country_code,
-                vessel_type_code=row.vessel_type_code,
-                source_updated_at=row.source_updated_at,
+        vessels: list[VesselSummary] = []
+        seen: set[str] = set()
+        for row in rows:
+            key = f"imo:{row.imo}" if row.imo else f"id:{row.id}"
+            if key in seen:
+                continue
+            seen.add(key)
+            vessels.append(
+                VesselSummary(
+                    id=row.id,
+                    imo=row.imo,
+                    mmsi=row.mmsi,
+                    name=row.name,
+                    call_sign=row.call_sign,
+                    flag_country_code=row.flag_country_code,
+                    vessel_type_code=row.vessel_type_code,
+                    source_updated_at=row.source_updated_at,
+                )
             )
-            for row in rows
-        ]
+        return vessels
 
     async def relationships(self, entity_id: int, limit: int = 50) -> list[EntityRelationshipRead] | None:
         if await self.get(entity_id) is None:

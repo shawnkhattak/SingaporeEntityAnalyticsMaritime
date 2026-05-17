@@ -17,7 +17,7 @@ function parsePath(path: string, search: string): RouteState {
   if (clean === "/ports") return { name: "ports" };
   if (clean === "/risk") return { name: "risk" };
   if (clean === "/news") return { name: "news" };
-  if (clean === "/sanctions") return { name: "sanctions" };
+  if (clean === "/sanctions") return { name: "risk" };
   if (clean.startsWith("/evidence/")) {
     const id = Number(clean.split("/")[2]);
     return Number.isInteger(id) ? { name: "evidence", id } : { name: "map" };

@@ -304,7 +304,7 @@ const RISK_LABELS: Record<string, RiskLabel> = {
     kind: "identity_conflict",
     title: "Conflicting identity",
     body: "Multiple source observations report different names or particulars for this IMO. May indicate identity spoofing.",
-    toneClass: "med",
+    toneClass: "low",
   },
   negative_news_mention: {
     kind: "news",

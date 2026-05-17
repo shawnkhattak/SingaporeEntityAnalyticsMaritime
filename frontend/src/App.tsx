@@ -1,12 +1,13 @@
 import { useEffect } from "react";
 import { Shell } from "./components/Shell";
-import { getDevTableCounts, getHealth, loadDevState, loadMapVessels, runPositionsSnapshot } from "./api";
+import { getDevTableCounts, getHealth, loadDevState, loadMapVessels, runNewsLive, runPositionsSnapshot } from "./api";
 import { useApp, useRunningJobs, useToasts } from "./state/AppState";
 import { usePoll } from "./hooks/usePoll";
 
 // OCEANS-X positions snapshot cadence. Anything more frequent risks
 // hammering the upstream API and consuming the quota.
 const OCEANSX_INTERVAL_MS = 10 * 60 * 1000;
+const NEWS_RSS_INTERVAL_MS = 60 * 60 * 1000;
 
 export function App() {
   const { dispatch } = useApp();
@@ -48,6 +49,24 @@ export function App() {
       }
     },
     OCEANSX_INTERVAL_MS,
+    { immediate: false },
+  );
+
+  // Refresh configured RSS.app/news feeds hourly. This keeps the News
+  // page current without making the user manually pull RSS all day.
+  usePoll(
+    async () => {
+      if (running["news"]) return;
+      start("news");
+      try {
+        await runNewsLive();
+        const counts = await getDevTableCounts();
+        dispatch({ type: "SET_TABLE_COUNTS", counts });
+      } finally {
+        finish("news");
+      }
+    },
+    NEWS_RSS_INTERVAL_MS,
     { immediate: false },
   );
 

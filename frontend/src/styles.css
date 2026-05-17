@@ -220,6 +220,13 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
   fill: currentColor;
   stroke-width: 2;
 }
+.news-source-badge img {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 2px;
+  object-fit: contain;
+}
 .news-source-badge span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -234,6 +241,224 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
 .source-rss { color: #A65307; background: rgba(234, 112, 13, .13); border-color: rgba(234, 112, 13, .24); }
 .source-maritime-news { color: var(--ocean-600); background: rgba(58,127,184,.11); border-color: rgba(58,127,184,.20); }
 .source-unknown { color: var(--slate-600); background: var(--gray-100); border-color: var(--gray-200); }
+
+.source-list-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  min-width: 0;
+}
+.source-list-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(58,127,184,.18);
+  background: rgba(58,127,184,.09);
+  color: var(--ocean-600);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sanction-source-list {
+  margin-top: 6px;
+  line-height: 1.45;
+}
+.sanction-source-item {
+  color: var(--slate-700);
+  font-size: 12px;
+  line-height: 1.35;
+  padding-left: 10px;
+  position: relative;
+}
+.sanction-source-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ocean-400);
+}
+.sanction-source-more {
+  align-self: flex-start;
+  margin: 1px 0 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ocean-600);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.sanction-source-more:hover { color: var(--ocean-500); text-decoration: underline; }
+.identity-conflict-summary {
+  margin-top: 6px;
+  line-height: 1.45;
+}
+.identity-conflict-item {
+  color: var(--navy-700);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.identity-conflict-label {
+  color: var(--navy-900);
+  font-weight: 650;
+}
+.identity-conflict-reason {
+  margin-top: 6px;
+  color: var(--slate-500);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.identity-conflict-reason strong {
+  color: var(--slate-500);
+  font-weight: 650;
+}
+.identity-conflict-more {
+  align-self: flex-start;
+  margin: 1px 0 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ocean-600);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.identity-conflict-more:hover { color: var(--ocean-500); text-decoration: underline; }
+.risk-group-alert-line {
+  color: var(--navy-700);
+  font-size: 12px;
+  line-height: 1.35;
+  padding-left: 10px;
+  position: relative;
+}
+.risk-group-alert-line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ocean-400);
+}
+.risk-group-alert-list {
+  gap: 4px;
+  margin-top: 8px;
+}
+.risk-alert-row {
+  display: grid;
+  grid-template-columns: 18px minmax(118px, 132px) minmax(0, 1fr) max-content;
+  align-items: center;
+  column-gap: 10px;
+  min-height: 26px;
+  padding: 4px 7px;
+  border: 1px solid rgba(230,233,238,.85);
+  border-radius: 7px;
+  background: rgba(248,249,251,.72);
+  min-width: 0;
+}
+.risk-alert-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--gray-100);
+  color: var(--slate-500);
+}
+.risk-alert-icon.sanctioned { color: var(--risk-critical); background: rgba(198,40,40,.10); }
+.risk-alert-icon.detained { color: var(--risk-high); background: rgba(224,74,31,.10); }
+.risk-alert-icon.watchlist { color: var(--ocean-600); background: rgba(58,127,184,.10); }
+.risk-alert-icon.identity { color: var(--slate-500); background: rgba(95,113,132,.12); }
+.risk-alert-icon.high-risk { color: var(--risk-high); background: rgba(224,74,31,.10); }
+.risk-alert-icon.news { color: var(--slate-500); background: rgba(95,113,132,.10); }
+.risk-alert-label {
+  color: var(--navy-700);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  min-width: 0;
+}
+.risk-alert-detail {
+  color: var(--navy-700);
+  font-size: 12px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.risk-alert-time {
+  color: var(--slate-400);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.risk-group-alert-more {
+  color: var(--slate-500);
+  font-size: 11.5px;
+  padding: 2px 6px;
+}
+.risk-group-actions {
+  gap: 4px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  min-height: 26px;
+}
+.entity-detail-page {
+  gap: 12px;
+  padding-bottom: 72px;
+}
+.entity-section {
+  border: 1px solid var(--gray-200);
+  border-radius: var(--r-card);
+  background: var(--white);
+  padding: 12px;
+}
+.entity-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.entity-vessel-card,
+.entity-relationship-card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--r-card);
+  background: var(--white);
+  color: inherit;
+  text-decoration: none;
+}
+.entity-relationship-card {
+  display: block;
+}
+.entity-vessel-card:hover,
+.entity-relationship-card:hover {
+  border-color: var(--ocean-200);
+  background: var(--gray-50);
+  text-decoration: none;
+}
+@media (max-width: 620px) {
+  .entity-metric-grid { grid-template-columns: 1fr; }
+}
 
 /* ===== Buttons ===== */
 .btn {
@@ -1071,6 +1296,38 @@ button.metric:hover, a.metric:hover {
 .util-chip:hover { background: var(--white); border-color: var(--gray-300); transform: translateY(-1px); }
 .util-chip:active { transform: translateY(0) scale(0.97); transition-duration: 60ms; }
 .util-chip svg { width: 14px; height: 14px; }
+
+/* Roadmap */
+.roadmap-page {
+  animation: fade-in var(--motion-base) var(--ease-out) both;
+}
+.roadmap-title {
+  animation: slide-in-left var(--motion-base) var(--ease-out) both;
+}
+.roadmap-card {
+  opacity: 0;
+  animation: roadmap-card-in 420ms var(--ease-out) both;
+}
+.roadmap-card:hover {
+  border-color: var(--ocean-200);
+  box-shadow: 0 10px 28px rgba(14,34,53,0.09);
+  transform: translateY(-2px);
+}
+.roadmap-card.is-current {
+  border-color: rgba(58,127,184,.35);
+  box-shadow: 0 8px 24px rgba(58,127,184,.11);
+}
+.roadmap-step.is-pulsing {
+  animation: roadmap-step-pulse 1.8s var(--ease-in-out) infinite;
+}
+@keyframes roadmap-card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes roadmap-step-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(58,127,184,.24); }
+  50% { box-shadow: 0 0 0 7px rgba(58,127,184,0); }
+}
 
 /* Greyscale wash for backend-unreachable */
 .shell .map-canvas { transition: filter var(--motion-slow) var(--ease-in-out); }

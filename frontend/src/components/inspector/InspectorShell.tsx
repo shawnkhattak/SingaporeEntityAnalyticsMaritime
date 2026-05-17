@@ -32,7 +32,7 @@ export function InspectorShell({ title, breadcrumb, tabs, activeTab = 0, onTabCh
         <div className="row" style={{ gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             {breadcrumb && <div className="t-caption">{breadcrumb}</div>}
-            <h2 className="t-h1" style={{ margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</h2>
+            <h2 className="t-h1" title={title} style={{ margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</h2>
           </div>
           <button
             className="btn ghost icon sm"
