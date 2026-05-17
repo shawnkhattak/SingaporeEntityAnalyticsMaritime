@@ -1,7 +1,7 @@
 import { Database, FileText, Network, RefreshCw, Ship } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getVessel, getVesselEvents, getVesselGraph, getVesselObservations, getVesselRiskFlags, runMovements, runParticulars, runRiskRecompute } from "../../api";
-import { navigateTo } from "../../hooks/useRoute";
+import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
 import { requestMapCenter } from "../../hooks/useMapCenter";
 import { recordRecentVessel, useApp, useJobRunner, useSelection } from "../../state/AppState";
 import { Button } from "../primitives/Button";
@@ -74,7 +74,7 @@ export function VesselDetailInspector({ id }: { id: number }) {
 
   if (loading && !data) {
     return (
-      <InspectorShell breadcrumb="Vessel" title="Loading…" onClose={() => window.history.back()}>
+      <InspectorShell breadcrumb="Vessel" title="Loading…" onClose={closeInspectorRoute}>
         <Skeleton height={32} />
         <div className="col" style={{ marginTop: 12, gap: 8 }}>
           <Skeleton height={80} />
@@ -86,7 +86,7 @@ export function VesselDetailInspector({ id }: { id: number }) {
 
   if (error || !data) {
     return (
-      <InspectorShell breadcrumb="Vessel" title="Could not load" onClose={() => window.history.back()}>
+      <InspectorShell breadcrumb="Vessel" title="Could not load" onClose={closeInspectorRoute}>
         <ErrorState title="Vessel unavailable" body={error ?? "No data."} onRetry={load} />
       </InspectorShell>
     );
@@ -116,12 +116,8 @@ export function VesselDetailInspector({ id }: { id: number }) {
       activeTab={tab}
       onTabChange={setTab}
       onClose={() => {
-        if (fromRisk) {
-          try { sessionStorage.removeItem("seam:return-to-risk"); } catch { /* ignore */ }
-          navigateTo("/risk");
-        } else {
-          window.history.back();
-        }
+        try { sessionStorage.removeItem("seam:return-to-risk"); } catch { /* ignore */ }
+        closeInspectorRoute();
       }}
       footer={
         tab === 0 ? (

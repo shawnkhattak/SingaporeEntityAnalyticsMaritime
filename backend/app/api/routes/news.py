@@ -17,16 +17,20 @@ class NewsArticleRead(BaseModel):
 
     id: int
     source: str
+    source_badge: str | None = None
+    bundle_name: str | None = None
     title: str
     url: str
     published_at: datetime | None
     summary: str | None
+    image: str | None = None
 
 
 @router.get("", response_model=list[NewsArticleRead])
 async def list_news(
     session: Annotated[AsyncSession, Depends(get_session)],
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    bundle_name: Annotated[str | None, Query()] = None,
 ) -> list[NewsArticleRead]:
     """Most-recent-first news article listing.
 
@@ -34,7 +38,21 @@ async def list_news(
     `getRecentObservations()` for an `observation_type` that never
     appeared, so the page always rendered zero rows.
     """
-    rows = await session.scalars(
-        select(NewsArticle).order_by(desc(NewsArticle.published_at), desc(NewsArticle.id)).limit(limit)
-    )
-    return [NewsArticleRead.model_validate(row) for row in rows]
+    statement = select(NewsArticle).order_by(desc(NewsArticle.published_at), desc(NewsArticle.id)).limit(limit)
+    if bundle_name:
+        statement = statement.where(NewsArticle.raw_payload["bundle_name"].astext == bundle_name)
+    rows = await session.scalars(statement)
+    return [
+        NewsArticleRead(
+            id=row.id,
+            source=row.source,
+            source_badge=(row.raw_payload or {}).get("source_badge"),
+            bundle_name=(row.raw_payload or {}).get("bundle_name"),
+            title=row.title,
+            url=row.url,
+            published_at=row.published_at,
+            summary=row.summary,
+            image=(row.raw_payload or {}).get("image"),
+        )
+        for row in rows
+    ]

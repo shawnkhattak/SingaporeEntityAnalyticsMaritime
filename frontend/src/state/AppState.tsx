@@ -164,7 +164,19 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, runningJobs: next };
     }
     case "SET_VESSELS":
-      return { ...state, vessels: action.vessels, vesselsLoaded: true };
+      return {
+        ...state,
+        vessels: action.vessels,
+        vesselsLoaded: true,
+        riskByVessel: {
+          ...state.riskByVessel,
+          ...Object.fromEntries(
+            action.vessels
+              .filter((v) => v.risk_flags && v.risk_flags.length > 0)
+              .map((v) => [v.vessel_id, v.risk_flags ?? []]),
+          ),
+        },
+      };
     case "SET_HEALTH":
       return { ...state, health: action.health };
     case "SET_JOBS":
@@ -322,16 +334,19 @@ export function useJobRunner() {
         successTitle: string;
         errorTitle: string;
         successBody?: (result: T) => string | undefined;
+        suppressSuccessToast?: boolean;
       },
     ): Promise<T | null> => {
       dispatch({ type: "JOB_STARTED", slug });
       try {
         const result = await run();
-        toasts.push({
-          variant: "success" as ToastVariant,
-          title: messages.successTitle,
-          body: messages.successBody?.(result),
-        });
+        if (!messages.suppressSuccessToast) {
+          toasts.push({
+            variant: "success" as ToastVariant,
+            title: messages.successTitle,
+            body: messages.successBody?.(result),
+          });
+        }
         return result;
       } catch (error) {
         toasts.push({

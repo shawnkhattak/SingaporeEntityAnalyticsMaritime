@@ -1,4 +1,5 @@
 import { cloneElement, isValidElement, useRef, useState, type ReactElement } from "react";
+import { createPortal } from "react-dom";
 
 type TooltipProps = {
   label: string;
@@ -8,7 +9,7 @@ type TooltipProps = {
 
 export function Tooltip({ label, children, delay = 250 }: TooltipProps) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number; placement: "top" | "right" } | null>(null);
   const timer = useRef<number | undefined>(undefined);
 
   function show(e: React.MouseEvent) {
@@ -16,7 +17,12 @@ export function Tooltip({ label, children, delay = 250 }: TooltipProps) {
     const rect = target.getBoundingClientRect();
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
-      setPos({ x: rect.left + rect.width / 2, y: rect.top - 6 });
+      const railTooltip = rect.left < 96 && rect.width <= 48;
+      setPos(
+        railTooltip
+          ? { x: rect.right + 10, y: rect.top + rect.height / 2, placement: "right" }
+          : { x: rect.left + rect.width / 2, y: rect.top - 6, placement: "top" },
+      );
       setOpen(true);
     }, delay);
   }
@@ -38,10 +44,11 @@ export function Tooltip({ label, children, delay = 250 }: TooltipProps) {
   return (
     <>
       {cloned}
-      {open && pos && (
-        <span className="tooltip" style={{ left: pos.x, top: pos.y }}>
+      {open && pos && createPortal(
+        <span className={`tooltip ${pos.placement}`} style={{ left: pos.x, top: pos.y }}>
           {label}
-        </span>
+        </span>,
+        document.body,
       )}
     </>
   );

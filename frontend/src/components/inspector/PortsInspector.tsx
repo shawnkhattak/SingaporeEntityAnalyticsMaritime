@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronRight, MapPin, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPortActivity, runPortActivity } from "../../api";
+import { closeInspectorRoute } from "../../hooks/useRoute";
 import { useJobRunner } from "../../state/AppState";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
@@ -101,7 +102,7 @@ export function PortsInspector() {
       }))}
       activeTab={tab}
       onTabChange={setTab}
-      onClose={() => window.history.back()}
+      onClose={closeInspectorRoute}
       footer={
         <div className="row" style={{ gap: 6 }}>
           <Button size="sm" leadingIcon={<RefreshCw size={12} />} onClick={() => refreshKind("due-arrive")}>Pull arrivals</Button>

@@ -156,12 +156,10 @@ CURATED_REFERENCE = {
         "YAWG": "Yacht-Wing In Ground Craft",
     },
     "entity_role": {
-        "registered_owner": "Registered owner",
-        "ship_manager": "Ship manager",
+        "owner": "Owner",
         "operator": "Operator",
-        "classification_society": "Classification society",
-        "flag_state": "Flag state",
-        "vessel_type": "Vessel type",
+        "ship_manager": "Ship manager",
+        "ism_manager": "ISM manager",
     },
 }
 

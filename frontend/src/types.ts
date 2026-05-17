@@ -45,6 +45,8 @@ export type VesselMapFeature = VesselPosition & {
   call_sign: string | null;
   flag_country_code: string | null;
   vessel_type_code: string | null;
+  highest_risk_severity?: string | null;
+  risk_flags?: RiskFlag[];
 };
 
 export type DevVesselBrowseRow = {

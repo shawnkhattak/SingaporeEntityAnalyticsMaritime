@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 from dataclasses import dataclass
@@ -28,6 +29,7 @@ INTERNAL_TEST_SOURCE = "internal-test"
 OCEANSX_SOURCE = "OCEANS-X"
 OCEANSX_POSITIONS_JOB_TYPE = "oceansx.positions_snapshot"
 OCEANSX_PARTICULARS_JOB_TYPE = "oceansx.vessel_particulars"
+OCEANSX_BULK_PARTICULARS_JOB_TYPE = "oceansx.vessel_particulars_bulk"
 OCEANSX_MOVEMENTS_JOB_TYPE = "oceansx.vessel_movements"
 OCEANSX_PORT_ACTIVITY_JOB_TYPE = "oceansx.port_activity"
 OCEANSX_POSITION_OBSERVATION_TYPE = "vessel_position"
@@ -36,14 +38,11 @@ OCEANSX_MOVEMENT_OBSERVATION_TYPE = "vessel_movement"
 OCEANSX_PORT_ACTIVITY_OBSERVATION_TYPE = "port_activity"
 
 PARTICULARS_ENTITY_FIELDS = {
-    "registeredOwner": ("registered_owner", "organization"),
-    "registeredOwnership": ("registered_owner", "organization"),
-    "shipManager": ("ship_manager", "organization"),
-    "operator": ("operator", "organization"),
-    "ismManager": ("ism_manager", "organization"),
-    "classificationSociety": ("classification_society", "classification_society"),
-    "flag": ("flag_state", "flag_state"),
-    "vesselType": ("vessel_type", "vessel_type"),
+    "registeredOwner": ("owner", "company"),
+    "registeredOwnership": ("owner", "company"),
+    "shipManager": ("ship_manager", "company"),
+    "operator": ("operator", "company"),
+    "ismManager": ("ism_manager", "company"),
 }
 
 
@@ -400,6 +399,201 @@ class IngestionService:
         await self.session.commit()
         await self.session.refresh(job)
         return job
+
+    async def start_bulk_map_particulars(
+        self,
+        *,
+        delay_seconds: float,
+        requested_by: str = "dev",
+    ) -> IngestionJob:
+        now = datetime.now(UTC)
+        stale_jobs = await self.session.scalars(
+            select(IngestionJob).where(
+                IngestionJob.job_type == OCEANSX_BULK_PARTICULARS_JOB_TYPE,
+                IngestionJob.status.in_(("queued", "running")),
+            )
+        )
+        for stale_job in stale_jobs:
+            stale_job.status = "failed"
+            stale_job.finished_at = now
+            stale_job.parameters = {
+                **(stale_job.parameters or {}),
+                "superseded": True,
+                "last_error": "Superseded by a newer Singapore-flagged vessel particulars bulk job.",
+            }
+            self.session.add(
+                IngestionLog(
+                    job_id=stale_job.id,
+                    level="warning",
+                    message="Marked stale bulk vessel particulars job as superseded.",
+                    context={"superseded_by": "new bulk particulars request"},
+                )
+            )
+
+        vessel_ids = await self._current_map_vessel_ids()
+        job = IngestionJob(
+            job_type=OCEANSX_BULK_PARTICULARS_JOB_TYPE,
+            status="queued",
+            requested_by=requested_by,
+            parameters={
+                "mode": "live",
+                "source": OCEANSX_SOURCE,
+                "selection": "singapore_flagged_map_vessels",
+                "flag_country_code": "SG",
+                "delay_seconds": delay_seconds,
+                "total": len(vessel_ids),
+                "completed": 0,
+                "succeeded": 0,
+                "failed": 0,
+                "skipped": 0,
+                "current_vessel_id": None,
+                "started_background": False,
+            },
+            started_at=now,
+        )
+        self.session.add(job)
+        await self.session.commit()
+        await self.session.refresh(job)
+        return job
+
+    async def run_bulk_map_particulars(
+        self,
+        *,
+        settings: Settings,
+        job_id: int,
+        delay_seconds: float,
+    ) -> None:
+        job = await self.session.get(IngestionJob, job_id)
+        if job is None:
+            return
+
+        health = await self._get_or_create_source_health(OCEANSX_SOURCE)
+        health.last_checked_at = datetime.now(UTC)
+        vessel_ids = await self._current_map_vessel_ids()
+        stats: dict[str, Any] = {
+            "mode": "live",
+            "source": OCEANSX_SOURCE,
+            "selection": "singapore_flagged_map_vessels",
+            "flag_country_code": "SG",
+            "delay_seconds": delay_seconds,
+            "total": len(vessel_ids),
+            "completed": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "skipped": 0,
+            "current_vessel_id": None,
+            "last_error": None,
+            "started_background": True,
+        }
+        job.status = "running"
+        job.parameters = stats.copy()
+        self.session.add(
+            IngestionLog(
+                job_id=job.id,
+                level="info",
+                message="Started bulk OCEANS-X vessel particulars ingestion.",
+                context={
+                    "total": len(vessel_ids),
+                    "delay_seconds": delay_seconds,
+                    "selection": "singapore_flagged_map_vessels",
+                    "flag_country_code": "SG",
+                },
+            )
+        )
+        await self.session.commit()
+
+        for index, vessel_id in enumerate(vessel_ids):
+            stats["current_vessel_id"] = vessel_id
+            try:
+                vessel = await self.session.get(Vessel, vessel_id)
+                if vessel is None or not vessel.imo:
+                    stats["skipped"] += 1
+                    self.session.add(
+                        IngestionLog(
+                            job_id=job.id,
+                            level="warning",
+                            message="Skipped vessel particulars lookup.",
+                            context={"vessel_id": vessel_id, "reason": "missing vessel or IMO"},
+                        )
+                    )
+                else:
+                    payload = await self._load_particulars_payload(settings, "live", vessel.imo)
+                    vessel_stats = await self._ingest_particulars_payload(vessel, payload, fetched_at=datetime.now(UTC))
+                    stats["succeeded"] += 1
+                    self.session.add(
+                        IngestionLog(
+                            job_id=job.id,
+                            level="info",
+                            message="Fetched OCEANS-X vessel particulars.",
+                            context={"vessel_id": vessel_id, "imo": vessel.imo, **vessel_stats},
+                        )
+                    )
+            except (OceansXError, ValueError, OSError) as exc:
+                stats["failed"] += 1
+                stats["last_error"] = str(exc)
+                self.session.add(
+                    IngestionLog(
+                        job_id=job.id,
+                        level="error",
+                        message="OCEANS-X vessel particulars lookup failed.",
+                        context={"vessel_id": vessel_id, "error": str(exc)},
+                    )
+                )
+            finally:
+                stats["completed"] = index + 1
+                job.parameters = stats.copy()
+                health.last_checked_at = datetime.now(UTC)
+                await self.session.commit()
+
+            if index + 1 < len(vessel_ids) and delay_seconds > 0:
+                await asyncio.sleep(delay_seconds)
+
+        job.status = "succeeded" if stats["total"] == 0 or stats["failed"] < stats["total"] else "failed"
+        job.finished_at = datetime.now(UTC)
+        stats["current_vessel_id"] = None
+        job.parameters = stats.copy()
+        if job.status == "succeeded":
+            health.status = "healthy"
+            health.last_success_at = job.finished_at
+            health.last_error = None
+        else:
+            health.status = "unhealthy"
+            health.last_error = str(stats["last_error"] or "All particulars lookups failed")
+        health.metadata_ = {"last_job_id": job.id, **stats}
+        self.session.add(
+            IngestionLog(
+                job_id=job.id,
+                level="info" if job.status == "succeeded" else "error",
+                message="Completed bulk OCEANS-X vessel particulars ingestion.",
+                context=stats.copy(),
+            )
+        )
+        await self.session.commit()
+
+    async def _current_map_vessel_ids(self, limit: int = 5000) -> list[int]:
+        statement = (
+            select(Vessel.id)
+            .join(VesselPositionLatest, VesselPositionLatest.vessel_id == Vessel.id)
+            .where(Vessel.imo.is_not(None))
+            .where(Vessel.imo.notin_(("0", "00", "000", "0000")))
+            .where(func.upper(Vessel.flag_country_code).in_(("SG", "SINGAPORE")))
+            .order_by(desc(VesselPositionLatest.position_timestamp))
+            .limit(limit)
+        )
+        latest_job = await self.session.scalar(
+            select(IngestionJob)
+            .where(
+                IngestionJob.job_type == OCEANSX_POSITIONS_JOB_TYPE,
+                IngestionJob.status == "succeeded",
+                IngestionJob.started_at.is_not(None),
+                IngestionJob.finished_at.is_not(None),
+            )
+            .order_by(desc(IngestionJob.finished_at))
+            .limit(1)
+        )
+        if latest_job is not None:
+            statement = statement.where(VesselPositionLatest.snapshot_job_id == latest_job.id)
+        return list(await self.session.scalars(statement))
 
     async def run_vessel_movements(
         self,

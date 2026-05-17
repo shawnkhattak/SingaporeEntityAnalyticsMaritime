@@ -1,7 +1,7 @@
 import { Database, RefreshCw, Scale } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getRiskFeed, runSanctionsLive } from "../../api";
-import { navigateTo } from "../../hooks/useRoute";
+import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
 import { useJobRunner } from "../../state/AppState";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
@@ -35,7 +35,7 @@ export function SanctionsInspector() {
     <InspectorShell
       breadcrumb="Sanctions"
       title={`Sanctions · ${matches?.length ?? 0}`}
-      onClose={() => window.history.back()}
+      onClose={closeInspectorRoute}
       footer={
         <div className="row" style={{ gap: 6 }}>
           <Button size="sm" variant="danger" leadingIcon={<RefreshCw size={12} />} onClick={() => setConfirmOpen(true)}>

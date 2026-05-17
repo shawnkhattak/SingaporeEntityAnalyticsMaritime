@@ -8,5 +8,9 @@ Read models link back to observations through evidence IDs:
 - `relationships.evidence_id`
 - `risk_flags.evidence_id`
 - `sanctions_records.evidence_id`
+- `port_events.evidence_id`
+- `news_links.evidence_id`
+
+`vessel_positions_latest.snapshot_job_id` is not evidence; it is snapshot membership metadata used by `/api/map/vessels?scope=latest-snapshot`.
 
 Graph edges that claim evidence must resolve through `GET /api/evidence/{observation_id}`. The V1 graph does not infer hidden ownership; it only renders relationships derived from stored particulars, port events, sanctions/news matches, or explicit deterministic rules added later.

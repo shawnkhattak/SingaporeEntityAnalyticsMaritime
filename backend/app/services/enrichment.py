@@ -1,3 +1,4 @@
+import json
 import socket
 from csv import DictReader
 from io import StringIO
@@ -17,6 +18,37 @@ from app.models.evidence import SourceObservation
 from app.models.maritime import Entity, Vessel
 from app.models.risk import NewsArticle, NewsLink, RiskFlag, SanctionsRecord
 from app.services.ingestion import _datetime_value, stable_payload_hash
+
+RSS_APP_BUNDLES = {
+    "https://rss.app/feeds/v1.1/_k2zRjP2j4B2XpYXV.json": {
+        "bundle_name": "SEAM Singapore Social Media Intel",
+        "purpose": "This bundle tracks public social media chatter and shipping-related posts connected to Singapore maritime activity.",
+    },
+    "https://rss.app/feeds/v1.1/_dmwNOhqoTXjyWDMc.json": {
+        "bundle_name": "SEAM Entity Watchlist",
+        "purpose": "This bundle tracks specific Singapore maritime keywords, vessel activity, and entity-related watchlist terms.",
+    },
+    "https://rss.app/feeds/v1.1/_gw24IMIVRI5WBN1p.json": {
+        "bundle_name": "SEAM Singapore Maritime Intel",
+        "purpose": "This bundle tracks formal maritime news, trade publications, and official Singapore maritime updates.",
+    },
+}
+
+RSS_SOURCE_BADGES = {
+    "X/Twitter keyword search feed": "Twitter/X",
+    "Lloyd’s List Twitter/X": "Lloyd’s List",
+    '"Singapore bunker" vessel': "RSS.app Search Feed",
+    '"Singapore-flagged" vessel': "RSS.app Search Feed",
+    '"PSA Singapore" maritime': "RSS.app Search Feed",
+    '"Singapore Strait" tanker': "RSS.app Search Feed",
+    '"Port of Singapore" vessel': "RSS.app Search Feed",
+    "TradeWinds Singapore": "TradeWinds",
+    "MarineLink Singapore": "Maritime News",
+    "Splash 24/7": "Splash 24/7",
+    "MPA Singapore Media Releases": "Government Source",
+    "gCaptain": "gCaptain",
+    "The Maritime Executive": "The Maritime Executive",
+}
 
 
 def classify_match(candidate: str, target: str) -> str:
@@ -384,7 +416,7 @@ async def _fetch_feed_articles(feed_url: str) -> list[dict[str, Any]]:
     import asyncio
 
     def _sync_fetch() -> list[dict[str, Any]]:
-        request = urllib.request.Request(feed_url, headers={"Accept": "application/rss+xml, application/atom+xml, application/xml", "User-Agent": "SEAM/1.0"}, method="GET")
+        request = urllib.request.Request(feed_url, headers={"Accept": "application/feed+json, application/json, application/rss+xml, application/atom+xml, application/xml", "User-Agent": "SEAM/1.0"}, method="GET")
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
                 body = response.read()
@@ -396,6 +428,10 @@ async def _fetch_feed_articles(feed_url: str) -> list[dict[str, Any]]:
             raise ValueError(f"News feed returned HTTP {exc.code}: {feed_url}") from exc
         except urllib.error.URLError as exc:
             raise ValueError(f"News feed request failed for {feed_url}: {exc.reason}") from exc
+        stripped = body.lstrip()
+        if stripped.startswith(b"{"):
+            return _json_feed_articles(body, feed_url)
+
         root = ET.fromstring(body)
         host = urllib.parse.urlparse(feed_url).netloc or "RSS"
         source = _xml_text(root.find("./channel/title")) or host
@@ -427,6 +463,90 @@ async def _fetch_feed_articles(feed_url: str) -> list[dict[str, Any]]:
         return [article for article in articles if article.get("title") and article.get("url")]
 
     return await asyncio.to_thread(_sync_fetch)
+
+
+def _json_feed_articles(body: bytes, feed_url: str) -> list[dict[str, Any]]:
+    payload = json.loads(body.decode("utf-8"))
+    bundle_title = str(payload.get("title") or RSS_APP_BUNDLES.get(feed_url, {}).get("bundle_name") or "RSS.app").strip()
+    bundle_meta = RSS_APP_BUNDLES.get(feed_url, {})
+    articles: list[dict[str, Any]] = []
+    for item in payload.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        title = _clean_feed_text(item.get("title"))
+        url = _clean_feed_text(item.get("url") or item.get("external_url") or item.get("id"))
+        if not title or not url:
+            continue
+        summary = _clean_feed_text(item.get("summary") or item.get("content_text") or item.get("content_html"))
+        author_names = [
+            _clean_feed_text(author.get("name"))
+            for author in item.get("authors", [])
+            if isinstance(author, dict) and _clean_feed_text(author.get("name"))
+        ]
+        source_name, source_badge = _rss_app_source_for(bundle_title, title, summary or "", url, author_names)
+        articles.append(
+            {
+                "source": source_name,
+                "source_badge": source_badge,
+                "bundle_name": bundle_meta.get("bundle_name", bundle_title),
+                "bundle_purpose": bundle_meta.get("purpose"),
+                "feed_url": feed_url,
+                "title": title,
+                "url": url,
+                "published_at": item.get("date_published") or item.get("date_modified"),
+                "summary": summary,
+                "image": item.get("image"),
+                "authors": author_names,
+                "rss_app_item_id": item.get("id"),
+            }
+        )
+    return articles
+
+
+def _rss_app_source_for(bundle_title: str, title: str, summary: str, url: str, authors: list[str]) -> tuple[str, str]:
+    text = f"{title} {summary} {url} {' '.join(authors)}".casefold()
+    host = urllib.parse.urlparse(url).netloc.casefold()
+
+    if bundle_title == "SEAM Singapore Social Media Intel":
+        if "lloydslist" in text or "lloyd" in text:
+            return "Lloyd’s List Twitter/X", RSS_SOURCE_BADGES["Lloyd’s List Twitter/X"]
+        return "X/Twitter keyword search feed", RSS_SOURCE_BADGES["X/Twitter keyword search feed"]
+
+    if bundle_title == "SEAM Entity Watchlist":
+        for source_name, needles in (
+            ('"Singapore bunker" vessel', ("singapore bunker", "bunker")),
+            ('"Singapore-flagged" vessel', ("singapore-flagged", "singapore flagged")),
+            ('"PSA Singapore" maritime', ("psa singapore", "pasir panjang")),
+            ('"Singapore Strait" tanker', ("singapore strait", "tanker")),
+            ('"Port of Singapore" vessel', ("port of singapore", "singapore")),
+        ):
+            if any(needle in text for needle in needles):
+                return source_name, RSS_SOURCE_BADGES[source_name]
+        return '"Port of Singapore" vessel', RSS_SOURCE_BADGES['"Port of Singapore" vessel']
+
+    if bundle_title == "SEAM Singapore Maritime Intel":
+        if "tradewinds" in host or "tradewinds" in text:
+            return "TradeWinds Singapore", RSS_SOURCE_BADGES["TradeWinds Singapore"]
+        if "marinelink" in host or "marinelink" in text:
+            return "MarineLink Singapore", RSS_SOURCE_BADGES["MarineLink Singapore"]
+        if "splash247" in host or "splash 24/7" in text:
+            return "Splash 24/7", RSS_SOURCE_BADGES["Splash 24/7"]
+        if "mpa.gov.sg" in host or "maritime and port authority" in text:
+            return "MPA Singapore Media Releases", RSS_SOURCE_BADGES["MPA Singapore Media Releases"]
+        if "gcaptain" in host or "gcaptain" in text:
+            return "gCaptain", RSS_SOURCE_BADGES["gCaptain"]
+        if "maritime-executive" in host or "the maritime executive" in text:
+            return "The Maritime Executive", RSS_SOURCE_BADGES["The Maritime Executive"]
+        return "MarineLink Singapore", RSS_SOURCE_BADGES["MarineLink Singapore"]
+
+    return "X/Twitter keyword search feed", RSS_SOURCE_BADGES["X/Twitter keyword search feed"]
+
+
+def _clean_feed_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = " ".join(str(value).split())
+    return text or None
 
 
 def _xml_text(node: ET.Element | None) -> str | None:

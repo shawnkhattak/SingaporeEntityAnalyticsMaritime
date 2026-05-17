@@ -1,7 +1,7 @@
 import { Building2, CheckCircle2, Copy, ExternalLink, Hash, Link as LinkIcon, Ship, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getEvidence, type EvidenceDetail } from "../../api";
-import { navigateTo } from "../../hooks/useRoute";
+import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
 import { recordRecent } from "../../state/AppState";
 import { Button } from "../primitives/Button";
 import { ErrorState } from "../primitives/ErrorState";
@@ -55,14 +55,14 @@ export function EvidenceInspector({ id }: { id: number }) {
 
   if (error) {
     return (
-      <InspectorShell breadcrumb="Evidence" title={`Evidence #${id}`} onClose={() => window.history.back()}>
+      <InspectorShell breadcrumb="Evidence" title={`Evidence #${id}`} onClose={closeInspectorRoute}>
         <ErrorState body={error} onRetry={load} />
       </InspectorShell>
     );
   }
   if (!data) {
     return (
-      <InspectorShell breadcrumb="Evidence" title={`Evidence #${id}`} onClose={() => window.history.back()}>
+      <InspectorShell breadcrumb="Evidence" title={`Evidence #${id}`} onClose={closeInspectorRoute}>
         <Skeleton height={80} />
       </InspectorShell>
     );
@@ -76,7 +76,7 @@ export function EvidenceInspector({ id }: { id: number }) {
     <InspectorShell
       breadcrumb="Evidence"
       title={`Evidence #${data.id}`}
-      onClose={() => window.history.back()}
+      onClose={closeInspectorRoute}
     >
       {/* Top action bar */}
       <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
@@ -257,4 +257,3 @@ function escapeStr(s: string): string {
   }
   return out + '"';
 }
-

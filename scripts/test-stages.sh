@@ -43,7 +43,7 @@ docker compose ps --services --filter status=running | grep -Fx backend >/dev/nu
 docker compose ps --services --filter status=running | grep -Fx frontend >/dev/null || fail "stage 2 frontend service running"
 pass "stage 2 three runtime services are running"
 
-docker compose exec -T backend alembic current | grep -F "0003_sanctions_records_vessel_id" >/dev/null || fail "stage 3 alembic current revision"
+docker compose exec -T backend alembic current | grep -F "0004_position_snapshot_job_id" >/dev/null || fail "stage 3 alembic current revision"
 pass "stage 3 migration revision is current"
 
 schema_tables="$(docker compose exec -T db psql -U seam -d seam -Atc "select tablename from pg_tables where schemaname = 'public' order by tablename")"

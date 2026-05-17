@@ -12,7 +12,6 @@ import { Radar, Ship } from "lucide-react";
 import { runPositionsSnapshot } from "../../api";
 import { useJobRunner } from "../../state/AppState";
 import { highestSeverity, matchesFilters } from "./filters";
-import { MapUtilityBar } from "./MapUtilityBar";
 import { MapStatusStrip } from "./MapStatusStrip";
 import { VesselPopover } from "./VesselPopover";
 
@@ -188,7 +187,7 @@ export function MapCanvas() {
         style: BASE_STYLE,
         center: DEFAULT_CENTER,
         zoom: DEFAULT_ZOOM,
-        attributionControl: { compact: true },
+        attributionControl: false,
         maxZoom: 16,
       });
     } catch (err) {
@@ -200,7 +199,9 @@ export function MapCanvas() {
       // eslint-disable-next-line no-console
       console.error("[SEAM] MapLibre error", e?.error ?? e);
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(new maplibregl.FullscreenControl(), "top-right");
+    map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-left");
     mapRef.current = map;
 
     map.on("load", () => {
@@ -425,7 +426,7 @@ export function MapCanvas() {
     if (!map || !ready) return;
     const fc: GeoJSON.FeatureCollection = {
       type: "FeatureCollection",
-      features: filteredVessels.map((v) => featureFor(v, state.riskByVessel[v.vessel_id])),
+      features: filteredVessels.map((v) => featureFor(v, state.riskByVessel[v.vessel_id] ?? v.risk_flags)),
     };
     const src = map.getSource("vessels") as unknown as maplibregl.GeoJSONSource | undefined;
     if (src) src.setData(fc);
@@ -564,7 +565,6 @@ export function MapCanvas() {
   return (
     <>
       <div className="map-canvas" ref={containerRef} />
-      <MapUtilityBar mapRef={mapRef} />
       <MapStatusStrip vesselCount={filteredVessels.length} runJob={runJob} />
       {/* Only show the "no vessels loaded" CTA after we've actually
           attempted at least one fetch. Previously this flashed on
@@ -605,7 +605,7 @@ export function MapCanvas() {
           </div>
         </div>
       )}
-      {popover && <VesselPopover x={popover.x} y={popover.y} vessel={popover.vessel} severity={popover.severity} flags={state.riskByVessel[popover.vessel.vessel_id] ?? []} onClose={() => setPopover(null)} />}
+      {popover && <VesselPopover x={popover.x} y={popover.y} vessel={popover.vessel} severity={popover.severity} flags={state.riskByVessel[popover.vessel.vessel_id] ?? popover.vessel.risk_flags ?? []} onClose={() => setPopover(null)} />}
       {!state.backendOnline && (
         <div
           className="pill fail glass"
@@ -623,7 +623,7 @@ function featureFor(v: VesselMapFeature, flags: RiskFlag[] | undefined): GeoJSON
   // Prefer true heading; some AIS feeds only emit course-over-ground.
   const heading = v.heading_degrees ?? null;
   const course = v.course_degrees ?? null;
-  const severity = highestSeverity(flags ?? []);
+  const severity = flags?.length ? highestSeverity(flags) : v.highest_risk_severity ?? "none";
   return {
     type: "Feature",
     geometry: { type: "Point", coordinates: [v.longitude, v.latitude] },

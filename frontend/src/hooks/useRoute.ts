@@ -85,3 +85,8 @@ export function navigateTo(href: string) {
   window.history.pushState({}, "", href);
   window.dispatchEvent(new Event("seam:navigate"));
 }
+
+export function closeInspectorRoute() {
+  window.history.replaceState({}, "", "/map");
+  window.dispatchEvent(new Event("seam:navigate"));
+}

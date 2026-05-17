@@ -5,6 +5,9 @@ from app.models.maritime import Entity, Relationship, Vessel
 from app.models.risk import RiskFlag
 from app.schemas.graph import GraphEdge, GraphNode, GraphRead
 
+ENTITY_TYPE_COMPANY = "company"
+ENTITY_RELATIONSHIP_TYPES = ("owner", "operator", "ship_manager", "ism_manager")
+
 
 class GraphService:
     def __init__(self, session: AsyncSession) -> None:
@@ -29,6 +32,8 @@ class GraphService:
             select(Relationship, Entity)
             .join(Entity, Entity.id == Relationship.to_entity_id)
             .where(Relationship.vessel_id == vessel.id)
+            .where(Entity.entity_type == ENTITY_TYPE_COMPANY)
+            .where(Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES))
             .order_by(Relationship.relationship_type, Entity.name)
         )
         for relationship, entity in rows:
@@ -76,7 +81,7 @@ class GraphService:
 
     async def for_entity(self, entity_id: int) -> GraphRead | None:
         entity = await self.session.get(Entity, entity_id)
-        if entity is None:
+        if entity is None or entity.entity_type != ENTITY_TYPE_COMPANY:
             return None
 
         nodes = {
@@ -92,6 +97,7 @@ class GraphService:
             select(Relationship, Vessel)
             .join(Vessel, Vessel.id == Relationship.vessel_id)
             .where(Relationship.to_entity_id == entity.id)
+            .where(Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES))
             .order_by(Vessel.name)
         )
         for relationship, vessel in rows:

@@ -26,7 +26,13 @@ class Settings(BaseSettings):
     opensanctions_live_call_budget: int = 1
     opensanctions_batch_size: int = 50
     opensanctions_maritime_csv_url: str = "https://data.opensanctions.org/datasets/20260510/maritime/maritime.csv"
-    news_rss_urls: list[str] = Field(default_factory=lambda: ["https://gcaptain.com/feed/"])
+    news_rss_urls: list[str] = Field(
+        default_factory=lambda: [
+            "https://rss.app/feeds/v1.1/_k2zRjP2j4B2XpYXV.json",
+            "https://rss.app/feeds/v1.1/_dmwNOhqoTXjyWDMc.json",
+            "https://rss.app/feeds/v1.1/_gw24IMIVRI5WBN1p.json",
+        ]
+    )
 
     @field_validator("news_rss_urls", mode="before")
     @classmethod

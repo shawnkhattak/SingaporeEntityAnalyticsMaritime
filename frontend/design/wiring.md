@@ -444,19 +444,19 @@ export type SelectedSubject =
 
 | Function | Endpoint | Used by |
 |---|---|---|
-| `loadDevState()` | `GET /api/dev/ingestion/jobs`, `/logs`, `/api/dev/source-health`, `/api/map/vessels?limit=25` | `OpsConsole`, `FooterStrip` |
+| `loadDevState()` | `GET /api/dev/ingestion/jobs`, `/logs`, `/api/dev/source-health`, `/api/map/vessels?limit=5000&scope=latest-snapshot` | `OpsConsole`, `FooterStrip`, initial map cache |
 | `browseDevVessels(q, limit)` | `GET /api/dev/vessels?q=&limit=` | `OpsConsole` vessel browser |
 | `runTestJob()` | `POST /api/dev/ingestion/test` | `OpsConsole` |
 | `runPositionsSnapshot()` | `POST /api/dev/ingestion/positions-snapshot?mode=live` | `SourceRefreshControls`, `OpsConsole`, map empty state |
 | `runParticulars(id)` | `POST /api/dev/ingestion/vessel-particulars/{id}?mode=live` | `VesselDetailInspector`, `SourceRefreshControls` |
 | `runMovements(id)` | `POST /api/dev/ingestion/vessel-movements/{id}?mode=live` | `VesselDetailInspector`, `SourceRefreshControls` |
-| `runPortActivity(kind)` | `POST /api/dev/ingestion/port-activity?kind={due-arrive|due-depart}&mode=live` | `PortsInspector`, `SourceRefreshControls`, `OpsConsole` |
+| `runPortActivity(kind, date?)` | `POST /api/dev/ingestion/port-activity?kind={due-arrive|due-depart}&mode=live[&date=YYYY-MM-DD]` | `PortsInspector`, `SourceRefreshControls`, `OpsConsole` |
 | `runRefreshLive()` | `POST /api/dev/ingestion/refresh-live` | `SourceRefreshControls`, `OpsConsole` header |
 | `runGeoLive()` | `POST /api/dev/ingestion/geo-layers` | `SourceRefreshControls`, `OpsConsole` |
 | `runSanctionsLive()` | `POST /api/dev/ingestion/sanctions?confirm_live=true` | `SanctionsInspector` (via confirm modal), `OpsConsole` |
 | `runNewsLive()` | `POST /api/dev/ingestion/news` | `NewsInspector`, `SourceRefreshControls` |
 | `runRiskRecompute(vesselId?)` | `POST /api/dev/risk/recompute[?vessel_id=]` | `RiskFeedInspector`, `VesselDetailInspector`, `OpsConsole` |
-| `loadMapVessels(limit)` | `GET /api/map/vessels?limit=` | `MapCanvas`, `KeyStatsStrip` |
+| `loadMapVessels(limit)` | `GET /api/map/vessels?limit=&scope=latest-snapshot` | `MapCanvas`, `KeyStatsStrip` |
 | `searchVessels(q, limit)` | `GET /api/vessels/search?q=&limit=` | `GlobalSearch`, `VesselListInspector`, command palette |
 | `getVessel(id)` | `GET /api/vessels/{id}` | `VesselDetailInspector` |
 | `getVesselObservations(id)` | `GET /api/vessels/{id}/observations?limit=20` | `VesselDetailInspector` → Evidence tab |
@@ -468,6 +468,7 @@ export type SelectedSubject =
 | `getEntityVessels(id)` | `GET /api/entities/{id}/vessels` | `EntityDetailInspector` → Vessels tab |
 | `getEntityRelationships(id)` | `GET /api/entities/{id}/relationships` | `EntityDetailInspector` → Relationships tab |
 | `getEntityRiskFlags(id)` | `GET /api/entities/{id}/risk-flags` | `EntityDetailInspector` → Risk tab |
+| `getRiskFeed(limit, includeResolved?, flagTypes?)` | `GET /api/risk/feed?limit=&include_resolved=&flag_types=` | `RiskFeedInspector`, `SanctionsInspector` |
 | `getEntityGraph(id)` | `GET /api/graph/entities/{id}` | `EntityDetailInspector` Graph tab; `GraphCanvas` |
 | `getSchemaGraph()` | `GET /api/meta/schema-graph` | `SchemaCanvas` |
 | `getGeoLayers()` | `GET /api/geo/layers` | `MapFilters`, `GeoOverlayLayer` |
@@ -1095,19 +1096,19 @@ export function onMapCenter(handler: (ev: CenterEvent) => void): () => void {
 
 ---
 
-## 14. New endpoints to ADD to the backend
+## 14. Backend endpoint backlog
 
-The UI degrades gracefully without these but the design assumes they exist. Open follow-up tickets and stub the call sites with `TODO(api):` comments.
+These are the remaining endpoint gaps or expansion points. Implemented items are listed for historical context.
 
-1. **`GET /api/risk/feed?status=open&limit=200`** — aggregated risk flags across vessels and entities. Replaces the per-vessel client fan-out in `RiskFeedInspector` (§8.10). Response: `RiskFlag[]` with `subject_type`, `subject_id`, `subject_name` denormalized.
-2. **`GET /api/news?limit=50`** — RSS-derived news rows as their own collection. Today we filter `getRecentObservations()` by source prefix; this endpoint gives us a clean shape.
-3. **`GET /api/sanctions/matches?limit=100`** — aggregated sanctions risk flags joined with subjects + sources. Replaces the cross-cache derivation in `SanctionsInspector`.
-4. **`GET /api/ports`** — distinct ports referenced by stored events with counts of due-arrive / due-depart. Powers the **All ports** tab and the "in-port now" count on each port row.
+1. **Implemented: `GET /api/risk/feed?limit=250&include_resolved=false&flag_types=...`** — aggregated risk flags across vessels and entities. Used by `RiskFeedInspector` and `SanctionsInspector`.
+2. **Implemented: `GET /api/news?limit=50`** — RSS-derived news rows as their own collection.
+3. **Covered by risk feed: sanctions matches** — `SanctionsInspector` filters `/api/risk/feed` with `flag_types=sanctions_match`.
+4. **`GET /api/ports`** — distinct ports referenced by stored events with counts of due-arrive / due-depart. Would power a richer **All ports** tab and command-palette port search.
 5. **`GET /api/vessels?filters=&limit=&offset=`** — server-side filtered and paginated list for the `VesselListInspector`. The current client-side filter scales to ~5k vessels; past that, push to the backend.
-6. **`GET /api/reference/flag_state`** and **`GET /api/reference/vessel_type`** — confirm they're populated (the §7.2 helper assumes this).
-7. **`GET /api/vessels/{id}/positions?since=`** — historical AIS breadcrumb for the Position history tab.
-8. **`GET /api/graph/vessels/{id}?depth=N`** and same for entities — formalize the depth parameter.
-9. **`GET /api/sanctions/quota`** — current OpenSanctions quota usage; powers the FooterStrip warning and the confirm modal copy.
+6. **`GET /api/reference/flag_state` and `GET /api/reference/vessel_type`** — keep these populated for filter labels.
+7. **`GET /api/vessels/{id}/positions?since=`** — historical AIS breadcrumb for a future Position history tab.
+8. **`GET /api/graph/vessels/{id}?depth=N` and same for entities** — formalize the depth parameter.
+9. **`GET /api/sanctions/quota`** — current OpenSanctions quota usage; powers the FooterStrip warning and confirm modal copy.
 10. **`POST /api/dev/ingestion/sanctions-csv`** (already used in §7.2 `runSanctionsCsv`) — confirm it accepts `text/csv` POST bodies.
 
 If anything in §7.1 isn't actually live in `backend/app/api/routes/`, **stop and surface the conflict** rather than improvising.

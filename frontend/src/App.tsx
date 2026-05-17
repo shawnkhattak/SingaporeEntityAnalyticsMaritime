@@ -37,11 +37,6 @@ export function App() {
         await runPositionsSnapshot();
         const vessels = await loadMapVessels(5000);
         dispatch({ type: "SET_VESSELS", vessels });
-        toasts.push({
-          variant: "info",
-          title: "OCEANS-X auto-refresh complete",
-          body: `${vessels.length} vessels in latest snapshot.`,
-        });
       } catch (error) {
         toasts.push({
           variant: "warning",

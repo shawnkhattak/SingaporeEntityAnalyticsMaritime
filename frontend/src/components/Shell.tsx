@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { useRoute } from "../hooks/useRoute";
+import { closeInspectorRoute, useRoute } from "../hooks/useRoute";
 import { useHotkey } from "../hooks/useHotkey";
 import { isFullCanvas, isInspectorRoute, type RouteState } from "../types";
 import { useApp, useInspectorState } from "../state/AppState";
@@ -154,7 +154,7 @@ export function Shell() {
       return;
     }
     if (inspectorVisible) {
-      window.history.back();
+      closeInspectorRoute();
     }
   });
 

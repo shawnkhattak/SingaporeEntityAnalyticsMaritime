@@ -1,12 +1,12 @@
 from datetime import date
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.db import get_session
+from app.db import async_session_factory, get_session
 from app.schemas.dev import DevVesselBrowseRow
 from app.schemas.evidence import EvidenceRead
 from app.schemas.ingestion import IngestionJobRead, IngestionLogRead, SourceHealthRead
@@ -24,6 +24,15 @@ def require_dev_mutations(settings: Annotated[Settings, Depends(get_settings)]) 
     if not settings.feature_mutations or settings.environment not in {"development", "local", "test"}:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return settings
+
+
+async def _run_bulk_map_particulars_background(job_id: int, delay_seconds: float, settings: Settings) -> None:
+    async with async_session_factory() as session:
+        await IngestionService(session).run_bulk_map_particulars(
+            settings=settings,
+            job_id=job_id,
+            delay_seconds=delay_seconds,
+        )
 
 
 @router.post(
@@ -63,6 +72,23 @@ async def run_vessel_particulars_ingestion(
 ) -> IngestionJobRead:
     service = IngestionService(session)
     return await service.run_vessel_particulars(settings=settings, vessel_id=vessel_id, mode=mode)
+
+
+@router.post(
+    "/ingestion/vessel-particulars-map",
+    response_model=IngestionJobRead,
+    dependencies=[Depends(require_dev_mutations)],
+)
+async def run_map_vessel_particulars_ingestion(
+    background_tasks: BackgroundTasks,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    delay_seconds: Annotated[float, Query(ge=0.05, le=10.0)] = 0.1,
+) -> IngestionJobRead:
+    service = IngestionService(session)
+    job = await service.start_bulk_map_particulars(delay_seconds=delay_seconds)
+    background_tasks.add_task(_run_bulk_map_particulars_background, job.id, delay_seconds, settings)
+    return job
 
 
 @router.post(

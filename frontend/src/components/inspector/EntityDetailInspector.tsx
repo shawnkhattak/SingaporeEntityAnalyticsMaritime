@@ -1,7 +1,7 @@
 import { Building2, Network, Ship } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getEntity, getEntityGraph, getEntityRelationships, getEntityRiskFlags, getEntityVessels } from "../../api";
-import { navigateTo } from "../../hooks/useRoute";
+import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
 import { recordRecent, useApp } from "../../state/AppState";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
@@ -49,14 +49,14 @@ export function EntityDetailInspector({ id }: { id: number }) {
 
   if (error) {
     return (
-      <InspectorShell breadcrumb="Entity" title="Could not load" onClose={() => window.history.back()}>
+      <InspectorShell breadcrumb="Entity" title="Could not load" onClose={closeInspectorRoute}>
         <ErrorState body={error} onRetry={load} />
       </InspectorShell>
     );
   }
   if (!data) {
     return (
-      <InspectorShell breadcrumb="Entity" title="Loading…" onClose={() => window.history.back()}>
+      <InspectorShell breadcrumb="Entity" title="Loading…" onClose={closeInspectorRoute}>
         <Skeleton height={80} />
       </InspectorShell>
     );
@@ -77,7 +77,7 @@ export function EntityDetailInspector({ id }: { id: number }) {
       tabs={tabItems}
       activeTab={tab}
       onTabChange={setTab}
-      onClose={() => window.history.back()}
+      onClose={closeInspectorRoute}
       footer={
         <Button size="sm" leadingIcon={<Network size={12} />} onClick={() => navigateTo(`/graph?subject=entity&id=${id}`)}>
           Open in graph

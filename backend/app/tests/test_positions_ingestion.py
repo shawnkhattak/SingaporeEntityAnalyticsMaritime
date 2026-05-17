@@ -61,9 +61,14 @@ class PositionsIngestionHelperTests(TestCase):
         self.assertEqual(normalized.observed_at.tzinfo, UTC)
 
     def test_particulars_role_mapping_is_evidence_backed(self) -> None:
-        self.assertEqual(PARTICULARS_ENTITY_FIELDS["registeredOwner"], ("registered_owner", "organization"))
-        self.assertEqual(PARTICULARS_ENTITY_FIELDS["shipManager"], ("ship_manager", "organization"))
-        self.assertEqual(PARTICULARS_ENTITY_FIELDS["classificationSociety"], ("classification_society", "classification_society"))
+        self.assertEqual(PARTICULARS_ENTITY_FIELDS["registeredOwner"], ("owner", "company"))
+        self.assertEqual(PARTICULARS_ENTITY_FIELDS["registeredOwnership"], ("owner", "company"))
+        self.assertEqual(PARTICULARS_ENTITY_FIELDS["shipManager"], ("ship_manager", "company"))
+        self.assertEqual(PARTICULARS_ENTITY_FIELDS["operator"], ("operator", "company"))
+        self.assertEqual(PARTICULARS_ENTITY_FIELDS["ismManager"], ("ism_manager", "company"))
+        self.assertNotIn("classificationSociety", PARTICULARS_ENTITY_FIELDS)
+        self.assertNotIn("flag", PARTICULARS_ENTITY_FIELDS)
+        self.assertNotIn("vesselType", PARTICULARS_ENTITY_FIELDS)
 
     def test_event_timestamp_parser_accepts_space_and_iso_formats(self) -> None:
         fallback = datetime(2026, 4, 26, 12, 0, tzinfo=UTC)

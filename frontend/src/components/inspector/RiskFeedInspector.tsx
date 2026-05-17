@@ -8,7 +8,7 @@ import { EmptyState } from "../primitives/EmptyState";
 import { Skeleton } from "../primitives/Skeleton";
 import type { RiskFeedItem, RiskFlag, RiskSeverity } from "../../types";
 import { requestMapCenter } from "../../hooks/useMapCenter";
-import { navigateTo } from "../../hooks/useRoute";
+import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
 import { riskLabel, type RiskKind } from "../../labels";
 import { RiskCard } from "./RiskCard";
 import { InspectorShell } from "./InspectorShell";
@@ -108,7 +108,7 @@ export function RiskFeedInspector() {
     <InspectorShell
       breadcrumb="Risk feed"
       title={`Risk · ${filtered.length}`}
-      onClose={() => window.history.back()}
+      onClose={closeInspectorRoute}
       footer={
         <Button
           size="sm"

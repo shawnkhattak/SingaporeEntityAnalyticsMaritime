@@ -1,6 +1,6 @@
 import { RefreshCw } from "lucide-react";
-import { useMemo } from "react";
-import { runPositionsSnapshot } from "../../api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { loadMapVessels, runPositionsSnapshot } from "../../api";
 import { useApp, useRunningJobs } from "../../state/AppState";
 import { formatRelative } from "../../format";
 
@@ -9,21 +9,36 @@ type MapStatusStripProps = {
   runJob: <T>(
     slug: string,
     run: () => Promise<T>,
-    messages: { successTitle: string; errorTitle: string; successBody?: (result: T) => string | undefined },
+    messages: {
+      successTitle: string;
+      errorTitle: string;
+      successBody?: (result: T) => string | undefined;
+      suppressSuccessToast?: boolean;
+    },
   ) => Promise<T | null>;
 };
 
 export function MapStatusStrip({ vesselCount, runJob }: MapStatusStripProps) {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const { isRunning } = useRunningJobs();
   const newest = useMemo(() => state.vessels[0]?.position_timestamp ?? null, [state.vessels]);
-  const totalRisk = useMemo(() => {
-    let n = 0;
-    for (const list of Object.values(state.riskByVessel)) {
-      n += list.filter((f) => f.status !== "resolved").length;
+  const previousNewest = useRef<string | null>(null);
+  const [justUpdated, setJustUpdated] = useState(false);
+  const refreshing = isRunning("positions-snapshot");
+
+  useEffect(() => {
+    if (previousNewest.current === null) {
+      previousNewest.current = newest;
+      return;
     }
-    return n;
-  }, [state.riskByVessel]);
+    if (newest && newest !== previousNewest.current) {
+      previousNewest.current = newest;
+      setJustUpdated(true);
+      const timeout = window.setTimeout(() => setJustUpdated(false), 1400);
+      return () => window.clearTimeout(timeout);
+    }
+    previousNewest.current = newest;
+  }, [newest]);
 
   return (
     <div className="map-status glass" style={{ left: "50%", transform: "translateX(-50%)" }}>
@@ -34,30 +49,25 @@ export function MapStatusStrip({ vesselCount, runJob }: MapStatusStripProps) {
       <span className="t-muted" style={{ fontSize: 11 }}>last refresh {formatRelative(newest)}</span>
       <button
         type="button"
-        className="btn ghost icon sm"
+        className={`btn ghost icon sm map-refresh-button ${refreshing ? "spinning" : ""} ${justUpdated ? "updated" : ""}`}
         onClick={() =>
-          runJob("positions-snapshot", runPositionsSnapshot, {
+          runJob("positions-snapshot", async () => {
+            const job = await runPositionsSnapshot();
+            const vessels = await loadMapVessels(5000);
+            dispatch({ type: "SET_VESSELS", vessels });
+            return job;
+          }, {
             successTitle: "Positions snapshot complete",
             errorTitle: "Snapshot failed",
+            suppressSuccessToast: true,
           })
         }
-        disabled={isRunning("positions-snapshot")}
+        disabled={refreshing}
         aria-label="Refresh positions"
-        title="Refresh positions"
+        title={refreshing ? "Refreshing positions" : "Refresh positions"}
       >
         <RefreshCw size={12} />
       </button>
-      {totalRisk > 0 && (
-        <>
-          <span className="t-muted" style={{ fontSize: 11 }}>·</span>
-          <span
-            className="pill med"
-            title="Sum of cached active flags for vessels visited this session — open the Risk feed for the full count."
-          >
-            {totalRisk} cached risk flag{totalRisk === 1 ? "" : "s"}
-          </span>
-        </>
-      )}
     </div>
   );
 }

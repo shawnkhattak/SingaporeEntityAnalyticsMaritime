@@ -7,7 +7,7 @@ SEAM V2 is a portfolio-first, evidence-driven maritime intelligence rebuild focu
 - Backend-owned ingestion from OCEANS-X and supporting reference sources.
 - PostgreSQL with PostGIS for canonical vessel, position, event, entity, relationship, risk flag, and evidence data.
 - Manual-first ingestion controls under development routes.
-- A frontend that exposes `/dev`, vessel search/detail, map, relationship graph, `/roadmap`, and `/schema`.
+- A frontend that exposes `/operations` (`/ops` and `/dev` aliases), vessel search/detail, ports, risk/sanctions/news feeds, map, relationship graph, `/roadmap`, and `/schema`.
 - Raw source payload retention, payload hashes, source timestamps, and evidence references for generated relationships and flags.
 
 ## V1 Non-Goals

@@ -2,7 +2,7 @@ import { Building2, RefreshCw, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getEntitiesList, runRefreshLive, searchEntities } from "../../api";
 import { useDebounce } from "../../hooks/useDebounce";
-import { navigateTo } from "../../hooks/useRoute";
+import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
 import { useJobRunner } from "../../state/AppState";
 import { Avatar } from "../primitives/Avatar";
 import { Button } from "../primitives/Button";
@@ -43,7 +43,7 @@ export function EntityListInspector() {
   }, [debounced]);
 
   return (
-    <InspectorShell breadcrumb="Entities" title={`Entities · ${results.length}`} onClose={() => window.history.back()}>
+    <InspectorShell breadcrumb="Entities" title={`Entities · ${results.length}`} onClose={closeInspectorRoute}>
       <Input
         variant="search"
         leadingIcon={<Search />}
@@ -65,7 +65,7 @@ export function EntityListInspector() {
           body={
             query
               ? "Try a different name, or refresh ingestion to pull new particulars."
-              : "Run vessel particulars enrichment first, then search for an owner, manager, or flag state."
+              : "Run vessel particulars enrichment first, then search for a company, owner, operator, or manager."
           }
           action={
             <Button

@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.schemas.risk import RiskFlagRead
 
 
 class VesselMapFeature(BaseModel):
@@ -19,3 +21,5 @@ class VesselMapFeature(BaseModel):
     navigational_status: str | None
     position_timestamp: datetime
     evidence_id: int | None
+    highest_risk_severity: str | None = None
+    risk_flags: list[RiskFlagRead] = Field(default_factory=list)

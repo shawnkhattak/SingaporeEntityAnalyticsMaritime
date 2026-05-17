@@ -18,6 +18,7 @@ import {
   runTestJob,
   searchVessels,
   runMovements,
+  runMapParticulars,
   runParticulars,
 } from "../../api";
 import { usePoll } from "../../hooks/usePoll";
@@ -126,6 +127,11 @@ export function OpsConsole() {
     if (logLevel === "all") return logs;
     return logs.filter((l) => l.level.toLowerCase() === logLevel);
   }, [logs, logLevel]);
+  const bulkParticularsJob = useMemo(
+    () => state.jobs.find((job) => job.job_type === "oceansx.vessel_particulars_bulk") ?? null,
+    [state.jobs],
+  );
+  const bulkParticularsActive = bulkParticularsJob?.status === "queued" || bulkParticularsJob?.status === "running";
 
   async function handleSanctionsCsvFile(file: File) {
     const text = await file.text();
@@ -283,6 +289,18 @@ export function OpsConsole() {
           <Panel title="Live ingestion">
             <div className="col" style={{ gap: 6 }}>
               <RunButton label="Positions snapshot" running={isRunning("positions-snapshot")} onClick={() => runJob("positions-snapshot", runPositionsSnapshot, { successTitle: "Snapshot complete", errorTitle: "Snapshot failed" }).then(refreshDev)} />
+              <RunButton
+                label="SG map vessel particulars"
+                running={bulkParticularsActive || isRunning("map-particulars")}
+                onClick={() =>
+                  runJob("map-particulars", () => runMapParticulars(0.1), {
+                    successTitle: "Bulk particulars started",
+                    errorTitle: "Bulk particulars failed",
+                    successBody: (job) => `${Number(job.parameters.total ?? 0).toLocaleString()} Singapore-flagged map vessels queued.`,
+                  }).then(refreshDev)
+                }
+              />
+              {bulkParticularsJob && <BulkParticularsProgress job={bulkParticularsJob} />}
               <RunButton label="Geo layers" running={isRunning("geo-layers")} onClick={() => runJob("geo-layers", runGeoLive, { successTitle: "Geo layers refreshed", errorTitle: "Geo layers failed" }).then(refreshDev)} />
               <RunButton label="News (RSS)" running={isRunning("news")} onClick={() => runJob("news", runNewsLive, { successTitle: "News refreshed", errorTitle: "News failed" }).then(refreshDev)} />
               <RunButton label="Risk recompute" running={isRunning("risk-recompute")} onClick={() => runJob("risk-recompute", () => runRiskRecompute(), { successTitle: "Risk recomputed", errorTitle: "Risk failed" }).then(refreshDev)} />
@@ -477,6 +495,51 @@ function Panel({ title, icon, children, shimmer }: { title: string; icon?: React
   );
 }
 
+function BulkParticularsProgress({ job }: { job: IngestionJob }) {
+  const total = numberParam(job.parameters.total);
+  const completed = numberParam(job.parameters.completed);
+  const succeeded = numberParam(job.parameters.succeeded);
+  const failed = numberParam(job.parameters.failed);
+  const skipped = numberParam(job.parameters.skipped);
+  const pct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
+  const active = job.status === "queued" || job.status === "running";
+  return (
+    <div style={{ padding: 10, borderRadius: "var(--r-card)", marginBottom: 4, background: "var(--gray-50)", border: "1px solid var(--gray-100)" }}>
+      <div className="row" style={{ gap: 8, fontSize: 11 }}>
+        <span className="mono" style={{ flex: 1 }}>Particulars {completed.toLocaleString()} / {total.toLocaleString()}</span>
+        <JobPill status={classifyJob(job.status)} label={job.status} />
+      </div>
+      <div
+        aria-label="Bulk particulars progress"
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={completed}
+        role="progressbar"
+        style={{ height: 8, background: "var(--gray-100)", borderRadius: 999, overflow: "hidden", marginTop: 8 }}
+      >
+        <div
+          className={active ? "shimmer" : ""}
+          style={{
+            width: `${pct}%`,
+            height: "100%",
+            background: failed > 0 ? "var(--risk-medium)" : "var(--ocean-500)",
+            transition: "width var(--motion-base) var(--ease-out)",
+          }}
+        />
+      </div>
+      <div className="row t-faded" style={{ marginTop: 6, gap: 8, fontSize: 11 }}>
+        <span>{pct}%</span>
+        <span style={{ flex: 1 }}>{succeeded.toLocaleString()} saved · {failed.toLocaleString()} failed · {skipped.toLocaleString()} skipped</span>
+      </div>
+    </div>
+  );
+}
+
+function numberParam(value: unknown): number {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function RunButton({ label, onClick, running, icon }: { label: string; onClick: () => void; running: boolean; icon?: React.ReactNode }) {
   return (
     <button
@@ -536,4 +599,3 @@ function CsvDropZone({ onFile }: { onFile: (file: File) => void }) {
     </label>
   );
 }
-

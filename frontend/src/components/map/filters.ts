@@ -23,7 +23,7 @@ export function matchesFilters(
   riskByVessel: Record<number, RiskFlag[]>,
   filters: MapFilters,
 ): boolean {
-  const flags = riskByVessel[v.vessel_id] ?? [];
+  const flags = riskByVessel[v.vessel_id] ?? v.risk_flags ?? [];
   const highest = highestSeverity(flags);
   if (filters.riskSeverities.size && !filters.riskSeverities.has(highest)) return false;
   if (filters.vesselTypes.size && (!v.vessel_type_code || !filters.vesselTypes.has(v.vessel_type_code))) return false;

@@ -38,7 +38,7 @@ export function PrimaryNav() {
   const route = useRoute();
   const { isCollapsed } = usePanelState();
   return (
-    <nav aria-label="Primary navigation" style={{ padding: isCollapsed ? "8px 8px" : "6px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
+    <nav aria-label="Primary navigation" className={`primary-nav ${isCollapsed ? "collapsed" : ""}`}>
       {MAIN_NAV.map((item) => (
         <NavRow key={item.href} item={item} isActive={item.matches(route)} collapsed={isCollapsed} />
       ))}

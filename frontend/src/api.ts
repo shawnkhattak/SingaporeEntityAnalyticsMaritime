@@ -89,6 +89,10 @@ export function runParticulars(vesselId: number) {
   return postJson<IngestionJob>(`/api/dev/ingestion/vessel-particulars/${vesselId}?mode=live`);
 }
 
+export function runMapParticulars(delaySeconds = 0.1) {
+  return postJson<IngestionJob>(`/api/dev/ingestion/vessel-particulars-map?delay_seconds=${delaySeconds}`);
+}
+
 export function runMovements(vesselId: number) {
   return postJson<IngestionJob>(`/api/dev/ingestion/vessel-movements/${vesselId}?mode=live`);
 }
@@ -183,14 +187,21 @@ export function getEntitiesList(limit = 50) {
 export type NewsArticleItem = {
   id: number;
   source: string;
+  source_badge: string | null;
+  bundle_name: string | null;
   title: string;
   url: string;
   published_at: string | null;
   summary: string | null;
+  image: string | null;
 };
 
-export function getNewsList(limit = 50) {
-  return getJson<NewsArticleItem[]>(`/api/news?limit=${limit}`);
+export function getNewsList(limit = 50, bundleName?: string) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (bundleName) {
+    params.set("bundle_name", bundleName);
+  }
+  return getJson<NewsArticleItem[]>(`/api/news?${params.toString()}`);
 }
 
 export function getVesselGraph(vesselId: number) {

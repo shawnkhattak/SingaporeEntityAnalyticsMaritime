@@ -5,6 +5,9 @@ from app.models.maritime import Entity, Relationship, Vessel
 from app.schemas.entities import EntityRead, EntityRelationshipRead
 from app.schemas.vessels import VesselSummary
 
+ENTITY_TYPE_COMPANY = "company"
+ENTITY_RELATIONSHIP_TYPES = ("owner", "operator", "ship_manager", "ism_manager")
+
 
 class EntityService:
     def __init__(self, session: AsyncSession) -> None:
@@ -15,6 +18,15 @@ class EntityService:
         rows = await self.session.scalars(
             select(Entity)
             .where(or_(Entity.name.ilike(pattern), Entity.entity_type.ilike(pattern), Entity.country_code.ilike(pattern)))
+            .where(Entity.entity_type == ENTITY_TYPE_COMPANY)
+            .where(
+                select(Relationship.id)
+                .where(
+                    Relationship.to_entity_id == Entity.id,
+                    Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES),
+                )
+                .exists()
+            )
             .order_by((func.lower(Entity.name) == query.strip().lower()).desc(), Entity.name)
             .limit(limit)
         )
@@ -23,21 +35,45 @@ class EntityService:
     async def list_recent(self, limit: int = 50) -> list[EntityRead]:
         """Recent-first listing, used when no search query is active."""
         rows = await self.session.scalars(
-            select(Entity).order_by(desc(Entity.updated_at), desc(Entity.id)).limit(limit)
+            select(Entity)
+            .where(Entity.entity_type == ENTITY_TYPE_COMPANY)
+            .where(
+                select(Relationship.id)
+                .where(
+                    Relationship.to_entity_id == Entity.id,
+                    Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES),
+                )
+                .exists()
+            )
+            .order_by(desc(Entity.updated_at), desc(Entity.id))
+            .limit(limit)
         )
         return [EntityRead.model_validate(row) for row in rows]
 
     async def get(self, entity_id: int) -> EntityRead | None:
         entity = await self.session.get(Entity, entity_id)
+        if entity is None or entity.entity_type != ENTITY_TYPE_COMPANY:
+            return None
+        has_owner_or_operator = await self.session.scalar(
+            select(Relationship.id)
+            .where(
+                Relationship.to_entity_id == entity_id,
+                Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES),
+            )
+            .limit(1)
+        )
+        if has_owner_or_operator is None:
+            return None
         return EntityRead.model_validate(entity) if entity is not None else None
 
     async def vessels(self, entity_id: int) -> list[VesselSummary] | None:
-        if await self.session.get(Entity, entity_id) is None:
+        if await self.get(entity_id) is None:
             return None
         rows = await self.session.scalars(
             select(Vessel)
             .join(Relationship, Relationship.vessel_id == Vessel.id)
             .where(Relationship.to_entity_id == entity_id)
+            .where(Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES))
             .order_by(Vessel.name)
         )
         return [
@@ -55,12 +91,13 @@ class EntityService:
         ]
 
     async def relationships(self, entity_id: int, limit: int = 50) -> list[EntityRelationshipRead] | None:
-        if await self.session.get(Entity, entity_id) is None:
+        if await self.get(entity_id) is None:
             return None
         rows = await self.session.execute(
             select(Relationship, Vessel)
             .outerjoin(Vessel, Vessel.id == Relationship.vessel_id)
             .where(or_(Relationship.to_entity_id == entity_id, Relationship.from_entity_id == entity_id))
+            .where(Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES))
             .order_by(desc(Relationship.created_at))
             .limit(limit)
         )
