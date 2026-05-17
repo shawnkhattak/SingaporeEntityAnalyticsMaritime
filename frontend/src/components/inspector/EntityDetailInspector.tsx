@@ -1,11 +1,10 @@
-import { Building2, ChevronDown, Database, Network, Ship } from "lucide-react";
+import { Building2, ChevronDown, Database, Link2, Ship } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getEntity, getEntityRelationships, getEntityRiskFlags, getEntityVessels } from "../../api";
 import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
 import { countryName, flagEmoji, riskLabel } from "../../labels";
 import { recordRecent, useApp } from "../../state/AppState";
 import type { Entity, EntityRelationship, RiskFlag, VesselSummary } from "../../types";
-import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { ErrorState } from "../primitives/ErrorState";
 import { EvidenceLink } from "../primitives/EvidenceLink";
@@ -70,11 +69,6 @@ export function EntityDetailInspector({ id }: { id: number }) {
       breadcrumb="Entity"
       title={entity.name}
       onClose={closeInspectorRoute}
-      footer={
-        <Button size="sm" leadingIcon={<Network size={12} />} onClick={() => navigateTo(`/graph?subject=entity&id=${id}`)}>
-          Open in graph
-        </Button>
-      }
     >
       <div className="col entity-detail-page">
         <section className="entity-section">
@@ -94,7 +88,7 @@ export function EntityDetailInspector({ id }: { id: number }) {
           </div>
           <div className="entity-metric-grid">
             <Metric icon={<Ship size={13} />} label="Unique vessels" value={groupedVessels.length} />
-            <Metric icon={<Network size={13} />} label="Relationships" value={data.relationships.length} />
+            <Metric icon={<Link2 size={13} />} label="Relationships" value={data.relationships.length} />
             <Metric icon={<Database size={13} />} label="Risk flags" value={data.risk.length} />
           </div>
         </section>
@@ -160,39 +154,46 @@ export function EntityDetailInspector({ id }: { id: number }) {
             <EmptyState compact title="No relationships" />
           ) : (
             <div className="col" style={{ gap: 6 }}>
-              {data.relationships.map((relationship) => (
-                <a key={relationship.id} href={relationship.vessel ? `/vessels/${relationship.vessel.id}` : "#"} className="entity-relationship-card">
-                  <div className="row" style={{ gap: 6, alignItems: "center" }}>
-                    <span className="pill info">{roleLabel(relationship.relationship_type)}</span>
-                    <span className="t-faded" style={{ fontSize: 11 }}>confidence: {relationship.confidence}</span>
-                    <span style={{ flex: 1 }} />
-                    <EvidenceLink id={relationship.evidence_id} variant="inline" />
+              {data.relationships.map((relationship) => {
+                const href = relationship.vessel ? `/vessels/${relationship.vessel.id}` : null;
+                const openRelationship = () => {
+                  if (href) navigateTo(href);
+                };
+                return (
+                  <div
+                    key={relationship.id}
+                    role={href ? "link" : undefined}
+                    tabIndex={href ? 0 : undefined}
+                    aria-label={href ? `Open vessel ${relationship.vessel?.name ?? relationship.vessel?.id}` : undefined}
+                    onClick={openRelationship}
+                    onKeyDown={(event) => {
+                      if (!href) return;
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openRelationship();
+                      }
+                    }}
+                    className={`entity-relationship-card ${href ? "is-clickable" : ""}`}
+                  >
+                    <div className="row" style={{ gap: 6, alignItems: "center" }}>
+                      <span className="pill info">{roleLabel(relationship.relationship_type)}</span>
+                      <span className="t-faded" style={{ fontSize: 11 }}>confidence: {relationship.confidence}</span>
+                      <span style={{ flex: 1 }} />
+                      <EvidenceLink id={relationship.evidence_id} variant="chip" />
+                    </div>
+                    <div className="t-sm" style={{ marginTop: 5, fontWeight: 650 }}>{relationship.vessel?.name ?? "No target vessel"}</div>
+                    <div className="mono t-faded" style={{ fontSize: 11, marginTop: 2 }}>
+                      {relationship.vessel?.imo ? `IMO ${relationship.vessel.imo}` : relationship.vessel?.mmsi ? `MMSI ${relationship.vessel.mmsi}` : "No vessel identifier"}
+                    </div>
+                    {relationship.evidence_summary && (
+                      <div className="t-faded" style={{ fontSize: 11, marginTop: 5, lineHeight: 1.4 }}>{relationship.evidence_summary}</div>
+                    )}
                   </div>
-                  <div className="t-sm" style={{ marginTop: 5, fontWeight: 650 }}>{relationship.vessel?.name ?? "No target vessel"}</div>
-                  <div className="mono t-faded" style={{ fontSize: 11, marginTop: 2 }}>
-                    {relationship.vessel?.imo ? `IMO ${relationship.vessel.imo}` : relationship.vessel?.mmsi ? `MMSI ${relationship.vessel.mmsi}` : "No vessel identifier"}
-                  </div>
-                  {relationship.evidence_summary && (
-                    <div className="t-faded" style={{ fontSize: 11, marginTop: 5, lineHeight: 1.4 }}>{relationship.evidence_summary}</div>
-                  )}
-                </a>
-              ))}
+                );
+              })}
             </div>
           )}
         </EntitySection>
-
-        <section className="entity-section">
-          <div className="row" style={{ gap: 10 }}>
-            <Network size={16} color="var(--ocean-500)" />
-            <div style={{ flex: 1 }}>
-              <strong style={{ fontSize: 13 }}>Graph view</strong>
-              <div className="t-sm" style={{ marginTop: 2 }}>Open this entity with its connected vessels and relationship records in the graph workspace.</div>
-            </div>
-            <Button size="sm" leadingIcon={<Network size={12} />} onClick={() => navigateTo(`/graph?subject=entity&id=${id}`)}>
-              Open
-            </Button>
-          </div>
-        </section>
       </div>
     </InspectorShell>
   );

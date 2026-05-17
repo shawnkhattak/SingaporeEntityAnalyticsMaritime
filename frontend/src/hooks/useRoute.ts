@@ -3,16 +3,18 @@ import type { RouteState } from "../types";
 
 function parsePath(path: string, search: string): RouteState {
   const clean = path.replace(/\/+$/, "") || "/";
+  const params = new URLSearchParams(search);
+  const from = params.get("from") === "risk" ? "risk" : undefined;
   if (clean === "/" || clean === "/map") return { name: "map" };
   if (clean === "/vessels") return { name: "vessels-list" };
   if (clean.startsWith("/vessels/")) {
     const id = Number(clean.split("/")[2]);
-    return Number.isInteger(id) ? { name: "vessel-detail", id } : { name: "vessels-list" };
+    return Number.isInteger(id) ? { name: "vessel-detail", id, from } : { name: "vessels-list" };
   }
   if (clean === "/entities") return { name: "entities-list" };
   if (clean.startsWith("/entities/")) {
     const id = Number(clean.split("/")[2]);
-    return Number.isInteger(id) ? { name: "entity-detail", id } : { name: "entities-list" };
+    return Number.isInteger(id) ? { name: "entity-detail", id, from } : { name: "entities-list" };
   }
   if (clean === "/ports") return { name: "ports" };
   if (clean === "/risk") return { name: "risk" };
@@ -22,19 +24,14 @@ function parsePath(path: string, search: string): RouteState {
     const id = Number(clean.split("/")[2]);
     return Number.isInteger(id) ? { name: "evidence", id } : { name: "map" };
   }
-  if (clean === "/graph") {
-    const params = new URLSearchParams(search);
-    const type = params.get("subject");
-    const id = Number(params.get("id"));
-    if ((type === "vessel" || type === "entity") && Number.isInteger(id)) {
-      return { name: "graph", subject: { type, id } };
-    }
-    return { name: "graph" };
-  }
   if (clean === "/schema") return { name: "schema" };
   if (clean === "/operations" || clean === "/ops" || clean === "/dev") return { name: "ops" };
+  if (clean.startsWith("/data/")) {
+    const table = decodeURIComponent(clean.split("/")[2] ?? "");
+    return table ? { name: "data-browser", table } : { name: "ops" };
+  }
   if (clean === "/roadmap") return { name: "roadmap" };
-  return { name: "map" };
+  return { name: "not-found", path: clean };
 }
 
 function currentRoute(): RouteState {

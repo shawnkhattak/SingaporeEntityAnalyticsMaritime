@@ -1,4 +1,9 @@
-from sqlalchemy import desc, func, or_, select
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import String, Text, cast, desc, func, inspect, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.evidence import SourceObservation
@@ -84,6 +89,72 @@ class DevConsoleService:
             for vessel, latest in rows
         ]
 
+    async def browse_table(
+        self,
+        table: str,
+        q: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        model = TABLE_MODELS.get(table)
+        if model is None:
+            raise KeyError(table)
+
+        columns = list(model.__table__.columns)
+        column_names = [col.name for col in columns]
+
+        statement = select(model)
+        count_stmt = select(func.count()).select_from(model)
+
+        if q:
+            term = q.strip()
+            if term:
+                pattern = f"%{term}%"
+                clauses = []
+                for col in columns:
+                    py_type = getattr(col.type, "python_type", None)
+                    try:
+                        is_str = py_type is str
+                    except (AttributeError, NotImplementedError):
+                        is_str = isinstance(col.type, (String, Text))
+                    if is_str:
+                        clauses.append(col.ilike(pattern))
+                    else:
+                        clauses.append(cast(col, String).ilike(pattern))
+                if clauses:
+                    statement = statement.where(or_(*clauses))
+                    count_stmt = count_stmt.where(or_(*clauses))
+
+        order_col = self._default_order_column(model)
+        if order_col is not None:
+            statement = statement.order_by(desc(order_col))
+
+        statement = statement.limit(limit).offset(offset)
+
+        total = await self.session.scalar(count_stmt) or 0
+        rows = (await self.session.scalars(statement)).all()
+        serialized = [
+            {name: _to_jsonable(getattr(row, name, None)) for name in column_names} for row in rows
+        ]
+
+        return {
+            "table": table,
+            "columns": column_names,
+            "rows": serialized,
+            "total": int(total),
+            "limit": limit,
+            "offset": offset,
+        }
+
+    @staticmethod
+    def _default_order_column(model: Any) -> Any:
+        for candidate in ("created_at", "fetched_at", "started_at", "event_time", "position_timestamp", "id"):
+            col = getattr(model, candidate, None)
+            if col is not None:
+                return col
+        pk_cols = list(inspect(model).primary_key)
+        return pk_cols[0] if pk_cols else None
+
     @staticmethod
     def _vessel_browser_row(vessel: Vessel, latest: VesselPositionLatest | None, flags: list[RiskFlag]) -> dict:
         severity_order = {"critical": 4, "high": 3, "medium": 2, "low": 1}
@@ -111,3 +182,19 @@ class DevConsoleService:
             "highest_risk_severity": highest_flag.severity if highest_flag is not None else None,
             "risk_flag_types": sorted({flag.flag_type for flag in flags}),
         }
+
+
+def _to_jsonable(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, dict):
+        return {str(k): _to_jsonable(v) for k, v in value.items()}
+    return str(value)

@@ -198,7 +198,7 @@ export const DEFAULT_FILTERS: MapFilters = {
   hasOpenRiskFlag: false,
   portActivityKind: null,
   timeWindow: "live",
-  enabledGeoLayers: new Set<string>(["ports_p", "coastline_l"]),
+  enabledGeoLayers: new Set<string>(),
 };
 
 export type ToastVariant = "success" | "info" | "warning" | "error";
@@ -227,20 +227,27 @@ export type SelectedSubject =
 export type RouteState =
   | { name: "map" }
   | { name: "vessels-list" }
-  | { name: "vessel-detail"; id: number }
+  | { name: "vessel-detail"; id: number; from?: "risk" }
   | { name: "entities-list" }
-  | { name: "entity-detail"; id: number }
+  | { name: "entity-detail"; id: number; from?: "risk" }
   | { name: "ports" }
   | { name: "risk" }
   | { name: "news" }
   | { name: "evidence"; id: number }
-  | { name: "graph"; subject?: { type: "vessel" | "entity"; id: number } }
   | { name: "schema" }
   | { name: "ops" }
-  | { name: "roadmap" };
+  | { name: "data-browser"; table: string }
+  | { name: "roadmap" }
+  | { name: "not-found"; path: string };
 
 export function isFullCanvas(route: RouteState): boolean {
-  return route.name === "graph" || route.name === "schema" || route.name === "ops" || route.name === "roadmap";
+  return (
+    route.name === "schema" ||
+    route.name === "ops" ||
+    route.name === "data-browser" ||
+    route.name === "roadmap" ||
+    route.name === "not-found"
+  );
 }
 
 export function isInspectorRoute(route: RouteState): boolean {

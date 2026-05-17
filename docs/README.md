@@ -9,7 +9,6 @@ This directory documents the current SEAM V2 implementation. Start with the prod
 - [Map](map.md) — live vessel snapshot, rendering order, focus behavior, geo layers.
 - [Evidence Model](evidence-model.md) — observation spine and evidence-backed read models.
 - [Schema Atlas](schema-atlas.md) — `/schema` and metadata graph.
-- [Graph](graph.md) — relationship graph behavior.
 
 ## Operations
 

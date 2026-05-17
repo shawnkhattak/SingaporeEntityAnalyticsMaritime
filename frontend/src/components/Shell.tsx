@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { closeInspectorRoute, useRoute } from "../hooks/useRoute";
 import { useHotkey } from "../hooks/useHotkey";
 import { isFullCanvas, isInspectorRoute, type RouteState } from "../types";
@@ -7,7 +7,7 @@ import { ErrorBoundary } from "./primitives/ErrorBoundary";
 import { ToastViewport } from "./primitives/ToastViewport";
 import { CommandPalette } from "./primitives/CommandPalette";
 import { CommandPanel } from "./command-panel/CommandPanel";
-import { MapCanvas } from "./map/MapCanvas";
+import { Button } from "./primitives/Button";
 
 const VesselListInspector = lazy(() => import("./inspector/VesselListInspector").then((m) => ({ default: m.VesselListInspector })));
 const VesselDetailInspector = lazy(() => import("./inspector/VesselDetailInspector").then((m) => ({ default: m.VesselDetailInspector })));
@@ -18,10 +18,11 @@ const RiskFeedInspector = lazy(() => import("./inspector/RiskFeedInspector").the
 const NewsInspector = lazy(() => import("./inspector/NewsInspector").then((m) => ({ default: m.NewsInspector })));
 const EvidenceInspector = lazy(() => import("./inspector/EvidenceInspector").then((m) => ({ default: m.EvidenceInspector })));
 
-const GraphCanvas = lazy(() => import("./canvas/GraphCanvas").then((m) => ({ default: m.GraphCanvas })));
+const MapCanvas = lazy(() => import("./map/MapCanvas").then((m) => ({ default: m.MapCanvas })));
 const SchemaCanvas = lazy(() => import("./canvas/SchemaCanvas").then((m) => ({ default: m.SchemaCanvas })));
 const OpsConsole = lazy(() => import("./canvas/OpsConsole").then((m) => ({ default: m.OpsConsole })));
 const RoadmapPage = lazy(() => import("./pages/RoadmapPage").then((m) => ({ default: m.RoadmapPage })));
+const DataBrowserPage = lazy(() => import("./pages/DataBrowserPage").then((m) => ({ default: m.DataBrowserPage })));
 
 function renderInspector(route: RouteState) {
   switch (route.name) {
@@ -61,14 +62,16 @@ function inspectorKey(route: RouteState): string {
 
 function renderFullCanvas(route: RouteState) {
   switch (route.name) {
-    case "graph":
-      return <GraphCanvas subject={route.subject} />;
     case "schema":
       return <SchemaCanvas />;
     case "ops":
       return <OpsConsole />;
+    case "data-browser":
+      return <DataBrowserPage table={route.table} />;
     case "roadmap":
       return <RoadmapPage />;
+    case "not-found":
+      return <NotFoundPage path={route.path} />;
     default:
       return null;
   }
@@ -88,6 +91,12 @@ export function Shell() {
     if (inspectorVisible) openInspector();
     else closeInspector();
   }, [inspectorVisible, openInspector, closeInspector]);
+
+  useEffect(() => {
+    if (route.name === "map" && state.selected) {
+      dispatch({ type: "CLEAR_SELECTION" });
+    }
+  }, [route.name, state.selected, dispatch]);
 
   // Auto-collapse fires AT MOST ONCE per session. After the first
   // inspector or full-canvas route opens, we set
@@ -121,10 +130,11 @@ export function Shell() {
       case "risk": label = "Risk & Sanctions"; break;
       case "news": label = "News"; break;
       case "evidence": label = `Evidence #${route.id}`; break;
-      case "graph": label = "Graph"; break;
       case "schema": label = "Schema"; break;
       case "ops": label = "Operations"; break;
+      case "data-browser": label = route.table; break;
       case "roadmap": label = "Roadmap"; break;
+      case "not-found": label = "Page not found"; break;
       case "map":
       default: label = "Map"; break;
     }
@@ -156,6 +166,7 @@ export function Shell() {
 
   return (
     <div className={`shell ${state.backendOnline ? "" : "offline"} ${state.isPanelCollapsed ? "panel-collapsed" : "panel-expanded"}`}>
+      <DesktopGate />
       {!fullCanvas && (
         <ErrorBoundary
           fallback={
@@ -169,16 +180,18 @@ export function Shell() {
             </div>
           }
         >
-          <MapCanvas />
+          <Suspense fallback={<div className="map-canvas" />}>
+            <MapCanvas />
+          </Suspense>
         </ErrorBoundary>
       )}
       <CommandPanel />
       {fullCanvas ? (
-        <div className="fullcanvas" key={`canvas-${route.name}`}>
+        <FullCanvas routeKey={fullCanvasScrollKey(route)} key={`canvas-${route.name}`}>
           <ErrorBoundary>
             <Suspense fallback={<div className="t-muted">Loading…</div>}>{renderFullCanvas(route)}</Suspense>
           </ErrorBoundary>
-        </div>
+        </FullCanvas>
       ) : inspectorVisible ? (
         <ErrorBoundary key={inspectorKey(route)}>
           <Suspense fallback={null}>{renderInspector(route)}</Suspense>
@@ -186,6 +199,78 @@ export function Shell() {
       ) : null}
       <ToastViewport />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+    </div>
+  );
+}
+
+function DesktopGate() {
+  return (
+    <div className="desktop-gate">
+      <div className="desktop-gate-card">
+        <div className="desktop-gate-mark">SEAM</div>
+        <h1>Desktop required</h1>
+        <p>SEAM is optimized for desktop. Please open this app on a desktop or laptop for the best experience.</p>
+      </div>
+    </div>
+  );
+}
+
+const fullCanvasScroll = new Map<string, number>();
+
+function fullCanvasScrollKey(route: RouteState): string {
+  return route.name === "data-browser" ? `data-browser:${route.table}` : route.name;
+}
+
+function FullCanvas({ routeKey, children }: { routeKey: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const target = fullCanvasScroll.get(routeKey) ?? 0;
+    let raf = 0;
+    let tries = 0;
+    function restore() {
+      if (!el) return;
+      el.scrollTop = target;
+      if (el.scrollTop !== target && tries < 20) {
+        tries += 1;
+        raf = requestAnimationFrame(restore);
+      }
+    }
+    restore();
+    function onScroll() {
+      if (!el) return;
+      fullCanvasScroll.set(routeKey, el.scrollTop);
+    }
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      if (el) {
+        fullCanvasScroll.set(routeKey, el.scrollTop);
+        el.removeEventListener("scroll", onScroll);
+      }
+    };
+  }, [routeKey]);
+
+  return (
+    <div ref={ref} className="fullcanvas">
+      {children}
+    </div>
+  );
+}
+
+function NotFoundPage({ path }: { path: string }) {
+  return (
+    <div className="not-found-page panel-solid">
+      <div className="t-caption">404</div>
+      <h1 className="t-h1" style={{ margin: "6px 0" }}>Page not found</h1>
+      <p className="t-sm" style={{ margin: "0 0 14px" }}>
+        No SEAM workspace exists at <span className="mono">{path}</span>.
+      </p>
+      <Button variant="primary" onClick={() => { window.history.pushState({}, "", "/map"); window.dispatchEvent(new Event("seam:navigate")); }}>
+        Back to map
+      </Button>
     </div>
   );
 }

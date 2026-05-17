@@ -232,9 +232,9 @@ export function RiskFeedInspector() {
               if (group.vesselId != null) {
                 const v = state.vessels.find((x) => x.vessel_id === group.vesselId);
                 if (v) requestMapCenter({ lng: v.longitude, lat: v.latitude, zoom: 8 });
-                navigateTo(`/vessels/${group.vesselId}`);
+                navigateTo(`/vessels/${group.vesselId}?from=risk`);
               } else if (group.entityId != null) {
-                navigateTo(`/entities/${group.entityId}`);
+                navigateTo(`/entities/${group.entityId}?from=risk`);
               }
             }}
           />

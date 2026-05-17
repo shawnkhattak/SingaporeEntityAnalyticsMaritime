@@ -14,7 +14,7 @@ type EvidenceLinkProps = {
 /**
  * Canonical evidence affordance. Wherever the app shows an evidence
  * reference (vessel popovers, list rows, risk cards, sanctions matches,
- * graph node detail, port events, news), use this primitive so the
+ * port events, news), use this primitive so the
  * styling stays consistent and the click target is always actionable.
  */
 export function EvidenceLink({ id, variant = "inline", label, className = "", onClick }: EvidenceLinkProps) {

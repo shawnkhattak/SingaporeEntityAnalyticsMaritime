@@ -7,7 +7,7 @@ SEAM V2 is a map-first analyst workspace. The map is the canvas, not a feature i
 - **Shell** — viewport-filling container. Renders the persistent `MapCanvas` plus a floating `CommandPanel`. Mounts an inspector on the left or a full-canvas surface, never both.
 - **Command panel** — 296 px expanded, 60 px collapsed icon rail. Sits at `top/left/bottom: 12px`. Auto-collapses when an inspector opens unless the user manually expanded it; the inspector then shifts from `left: 84px` to `left: 320px` so they never overlap. State persists in `localStorage` (`seam:panel-collapsed`, `seam:inspector-width`).
 - **Inspector** — slides in from the left, 480 ↔ 720 px (resizable via the grip handle). Shared header with breadcrumb + title + actions, optional tabs, scrollable body, optional sticky footer. The `X` close action dismisses the inspector by replacing the route with `/map`; it does not return to the previous inspector in browser history.
-- **Full-canvas surfaces** — Graph, Schema, Operations, Roadmap. Replace the map; the command panel collapses to its rail.
+- **Full-canvas surfaces** — Schema, Operations, Roadmap. Replace the map; the command panel collapses to its rail.
 
 ## Map workspace
 

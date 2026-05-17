@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronRight, MapPin, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getPortActivity, runPortActivity } from "../../api";
+import { getPortActivity } from "../../api";
 import { closeInspectorRoute } from "../../hooks/useRoute";
 import { useJobRunner } from "../../state/AppState";
 import { Button } from "../primitives/Button";
@@ -38,7 +38,7 @@ export function PortsInspector() {
     if (loadedDateRef.current === activityDate) return;
     loadedDateRef.current = activityDate;
     setLoading(true);
-    Promise.all([loadKind("due-arrive"), loadKind("due-depart")])
+    Promise.all([getPortActivity("due-arrive", 100, activityDate).catch(() => []), getPortActivity("due-depart", 100, activityDate).catch(() => [])])
       .then(([a, d]) => setCached({ arrive: a, depart: d }))
       .finally(() => setLoading(false));
   }, [activityDate]);
@@ -71,26 +71,20 @@ export function PortsInspector() {
 
   function refreshKind(k: "due-arrive" | "due-depart") {
     return runJob(`ports-${k}`, async () => {
-      await runPortActivity(k, activityDate);
       const fresh = await getPortActivity(k, 100, activityDate);
       setCached((curr) => ({ ...curr, [k === "due-arrive" ? "arrive" : "depart"]: fresh }));
     }, {
-      successTitle: `Port ${k === "due-arrive" ? "arrivals" : "departures"} refreshed`,
-      errorTitle: "Port activity failed",
+      successTitle: `Cached port ${k === "due-arrive" ? "arrivals" : "departures"} loaded`,
+      errorTitle: "Cached port activity failed",
     });
   }
 
-  async function loadKind(k: "due-arrive" | "due-depart") {
-    try {
-      await runPortActivity(k, activityDate);
-      return await getPortActivity(k, 100, activityDate);
-    } catch {
-      return [];
-    }
-  }
-
   const emptyActionKind = kind === "due-depart" ? "due-depart" : "due-arrive";
-  const emptyActionLabel = emptyActionKind === "due-arrive" ? "Pull arrivals now" : "Pull departures now";
+  const emptyActionLabel = emptyActionKind === "due-arrive" ? "Reload cached arrivals" : "Reload cached departures";
+  const emptyBody =
+    kind === "all"
+      ? "No cached port data is available. OCEANS-X port activity ingestion is paused for now."
+      : `No OCEANS-X ${kind === "due-depart" ? "departures" : "arrivals"} returned for ${activityDate}.`;
 
   return (
     <InspectorShell
@@ -105,8 +99,8 @@ export function PortsInspector() {
       onClose={closeInspectorRoute}
       footer={
         <div className="row" style={{ gap: 6 }}>
-          <Button size="sm" leadingIcon={<RefreshCw size={12} />} onClick={() => refreshKind("due-arrive")}>Pull arrivals</Button>
-          <Button size="sm" leadingIcon={<RefreshCw size={12} />} onClick={() => refreshKind("due-depart")}>Pull departures</Button>
+          <Button size="sm" leadingIcon={<RefreshCw size={12} />} onClick={() => refreshKind("due-arrive")}>Reload arrivals</Button>
+          <Button size="sm" leadingIcon={<RefreshCw size={12} />} onClick={() => refreshKind("due-depart")}>Reload departures</Button>
         </div>
       }
     >
@@ -116,7 +110,7 @@ export function PortsInspector() {
           compact
           icon={<MapPin size={18} />}
           title="No port activity yet"
-          body={`No OCEANS-X ${kind === "due-depart" ? "departures" : "arrivals"} returned for ${activityDate}.`}
+          body={emptyBody}
           action={
             <Button size="sm" variant="primary" leadingIcon={<RefreshCw size={11} />} onClick={() => refreshKind(emptyActionKind)}>
               {emptyActionLabel}

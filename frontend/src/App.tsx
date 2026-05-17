@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Shell } from "./components/Shell";
-import { getDevTableCounts, getHealth, loadDevState, loadMapVessels, runNewsLive, runPositionsSnapshot } from "./api";
+import { getHealth, runNewsLive, runPositionsSnapshot } from "./api";
+import { useRoute } from "./hooks/useRoute";
 import { useApp, useRunningJobs, useToasts } from "./state/AppState";
 import { usePoll } from "./hooks/usePoll";
 
@@ -10,9 +11,11 @@ const OCEANSX_INTERVAL_MS = 10 * 60 * 1000;
 const NEWS_RSS_INTERVAL_MS = 60 * 60 * 1000;
 
 export function App() {
+  const route = useRoute();
   const { dispatch } = useApp();
   const toasts = useToasts();
   const { running, start, finish } = useRunningJobs();
+  const mapVisible = !["ops", "schema", "roadmap", "not-found"].includes(route.name);
 
   // Global health poller (drives "backend unreachable" state).
   usePoll(
@@ -24,7 +27,7 @@ export function App() {
         dispatch({ type: "SET_BACKEND_ONLINE", online: false });
       }
     },
-    15_000,
+    60_000,
   );
 
   // Auto-snapshot OCEANS-X every 10 minutes. Skipped if a snapshot is
@@ -36,8 +39,6 @@ export function App() {
       start("positions-snapshot");
       try {
         await runPositionsSnapshot();
-        const vessels = await loadMapVessels(5000);
-        dispatch({ type: "SET_VESSELS", vessels });
       } catch (error) {
         toasts.push({
           variant: "warning",
@@ -49,7 +50,7 @@ export function App() {
       }
     },
     OCEANSX_INTERVAL_MS,
-    { immediate: false },
+    { immediate: false, paused: !mapVisible },
   );
 
   // Refresh configured RSS.app/news feeds hourly. This keeps the News
@@ -60,8 +61,6 @@ export function App() {
       start("news");
       try {
         await runNewsLive();
-        const counts = await getDevTableCounts();
-        dispatch({ type: "SET_TABLE_COUNTS", counts });
       } finally {
         finish("news");
       }
@@ -70,23 +69,12 @@ export function App() {
     { immediate: false },
   );
 
-  // Initial cold-load priming: health + dev state + table counts, so
-  // every count tile renders real numbers (or a skeleton) within the
-  // first second, not "—" forever.
+  // Initial cold-load health check only. Operations/dev datasets are
+  // loaded inside the Operations Center so /map does not poll them.
   useEffect(() => {
     getHealth()
       .then(() => dispatch({ type: "SET_BACKEND_ONLINE", online: true }))
       .catch(() => dispatch({ type: "SET_BACKEND_ONLINE", online: false }));
-    loadDevState()
-      .then((dev) => {
-        dispatch({ type: "SET_JOBS", jobs: dev.jobs });
-        dispatch({ type: "SET_HEALTH", health: dev.health });
-        if (dev.vessels?.length) dispatch({ type: "SET_VESSELS", vessels: dev.vessels });
-      })
-      .catch(() => undefined);
-    getDevTableCounts()
-      .then((counts) => dispatch({ type: "SET_TABLE_COUNTS", counts }))
-      .catch(() => undefined);
   }, [dispatch]);
 
   return <Shell />;

@@ -1,4 +1,4 @@
-import { ChevronRight, ExternalLink, Network, X } from "lucide-react";
+import { ChevronRight, ExternalLink, X } from "lucide-react";
 import { navigateTo } from "../../hooks/useRoute";
 import type { RiskFlag, VesselMapFeature } from "../../types";
 import { RiskPill } from "../primitives/Pill";
@@ -64,32 +64,26 @@ export function VesselPopover({ x, y, vessel, severity, flags, onClose }: Vessel
 
       {/* Action row: icon-only, no big "Open vessel" button. The click
           already navigated to the inspector; these are quick jumps. */}
-      <div className="row" style={{ marginTop: 8, gap: 4, justifyContent: "flex-end" }}>
-        <button
-          className="btn ghost icon sm"
-          aria-label="Open in graph"
-          title="Open in graph"
-          onClick={() => navigateTo(`/graph?subject=vessel&id=${vessel.vessel_id}`)}
-        >
-          <Network size={12} />
-        </button>
+      <div className="row" style={{ marginTop: 8, gap: 4, justifyContent: "flex-end", flexWrap: "wrap" }}>
         {vessel.evidence_id != null && (
           <button
-            className="btn ghost icon sm"
+            className="btn ghost sm"
             aria-label="Open evidence"
             title="Open evidence"
             onClick={() => navigateTo(`/evidence/${vessel.evidence_id}`)}
           >
             <ExternalLink size={12} />
+            Evidence
           </button>
         )}
         <button
-          className="btn ghost icon sm"
+          className="btn ghost sm"
           aria-label="Open vessel detail"
           title="Open vessel"
           onClick={() => navigateTo(`/vessels/${vessel.vessel_id}`)}
         >
           <ChevronRight size={12} />
+          Details
         </button>
       </div>
     </div>

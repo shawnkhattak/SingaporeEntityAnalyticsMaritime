@@ -1,7 +1,7 @@
-import { Database, FileText, Network, RefreshCw, Ship } from "lucide-react";
+import { Database, FileText, RefreshCw, Ship } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getVessel, getVesselEvents, getVesselObservations, getVesselRiskFlags, runMovements, runParticulars, runRiskRecompute } from "../../api";
-import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
+import { closeInspectorRoute } from "../../hooks/useRoute";
 import { requestMapCenter } from "../../hooks/useMapCenter";
 import { recordRecentVessel, useApp, useJobRunner, useSelection } from "../../state/AppState";
 import { Button } from "../primitives/Button";
@@ -137,9 +137,6 @@ export function VesselDetailInspector({ id }: { id: number }) {
               }
             >
               Refresh movements
-            </Button>
-            <Button size="sm" leadingIcon={<Network size={12} />} onClick={() => navigateTo(`/graph?subject=vessel&id=${id}`)}>
-              Open in graph
             </Button>
           </div>
         ) : tab === 3 ? (

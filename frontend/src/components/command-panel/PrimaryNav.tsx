@@ -8,10 +8,10 @@ type NavItem = { label: string; href: string; icon: typeof Ship; matches: (r: Ro
 
 const MAIN_NAV: NavItem[] = [
   { label: "Map", href: "/map", icon: MapIcon, matches: (r) => r.name === "map" },
-  { label: "Vessels", href: "/vessels", icon: Ship, matches: (r) => r.name === "vessels-list" || r.name === "vessel-detail" },
-  { label: "Entities", href: "/entities", icon: Building2, matches: (r) => r.name === "entities-list" || r.name === "entity-detail" },
+  { label: "Vessels", href: "/vessels", icon: Ship, matches: (r) => r.name === "vessels-list" || (r.name === "vessel-detail" && r.from !== "risk") },
+  { label: "Entities", href: "/entities", icon: Building2, matches: (r) => r.name === "entities-list" || (r.name === "entity-detail" && r.from !== "risk") },
   { label: "Ports", href: "/ports", icon: MapPin, matches: (r) => r.name === "ports" },
-  { label: "Risk & Sanctions", href: "/risk", icon: ShieldAlert, matches: (r) => r.name === "risk" },
+  { label: "Risk & Sanctions", href: "/risk", icon: ShieldAlert, matches: (r) => r.name === "risk" || (r.name === "vessel-detail" && r.from === "risk") || (r.name === "entity-detail" && r.from === "risk") },
   { label: "News", href: "/news", icon: Newspaper, matches: (r) => r.name === "news" },
 ];
 

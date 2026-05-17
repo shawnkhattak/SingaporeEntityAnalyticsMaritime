@@ -1,4 +1,4 @@
-import { Building2, CheckCircle2, Copy, ExternalLink, Hash, Link as LinkIcon, Ship, XCircle } from "lucide-react";
+import { ArrowLeft, Building2, CheckCircle2, Copy, ExternalLink, Hash, Link as LinkIcon, Ship, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getEvidence, type EvidenceDetail } from "../../api";
 import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
@@ -80,6 +80,16 @@ export function EvidenceInspector({ id }: { id: number }) {
     >
       {/* Top action bar */}
       <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+        <Button
+          size="sm"
+          leadingIcon={<ArrowLeft size={12} />}
+          onClick={() => {
+            if (window.history.length > 1) window.history.back();
+            else navigateTo("/map");
+          }}
+        >
+          Back
+        </Button>
         <Button size="sm" leadingIcon={<Copy size={12} />} onClick={() => copy(String(data.id))}>
           Copy ID
         </Button>

@@ -103,7 +103,7 @@ a:hover { text-decoration: underline; }
 .t-caption { font-size: 11px; line-height: 14px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--slate-500); }
 .t-num     { font-family: var(--font-mono); font-weight: 700; letter-spacing: -0.02em; }
 .t-muted   { color: var(--slate-500); }
-.t-faded   { color: var(--slate-400); }
+.t-faded   { color: var(--slate-500); }
 
 /* ===== Panels & cards ===== */
 .panel {
@@ -472,6 +472,9 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
 }
 .entity-relationship-card {
   display: block;
+}
+.entity-relationship-card.is-clickable {
+  cursor: pointer;
 }
 .entity-vessel-card:hover,
 .entity-relationship-card:hover {
@@ -894,6 +897,11 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   width: 17px;
   height: 17px;
 }
+.primary-nav .nav span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .cmd-section { padding: 8px 0; border-top: 1px solid var(--gray-200); }
 .cmd-section:first-child { border-top: 0; }
 .cmd-section-head {
@@ -1050,6 +1058,73 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   animation: fade-in var(--motion-slow) var(--ease-out) both;
 }
 .fullcanvas.padded { padding: 24px; }
+
+.desktop-gate {
+  display: none;
+}
+
+.desktop-gate-card,
+.not-found-page {
+  max-width: 460px;
+  padding: 24px;
+}
+
+.desktop-gate-mark {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--navy-900);
+  color: var(--white);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 18px;
+}
+
+.desktop-gate h1 {
+  margin: 0 0 8px;
+  color: var(--navy-900);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.desktop-gate p {
+  margin: 0;
+  color: var(--navy-700);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.not-found-page {
+  margin: 72px auto 0;
+}
+
+@media (max-width: 767px) {
+  .shell > :not(.desktop-gate) {
+    display: none !important;
+  }
+  .desktop-gate {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background:
+      linear-gradient(180deg, rgba(242,247,251,.96), rgba(229,239,246,.98));
+  }
+  .desktop-gate-card {
+    width: min(100%, 420px);
+    background: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: 18px;
+    box-shadow: var(--shadow-popover);
+  }
+}
 
 /* Toast viewport */
 .toast-viewport {

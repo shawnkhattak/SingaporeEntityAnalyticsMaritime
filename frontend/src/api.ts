@@ -59,14 +59,15 @@ async function errorMessage(response: Response, path: string): Promise<string> {
   return `API request failed (${response.status}): ${path}`;
 }
 
-export async function loadDevState(): Promise<DevState & { vessels: VesselMapFeature[] }> {
-  const [jobs, logs, health, vessels] = await Promise.all([
+let mapVesselsInFlight: Promise<VesselMapFeature[]> | null = null;
+
+export async function loadDevState(): Promise<DevState> {
+  const [jobs, logs, health] = await Promise.all([
     getJson<DevState["jobs"]>("/api/dev/ingestion/jobs"),
     getJson<DevState["logs"]>("/api/dev/ingestion/logs"),
     getJson<DevState["health"]>("/api/dev/source-health"),
-    getJson<VesselMapFeature[]>("/api/map/vessels?limit=5000&scope=latest-snapshot"),
   ]);
-  return { jobs, logs, health, vessels };
+  return { jobs, logs, health };
 }
 
 export function browseDevVessels(query = "", limit = 5000) {
@@ -75,6 +76,23 @@ export function browseDevVessels(query = "", limit = 5000) {
     params.set("q", query.trim());
   }
   return getJson<DevVesselBrowseRow[]>(`/api/dev/vessels?${params.toString()}`);
+}
+
+export type TableBrowseResponse = {
+  table: string;
+  columns: string[];
+  rows: Record<string, unknown>[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export function browseTable(table: string, query = "", limit = 50, offset = 0) {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (query.trim()) {
+    params.set("q", query.trim());
+  }
+  return getJson<TableBrowseResponse>(`/api/dev/table/${encodeURIComponent(table)}?${params.toString()}`);
 }
 
 export function runTestJob() {
@@ -126,7 +144,16 @@ export function runRiskRecompute(vesselId?: number) {
 }
 
 export function loadMapVessels(limit = 250) {
-  return getJson<VesselMapFeature[]>(`/api/map/vessels?limit=${limit}&scope=latest-snapshot`);
+  if (limit === 5000 && mapVesselsInFlight) return mapVesselsInFlight;
+  const promise = getJson<VesselMapFeature[]>(`/api/map/vessels?limit=${limit}&scope=latest-snapshot`)
+    .finally(() => {
+      if (mapVesselsInFlight === promise) mapVesselsInFlight = null;
+    });
+  if (limit === 5000) {
+    mapVesselsInFlight = promise;
+    return mapVesselsInFlight;
+  }
+  return promise;
 }
 
 export function searchVessels(query: string, limit = 20) {

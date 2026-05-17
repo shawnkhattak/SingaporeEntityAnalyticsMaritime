@@ -204,10 +204,6 @@ async def refresh_live(
     )
     particulars = [await ingestion.run_vessel_particulars(settings=settings, vessel_id=vessel_id, mode="live") for vessel_id in vessel_ids]
     movements = [await ingestion.run_vessel_movements(settings=settings, vessel_id=vessel_id, mode="live") for vessel_id in vessel_ids[:1]]
-    port_activity = [
-        await ingestion.run_port_activity(settings=settings, kind="due-arrive", mode="live"),
-        await ingestion.run_port_activity(settings=settings, kind="due-depart", mode="live"),
-    ]
     geo = await GeoService(session).ingest_live(settings)
     enrichment = EnrichmentService(session)
     sanctions = {"skipped": "OpenSanctions API is quota-limited; run /api/dev/ingestion/sanctions?confirm_live=true or import /api/dev/ingestion/sanctions-csv."}
@@ -221,7 +217,7 @@ async def refresh_live(
         "positions_job_id": positions.id,
         "particulars_job_ids": [job.id for job in particulars],
         "movement_job_ids": [job.id for job in movements],
-        "port_activity_job_ids": [job.id for job in port_activity],
+        "port_activity": {"skipped": "OCEANS-X port activity ingestion is paused."},
         "geo": geo,
         "sanctions": sanctions,
         "news": news,
@@ -289,3 +285,17 @@ async def browse_dev_vessels(
     limit: Annotated[int, Query(ge=1, le=5000)] = 5000,
 ) -> list[DevVesselBrowseRow]:
     return await DevConsoleService(session).vessel_browser(q=q, limit=limit)
+
+
+@router.get("/table/{table}", dependencies=[Depends(require_dev_mutations)])
+async def browse_table(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    table: str,
+    q: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict[str, Any]:
+    try:
+        return await DevConsoleService(session).browse_table(table=table, q=q, limit=limit, offset=offset)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown table: {exc.args[0]}") from exc

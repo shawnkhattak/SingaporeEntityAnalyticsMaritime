@@ -18,6 +18,7 @@ import {
   Ship,
   Sparkles,
   Upload,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -28,7 +29,6 @@ import {
   loadDevState,
   runGeoLive,
   runNewsLive,
-  runPortActivity,
   runPositionsSnapshot,
   runRefreshLive,
   runRiskRecompute,
@@ -60,6 +60,19 @@ import { formatDate, formatRelative, parseBackendDate } from "../../format";
 import { countryName, flagEmoji, vesselTypeLabel } from "../../labels";
 
 const PAGE_SIZE = 25;
+const SOURCE_STALE_AFTER_MS = 15 * 60 * 1000;
+const SOURCE_STALE_OVERRIDES_MS: Array<{ match: (key: string) => boolean; ms: number }> = [
+  { match: (k) => k === "oceans-x" || k === "oceansx" || k.startsWith("oceansx.") || k.startsWith("oceans-x."), ms: 60 * 60 * 1000 },
+  { match: (k) => k === "internal-test" || k === "internal.test" || k.startsWith("internal-test.") || k.startsWith("internal."), ms: 24 * 60 * 60 * 1000 },
+];
+
+function staleThresholdFor(source: string): number {
+  const key = source.toLowerCase();
+  for (const rule of SOURCE_STALE_OVERRIDES_MS) {
+    if (rule.match(key)) return rule.ms;
+  }
+  return SOURCE_STALE_AFTER_MS;
+}
 
 /* ---------- Friendly-label maps -------------------------------------- */
 
@@ -84,6 +97,24 @@ const TABLE_LABELS: Record<string, string> = {
 const CORE_KEYS = ["vessels", "vessel_positions_latest", "port_events", "entities", "relationships"];
 const RISK_KEYS = ["risk_flags", "sanctions_records", "news_articles", "news_links"];
 const SYSTEM_KEYS = ["ingestion_jobs", "ingestion_logs", "source_health", "source_observations"];
+
+const TABLE_TOOLTIPS: Record<string, string> = {
+  vessels: "All ships we're tracking, with their identities and specs.",
+  vessel_positions_latest: "Each ship's most recent location on the water.",
+  vessel_positions: "Historical track points showing where ships have been.",
+  port_events: "Records of ships arriving at and departing from ports.",
+  entities: "People, companies, and organizations linked to maritime activity.",
+  relationships: "Known connections between people, companies, and ships (e.g. owners, operators).",
+  risk_flags: "Concerns we've raised on a ship or entity — sanctions matches, suspicious behavior, news hits.",
+  sanctions_records: "People and entities on government sanctions lists.",
+  news_articles: "Maritime news stories we've collected from public sources.",
+  news_links: "Connections between news stories and the ships, people, or companies they mention.",
+  reference_data: "Background lookup data — countries, ports, vessel types, and similar lists.",
+  ingestion_jobs: "Background tasks that pull fresh data in from outside sources.",
+  ingestion_logs: "Step-by-step records of what each data pull did, including any errors.",
+  source_health: "How well each external data source is responding right now.",
+  source_observations: "Recent snapshots of each source's status over time.",
+};
 
 const JOB_TYPE_LABELS: Record<string, string> = {
   "oceansx.positions_snapshot": "Vessel positions snapshot",
@@ -149,6 +180,16 @@ function sourceAreaHint(source: string): string {
   return SOURCE_AREA_HINTS[parent] ?? sourceLabel(source);
 }
 
+function classifySourceHealth(health: SourceHealth): HealthStatus {
+  const status = classifyHealth(health.status);
+  if (status === "fail") return "fail";
+  const timestamp = health.last_success_at ?? health.last_checked_at;
+  if (!timestamp) return status;
+  const ageMs = Date.now() - parseBackendDate(timestamp).getTime();
+  if (!Number.isFinite(ageMs) || ageMs < 0) return "ok";
+  return ageMs > staleThresholdFor(health.source) ? "stale" : "ok";
+}
+
 function suggestedActionForSource(source: string): string {
   const key = source.toLowerCase();
   if (key.includes("port_activity")) return "Check OCEANS-X subscription scope, then retry the port activity pull.";
@@ -192,6 +233,7 @@ export function OpsConsole() {
   const [selectedVessel, setSelectedVessel] = useState<VesselSearchResult | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showPortDetails, setShowPortDetails] = useState(false);
+  const [dismissedBulkParticularsJobId, setDismissedBulkParticularsJobId] = useState<number | null>(null);
 
   async function refreshDev() {
     try {
@@ -317,11 +359,15 @@ export function OpsConsole() {
     [state.jobs],
   );
   const bulkParticularsActive = bulkParticularsJob?.status === "queued" || bulkParticularsJob?.status === "running";
+  const visibleBulkParticularsJob =
+    bulkParticularsJob && (bulkParticularsActive || dismissedBulkParticularsJobId !== bulkParticularsJob.id)
+      ? bulkParticularsJob
+      : null;
 
   /* ----- System status + active issues ----------------------------- */
 
   const failingSources = useMemo(
-    () => state.health.filter((h) => classifyHealth(h.status) !== "ok"),
+    () => state.health.filter((h) => classifySourceHealth(h) !== "ok"),
     [state.health],
   );
   const healthySources = state.health.length - failingSources.length;
@@ -507,7 +553,7 @@ export function OpsConsole() {
                       <div className="mono t-faded" style={{ fontSize: 10, marginTop: 2 }}>{h.source}</div>
                     )}
                   </div>
-                  <HealthPill status={classifyHealth(h.status)} />
+                  <HealthPill status={classifySourceHealth(h)} />
                 </div>
               ))}
             </div>
@@ -525,8 +571,9 @@ export function OpsConsole() {
         runJob={runJob}
         refreshDev={refreshDev}
         isRunning={isRunning}
-        bulkParticularsJob={bulkParticularsJob}
+        bulkParticularsJob={visibleBulkParticularsJob}
         bulkParticularsActive={bulkParticularsActive}
+        onDismissBulkParticulars={() => bulkParticularsJob && setDismissedBulkParticularsJobId(bulkParticularsJob.id)}
         onOpenSanctionsConfirm={() => setConfirmSanctions(true)}
         csvText={csvText}
         setCsvText={setCsvText}
@@ -549,7 +596,7 @@ export function OpsConsole() {
       />
 
       {/* ===== Recent activity ====================================== */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr)", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr)", gap: 12, alignItems: "stretch" }}>
         <Panel title="Operations timeline" icon={<Sparkles size={14} />}>
           {timeline.length === 0 ? (
             <p className="t-faded">No recent activity.</p>
@@ -566,8 +613,9 @@ export function OpsConsole() {
           title="Recent jobs"
           icon={<ClipboardList size={14} />}
           shimmer={Object.keys(state.runningJobs).length > 0}
+          fill
         >
-          <div className="table-wrap scroll" style={{ maxHeight: 260, overflow: "auto" }}>
+          <div className="table-wrap scroll" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
             <table className="table">
               <thead>
                 <tr>
@@ -600,7 +648,7 @@ export function OpsConsole() {
           </div>
         </Panel>
 
-        <Panel title="Recent logs">
+        <Panel title="Recent logs" fill>
           <div className="row" style={{ gap: 4, paddingBottom: 8 }}>
             {(["all", "info", "warning", "error"] as const).map((lvl) => (
               <button
@@ -639,7 +687,7 @@ export function OpsConsole() {
 
           <div
             className="scroll"
-            style={{ maxHeight: 220, overflow: "auto", display: "flex", flexDirection: "column", gap: 4 }}
+            style={{ flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: 4 }}
           >
             {visibleLogs.length === 0 ? (
               <p className="t-faded">No logs.</p>
@@ -978,9 +1026,10 @@ function SystemStatusStrip({
         padding: 16,
         borderLeft: `4px solid ${accent}`,
         display: "grid",
-        gridTemplateColumns: "minmax(0, 1.6fr) repeat(3, minmax(0, 1fr))",
-        gap: 16,
+        gridTemplateColumns: "minmax(280px, 1.6fr) repeat(3, minmax(145px, 1fr))",
+        gap: 14,
         alignItems: "center",
+        overflow: "hidden",
       }}
     >
       <div>
@@ -1003,7 +1052,7 @@ function SystemStatusStrip({
 
 function StatusMetric({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "fail" }) {
   return (
-    <div>
+    <div style={{ minWidth: 0 }}>
       <div className="metric-label">{label}</div>
       <div
         className="metric-value"
@@ -1036,8 +1085,8 @@ function ActiveIssuesCard({
           {failingSources.map((h) => (
             <IssueRow
               key={`src-${h.id}`}
-              tone={classifyHealth(h.status) === "fail" ? "crit" : "med"}
-              title={`${sourceLabel(h.source)} is ${classifyHealth(h.status) === "fail" ? "failing" : "stale"}`}
+              tone={classifySourceHealth(h) === "fail" ? "crit" : "med"}
+              title={`${sourceLabel(h.source)} is ${classifySourceHealth(h) === "fail" ? "failing" : "stale"}`}
               when={h.last_checked_at ?? h.last_success_at}
               area={sourceAreaHint(h.source)}
               suggestion={suggestedActionForSource(h.source)}
@@ -1103,6 +1152,7 @@ type ActionCenterProps = {
   isRunning: (slug: string) => boolean;
   bulkParticularsJob: IngestionJob | null;
   bulkParticularsActive: boolean;
+  onDismissBulkParticulars: () => void;
   onOpenSanctionsConfirm: () => void;
   csvText: string;
   setCsvText: (v: string) => void;
@@ -1124,6 +1174,7 @@ function ActionCenter(props: ActionCenterProps) {
     isRunning,
     bulkParticularsJob,
     bulkParticularsActive,
+    onDismissBulkParticulars,
     onOpenSanctionsConfirm,
     csvText,
     setCsvText,
@@ -1156,6 +1207,17 @@ function ActionCenter(props: ActionCenterProps) {
             }
           />
           <RunButton
+            label="Internal ingestion test"
+            icon={<CheckCircle2 size={12} />}
+            running={isRunning("test")}
+            onClick={() =>
+              runJob("test", runTestJob, {
+                successTitle: "Internal test complete",
+                errorTitle: "Internal test failed",
+              }).then(refreshDev)
+            }
+          />
+          <RunButton
             label="Singapore vessel particulars"
             icon={<Ship size={12} />}
             running={bulkParticularsActive || isRunning("map-particulars")}
@@ -1167,7 +1229,7 @@ function ActionCenter(props: ActionCenterProps) {
               }).then(refreshDev)
             }
           />
-          {bulkParticularsJob && <BulkParticularsProgress job={bulkParticularsJob} />}
+          {bulkParticularsJob && <BulkParticularsProgress job={bulkParticularsJob} onDismiss={onDismissBulkParticulars} />}
           <RunButton
             label="Geo layers"
             icon={<Globe size={12} />}
@@ -1326,32 +1388,12 @@ function ActionCenter(props: ActionCenterProps) {
             <MapIcon size={11} /> Port activity
           </div>
           <div className="row" style={{ gap: 6 }}>
-            <Button
-              size="sm"
-              onClick={() =>
-                runJob("ports-arrive", () => runPortActivity("due-arrive"), {
-                  successTitle: "Arrivals updated",
-                  errorTitle: "Arrivals failed",
-                }).then(refreshDev)
-              }
-            >
-              Pull arrivals
-            </Button>
-            <Button
-              size="sm"
-              onClick={() =>
-                runJob("ports-depart", () => runPortActivity("due-depart"), {
-                  successTitle: "Departures updated",
-                  errorTitle: "Departures failed",
-                }).then(refreshDev)
-              }
-            >
-              Pull departures
-            </Button>
+            <Button size="sm" disabled>Arrivals paused</Button>
+            <Button size="sm" disabled>Departures paused</Button>
           </div>
           <p className="t-faded" style={{ fontSize: 11, margin: 0, lineHeight: 1.5 }}>
-            Port activity availability may be limited by your OCEANS-X subscription. Vessel positions,
-            particulars, and movements can continue working independently.
+            OCEANS-X port activity ingestion is paused for now. Vessel positions, particulars,
+            movements, and internal tests can continue independently.
           </p>
           <button
             type="button"
@@ -1418,7 +1460,10 @@ function DataOverview({
 
       {Object.keys(referenceSummary).length > 0 && (
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--gray-100)" }}>
-          <div className="t-caption" style={{ paddingBottom: 6 }}>Reference data</div>
+          <div className="t-caption" style={{ paddingBottom: 2 }}>Reference data</div>
+          <div style={{ fontSize: 10, color: "var(--gray-500)", lineHeight: 1.3, paddingBottom: 6 }}>
+            Background lookup values used to label and enrich records.
+          </div>
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
             {Object.entries(referenceSummary).map(([domain, n]) => (
               <span key={domain} className="pill none" style={{ fontSize: 11 }}>
@@ -1450,24 +1495,36 @@ function DataGroup({
       <div className="t-caption">{title}</div>
       <div className="col" style={{ gap: 4 }}>
         {keys.map((key) => (
-          <div
+          <a
             key={key}
+            href={`/data/${encodeURIComponent(key)}`}
             className="row"
             style={{
               padding: "8px 10px",
               border: "1px solid var(--gray-100)",
               borderRadius: "var(--r-card)",
               background: "var(--white)",
+              alignItems: "flex-start",
+              textDecoration: "none",
+              color: "inherit",
+              cursor: "pointer",
             }}
           >
-            <span style={{ flex: 1, fontSize: 12 }}>{tableLabel(key)}</span>
+            <div className="col" style={{ flex: 1, gap: 2, minWidth: 0 }}>
+              <span style={{ fontSize: 12 }}>{tableLabel(key)}</span>
+              {TABLE_TOOLTIPS[key] && (
+                <span style={{ fontSize: 10, color: "var(--gray-500)", lineHeight: 1.3 }}>
+                  {TABLE_TOOLTIPS[key]}
+                </span>
+              )}
+            </div>
             <span
               className="mono"
               style={{ fontWeight: 700, fontSize: 13, color: "var(--navy-900)" }}
             >
               {loaded ? (tableCounts[key] ?? 0).toLocaleString() : <Skeleton width={32} height={14} rounded={3} />}
             </span>
-          </div>
+          </a>
         ))}
       </div>
       {freshness && (
@@ -1539,14 +1596,22 @@ function Panel({
   icon,
   children,
   shimmer,
+  fill,
 }: {
   title: React.ReactNode;
   icon?: React.ReactNode;
   shimmer?: boolean;
+  fill?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <section className={`panel-solid ${shimmer ? "shimmer" : ""}`.trim()} style={{ padding: 14 }}>
+    <section
+      className={`panel-solid ${shimmer ? "shimmer" : ""}`.trim()}
+      style={{
+        padding: 14,
+        ...(fill ? { display: "flex", flexDirection: "column", minHeight: 0, height: "100%" } : {}),
+      }}
+    >
       <div className="row" style={{ paddingBottom: 8 }}>
         {icon}
         {typeof title === "string" ? (
@@ -1555,12 +1620,12 @@ function Panel({
           <div style={{ flex: 1 }}>{title}</div>
         )}
       </div>
-      {children}
+      {fill ? <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>{children}</div> : children}
     </section>
   );
 }
 
-function BulkParticularsProgress({ job }: { job: IngestionJob }) {
+function BulkParticularsProgress({ job, onDismiss }: { job: IngestionJob; onDismiss: () => void }) {
   const total = numberParam(job.parameters.total);
   const completed = numberParam(job.parameters.completed);
   const succeeded = numberParam(job.parameters.succeeded);
@@ -1583,6 +1648,17 @@ function BulkParticularsProgress({ job }: { job: IngestionJob }) {
           Particulars {completed.toLocaleString()} / {total.toLocaleString()}
         </span>
         <JobPill status={classifyJob(job.status)} label={job.status} />
+        {!active && (
+          <button
+            type="button"
+            className="btn ghost icon sm"
+            onClick={onDismiss}
+            aria-label="Dismiss completed bulk particulars progress"
+            title="Dismiss completed progress"
+          >
+            {failed > 0 ? <X size={12} /> : <CheckCircle2 size={12} />}
+          </button>
+        )}
       </div>
       <div
         aria-label="Bulk particulars progress"

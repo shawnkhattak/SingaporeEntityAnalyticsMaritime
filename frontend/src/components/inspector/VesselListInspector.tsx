@@ -30,13 +30,26 @@ type Row = {
 };
 
 export function VesselListInspector() {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
   const debounced = useDebounce(query, 250);
   const [results, setResults] = useState<VesselSearchResult[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const { state } = useApp();
   const { filters } = useFilters();
+
+  useEffect(() => {
+    function syncQueryFromUrl() {
+      setQuery(new URLSearchParams(window.location.search).get("q") ?? "");
+      setPage(0);
+    }
+    window.addEventListener("seam:navigate", syncQueryFromUrl as EventListener);
+    window.addEventListener("popstate", syncQueryFromUrl);
+    return () => {
+      window.removeEventListener("seam:navigate", syncQueryFromUrl as EventListener);
+      window.removeEventListener("popstate", syncQueryFromUrl);
+    };
+  }, []);
 
   useEffect(() => {
     if (!debounced.trim()) {

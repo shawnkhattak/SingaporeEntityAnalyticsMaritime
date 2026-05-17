@@ -22,6 +22,7 @@ export function MultiSelect({
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [menuRect, setMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -30,6 +31,23 @@ export function MultiSelect({
     }
     if (open) document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !ref.current) return;
+    const update = () => {
+      const rect = ref.current?.getBoundingClientRect();
+      if (!rect) return;
+      const maxTop = Math.max(12, window.innerHeight - 300);
+      setMenuRect({ left: rect.left, top: Math.min(rect.bottom + 4, maxTop), width: rect.width });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
   }, [open]);
 
   const filtered = useMemo(() => {
@@ -82,13 +100,14 @@ export function MultiSelect({
       {open && (
         <div
           className="panel-solid"
+          onMouseDown={(event) => event.stopPropagation()}
           style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            left: 0,
-            right: 0,
-            zIndex: 40,
-            maxHeight: 280,
+            position: "fixed",
+            top: menuRect?.top ?? 0,
+            left: menuRect?.left ?? 0,
+            width: menuRect?.width ?? undefined,
+            zIndex: 80,
+            maxHeight: "min(280px, calc(100vh - 24px))",
             overflow: "auto",
             padding: 6,
           }}

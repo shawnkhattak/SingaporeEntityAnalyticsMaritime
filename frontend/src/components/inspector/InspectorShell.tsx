@@ -38,7 +38,7 @@ export function InspectorShell({ title, breadcrumb, tabs, activeTab = 0, onTabCh
             className="btn ghost icon sm"
             onClick={() => resize(width === 480 ? 720 : 480)}
             aria-label={width === 480 ? "Expand inspector width to 720px" : "Collapse inspector width to 480px"}
-            title={width === 480 ? "Widen panel" : "Narrow panel"}
+            title={width === 480 ? "Expand inspector width" : "Collapse inspector width"}
           >
             <ChevronsLeftRight size={14} />
           </button>

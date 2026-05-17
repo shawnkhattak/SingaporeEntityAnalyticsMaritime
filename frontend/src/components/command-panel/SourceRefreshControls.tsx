@@ -5,7 +5,6 @@ import {
   runMovements,
   runNewsLive,
   runParticulars,
-  runPortActivity,
   runPositionsSnapshot,
   runRefreshLive,
   runRiskRecompute,
@@ -67,28 +66,6 @@ export function SourceRefreshControls() {
             slug="news"
             run={() => runJob("news", runNewsLive, { successTitle: "News refreshed", errorTitle: "News refresh failed" })}
             running={isRunning("news")}
-          />
-          <RefreshButton
-            label="Ports — arrivals"
-            slug="ports-arrive"
-            run={() =>
-              runJob("ports-arrive", () => runPortActivity("due-arrive"), {
-                successTitle: "Port arrivals updated",
-                errorTitle: "Port arrivals failed",
-              })
-            }
-            running={isRunning("ports-arrive")}
-          />
-          <RefreshButton
-            label="Ports — departures"
-            slug="ports-depart"
-            run={() =>
-              runJob("ports-depart", () => runPortActivity("due-depart"), {
-                successTitle: "Port departures updated",
-                errorTitle: "Port departures failed",
-              })
-            }
-            running={isRunning("ports-depart")}
           />
           <RefreshButton
             label="Risk recompute"

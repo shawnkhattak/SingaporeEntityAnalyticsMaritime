@@ -536,20 +536,6 @@ export function MapCanvas() {
     { paused: pollingPaused },
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    loadMapVessels(5000)
-      .then((vessels) => {
-        if (!cancelled) dispatch({ type: "SET_VESSELS", vessels });
-      })
-      .catch(() => {
-        /* ignore */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [dispatch]);
-
   // Hold panel/inspector geometry in refs so the map-center subscriber
   // (registered once) can compute fresh padding on every fly-to.
   const layoutRef = useRef({

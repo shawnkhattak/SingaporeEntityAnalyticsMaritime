@@ -19,6 +19,7 @@ export function GlobalSearch({ compact }: { compact?: boolean }) {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [evidenceId, setEvidenceId] = useState<number | null>(null);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -29,6 +30,7 @@ export function GlobalSearch({ compact }: { compact?: boolean }) {
       return;
     }
     let cancelled = false;
+    setLoading(true);
     Promise.all([
       searchVessels(debounced, 5).catch(() => []),
       searchEntities(debounced, 5).catch(() => []),
@@ -36,6 +38,8 @@ export function GlobalSearch({ compact }: { compact?: boolean }) {
       if (cancelled) return;
       setVessels(v);
       setEntities(e);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
     });
     const match = debounced.trim().match(/^#?(\d+)$/);
     setEvidenceId(match ? Number(match[1]) : null);
@@ -90,11 +94,32 @@ export function GlobalSearch({ compact }: { compact?: boolean }) {
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            const first = results[0];
+            if (first) {
+              e.preventDefault();
+              if (first.kind === "vessel") {
+                select({ kind: "vessel", id: first.item.id });
+                navigateTo(`/vessels/${first.item.id}`);
+              } else if (first.kind === "entity") {
+                select({ kind: "entity", id: first.item.id });
+                navigateTo(`/entities/${first.item.id}`);
+              } else {
+                select({ kind: "evidence", id: first.id });
+                navigateTo(`/evidence/${first.id}`);
+              }
+            } else if (query.trim()) {
+              e.preventDefault();
+              navigateTo(`/vessels?q=${encodeURIComponent(query.trim())}`);
+            }
+            setOpen(false);
+          }}
           placeholder="Search vessels, IMOs, entities…"
         />
         <span className="kbd" aria-hidden="true">/</span>
       </label>
-      {open && results.length > 0 && (
+      {open && (results.length > 0 || loading || debounced.trim()) && (
         <div
           className="panel-solid"
           style={{
@@ -108,6 +133,20 @@ export function GlobalSearch({ compact }: { compact?: boolean }) {
             overflow: "auto",
           }}
         >
+          {loading && <div className="t-faded" style={{ padding: 8, fontSize: 12 }}>Searching…</div>}
+          {!loading && results.length === 0 && debounced.trim() && (
+            <button
+              type="button"
+              className="palette-row"
+              onClick={() => {
+                navigateTo(`/vessels?q=${encodeURIComponent(debounced.trim())}`);
+                setOpen(false);
+              }}
+            >
+              <Search size={14} color="var(--slate-500)" />
+              <span style={{ flex: 1 }}>Search vessels for “{debounced.trim()}”</span>
+            </button>
+          )}
           {results.map((r, idx) => {
             const Icon = r.kind === "vessel" ? Ship : r.kind === "entity" ? Building2 : FileText;
             const label =
