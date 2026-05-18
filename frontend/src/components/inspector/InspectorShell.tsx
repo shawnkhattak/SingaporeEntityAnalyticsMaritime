@@ -1,4 +1,4 @@
-import { ChevronsLeftRight, X } from "lucide-react";
+import { ArrowLeft, ChevronsLeftRight, X } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { useInspectorState } from "../../state/AppState";
 import { Tabs, type TabItem } from "../primitives/Tabs";
@@ -10,11 +10,13 @@ type InspectorShellProps = {
   activeTab?: number;
   onTabChange?: (index: number) => void;
   footer?: ReactNode;
+  onBack?: () => void;
+  backLabel?: string;
   onClose: () => void;
   children: ReactNode;
 };
 
-export function InspectorShell({ title, breadcrumb, tabs, activeTab = 0, onTabChange, footer, onClose, children }: InspectorShellProps) {
+export function InspectorShell({ title, breadcrumb, tabs, activeTab = 0, onTabChange, footer, onBack, backLabel = "Back", onClose, children }: InspectorShellProps) {
   const { width, resize } = useInspectorState();
 
   useEffect(() => {
@@ -30,6 +32,11 @@ export function InspectorShell({ title, breadcrumb, tabs, activeTab = 0, onTabCh
     >
       <header className="inspector-head">
         <div className="row" style={{ gap: 8 }}>
+          {onBack && (
+            <button className="btn ghost icon sm" onClick={onBack} aria-label={backLabel} title={backLabel}>
+              <ArrowLeft size={14} />
+            </button>
+          )}
           <div style={{ flex: 1, minWidth: 0 }}>
             {breadcrumb && <div className="t-caption">{breadcrumb}</div>}
             <h2 className="t-h1" title={title} style={{ margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</h2>

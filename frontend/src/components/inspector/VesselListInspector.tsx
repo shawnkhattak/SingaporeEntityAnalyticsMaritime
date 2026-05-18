@@ -2,7 +2,7 @@ import { Search, Ship } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { searchVessels } from "../../api";
 import { useDebounce } from "../../hooks/useDebounce";
-import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
+import { closeInspectorRoute, navigateBack } from "../../hooks/useRoute";
 import { useApp, useFilters } from "../../state/AppState";
 import { Avatar } from "../primitives/Avatar";
 import { EmptyState } from "../primitives/EmptyState";
@@ -128,6 +128,8 @@ export function VesselListInspector() {
     <InspectorShell
       breadcrumb="Vessels"
       title={`Vessels · ${titleSuffix}`}
+      onBack={() => navigateBack("/map")}
+      backLabel="Back to previous page"
       onClose={closeInspectorRoute}
       footer={
         <div className="row" style={{ justifyContent: "space-between", fontSize: 12 }}>

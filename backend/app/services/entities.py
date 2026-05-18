@@ -1,7 +1,7 @@
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import String, case, cast, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.maritime import Entity, Relationship, Vessel
+from app.models.maritime import Entity, Relationship, Vessel, VesselPositionLatest
 from app.schemas.entities import EntityRead, EntityRelationshipRead
 from app.schemas.vessels import VesselSummary
 
@@ -13,58 +13,103 @@ class EntityService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def search(self, query: str, limit: int = 20) -> list[EntityRead]:
+    @staticmethod
+    def _unique_vessel_count_expr():
+        return func.count(func.distinct(func.coalesce(Vessel.imo, cast(Vessel.id, String))))
+
+    @staticmethod
+    def _on_map_vessel_count_expr():
+        """Distinct vessels with a current latest position (i.e. on the map)."""
+        return func.count(
+            func.distinct(
+                case(
+                    (VesselPositionLatest.vessel_id.is_not(None), func.coalesce(Vessel.imo, cast(Vessel.id, String))),
+                    else_=None,
+                )
+            )
+        )
+
+    @staticmethod
+    def _entity_relationship_filter(entity_id: int):
+        return or_(Relationship.to_entity_id == entity_id, Relationship.from_entity_id == entity_id)
+
+    @staticmethod
+    def _entity_relationship_join():
+        return or_(Relationship.to_entity_id == Entity.id, Relationship.from_entity_id == Entity.id)
+
+    @staticmethod
+    def _entity_read(entity: Entity, unique_vessel_count: int = 0) -> EntityRead:
+        return EntityRead.model_validate(
+            {
+                "id": entity.id,
+                "entity_type": entity.entity_type,
+                "name": entity.name,
+                "country_code": entity.country_code,
+                "external_id": entity.external_id,
+                "created_at": entity.created_at,
+                "updated_at": entity.updated_at,
+                "unique_vessel_count": unique_vessel_count,
+            }
+        )
+
+    async def search(self, query: str, limit: int = 20, offset: int = 0) -> list[EntityRead]:
         pattern = f"%{query.strip()}%"
-        rows = await self.session.scalars(
-            select(Entity)
+        unique_vessels = self._unique_vessel_count_expr()
+        on_map_vessels = self._on_map_vessel_count_expr()
+        rows = await self.session.execute(
+            select(Entity, unique_vessels.label("unique_vessels"), on_map_vessels.label("on_map_vessels"))
+            .join(Relationship, self._entity_relationship_join())
+            .join(Vessel, Vessel.id == Relationship.vessel_id)
+            .outerjoin(VesselPositionLatest, VesselPositionLatest.vessel_id == Vessel.id)
             .where(or_(Entity.name.ilike(pattern), Entity.entity_type.ilike(pattern), Entity.country_code.ilike(pattern)))
             .where(Entity.entity_type == ENTITY_TYPE_COMPANY)
-            .where(
-                select(Relationship.id)
-                .where(
-                    Relationship.to_entity_id == Entity.id,
-                    Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES),
-                )
-                .exists()
+            .where(Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES))
+            .group_by(Entity.id)
+            .order_by(
+                desc(on_map_vessels),
+                desc(unique_vessels),
+                (func.lower(Entity.name) == query.strip().lower()).desc(),
+                Entity.name,
             )
-            .order_by((func.lower(Entity.name) == query.strip().lower()).desc(), Entity.name)
+            .offset(offset)
             .limit(limit)
         )
-        return [EntityRead.model_validate(row) for row in rows]
+        return [self._entity_read(row[0], int(row.unique_vessels or 0)) for row in rows]
 
-    async def list_recent(self, limit: int = 50) -> list[EntityRead]:
-        """Recent-first listing, used when no search query is active."""
-        rows = await self.session.scalars(
-            select(Entity)
+    async def list_recent(self, limit: int = 50, offset: int = 0) -> list[EntityRead]:
+        """Listing ordered by entities with the most vessels currently on the map."""
+        unique_vessels = self._unique_vessel_count_expr()
+        on_map_vessels = self._on_map_vessel_count_expr()
+        rows = await self.session.execute(
+            select(Entity, unique_vessels.label("unique_vessels"), on_map_vessels.label("on_map_vessels"))
+            .join(Relationship, self._entity_relationship_join())
+            .join(Vessel, Vessel.id == Relationship.vessel_id)
+            .outerjoin(VesselPositionLatest, VesselPositionLatest.vessel_id == Vessel.id)
             .where(Entity.entity_type == ENTITY_TYPE_COMPANY)
-            .where(
-                select(Relationship.id)
-                .where(
-                    Relationship.to_entity_id == Entity.id,
-                    Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES),
-                )
-                .exists()
-            )
-            .order_by(desc(Entity.updated_at), desc(Entity.id))
+            .where(Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES))
+            .group_by(Entity.id)
+            .order_by(desc(on_map_vessels), desc(unique_vessels), desc(Entity.updated_at), desc(Entity.id))
+            .offset(offset)
             .limit(limit)
         )
-        return [EntityRead.model_validate(row) for row in rows]
+        return [self._entity_read(row[0], int(row.unique_vessels or 0)) for row in rows]
 
     async def get(self, entity_id: int) -> EntityRead | None:
         entity = await self.session.get(Entity, entity_id)
         if entity is None or entity.entity_type != ENTITY_TYPE_COMPANY:
             return None
-        has_owner_or_operator = await self.session.scalar(
-            select(Relationship.id)
+        unique_vessels = await self.session.scalar(
+            select(self._unique_vessel_count_expr())
+            .select_from(Relationship)
+            .join(Vessel, Vessel.id == Relationship.vessel_id)
             .where(
-                Relationship.to_entity_id == entity_id,
+                self._entity_relationship_filter(entity_id),
                 Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES),
             )
-            .limit(1)
         )
-        if has_owner_or_operator is None:
+        if not unique_vessels:
             return None
-        return EntityRead.model_validate(entity) if entity is not None else None
+        return self._entity_read(entity, int(unique_vessels or 0))
 
     async def vessels(self, entity_id: int) -> list[VesselSummary] | None:
         if await self.get(entity_id) is None:
@@ -72,7 +117,7 @@ class EntityService:
         rows = await self.session.scalars(
             select(Vessel)
             .join(Relationship, Relationship.vessel_id == Vessel.id)
-            .where(Relationship.to_entity_id == entity_id)
+            .where(self._entity_relationship_filter(entity_id))
             .where(Relationship.relationship_type.in_(ENTITY_RELATIONSHIP_TYPES))
             .order_by(Vessel.name)
         )

@@ -1,6 +1,29 @@
 import { useEffect, useState } from "react";
 import type { RouteState } from "../types";
 
+type SeamHistoryState = {
+  seamDepth?: number;
+};
+
+function currentDepth(): number {
+  const state = window.history.state as SeamHistoryState | null;
+  return typeof state?.seamDepth === "number" ? state.seamDepth : 0;
+}
+
+function ensureHistoryState() {
+  const state = window.history.state as SeamHistoryState | null;
+  if (typeof state?.seamDepth === "number") return;
+  window.history.replaceState({ ...(state ?? {}), seamDepth: 0 }, "", window.location.href);
+}
+
+function pushAppRoute(href: string) {
+  window.history.pushState({ seamDepth: currentDepth() + 1 }, "", href);
+}
+
+function replaceAppRoute(href: string) {
+  window.history.replaceState({ seamDepth: currentDepth() }, "", href);
+}
+
 function parsePath(path: string, search: string): RouteState {
   const clean = path.replace(/\/+$/, "") || "/";
   const params = new URLSearchParams(search);
@@ -42,6 +65,7 @@ export function useRoute(): RouteState {
   const [route, setRoute] = useState<RouteState>(currentRoute);
 
   useEffect(() => {
+    ensureHistoryState();
     function onPopState() {
       setRoute(currentRoute());
     }
@@ -60,7 +84,7 @@ export function useRoute(): RouteState {
       const samePath = anchor.pathname === window.location.pathname && anchor.search === window.location.search;
       event.preventDefault();
       if (!samePath) {
-        window.history.pushState({}, "", anchor.href);
+        pushAppRoute(anchor.href);
       }
       // Dispatch a global event so every useRoute instance updates, not just this one.
       window.dispatchEvent(new Event("seam:navigate"));
@@ -79,11 +103,20 @@ export function useRoute(): RouteState {
 }
 
 export function navigateTo(href: string) {
-  window.history.pushState({}, "", href);
+  pushAppRoute(href);
+  window.dispatchEvent(new Event("seam:navigate"));
+}
+
+export function navigateBack(fallback = "/map") {
+  if (currentDepth() > 0) {
+    window.history.back();
+    return;
+  }
+  replaceAppRoute(fallback);
   window.dispatchEvent(new Event("seam:navigate"));
 }
 
 export function closeInspectorRoute() {
-  window.history.replaceState({}, "", "/map");
+  replaceAppRoute("/map");
   window.dispatchEvent(new Event("seam:navigate"));
 }

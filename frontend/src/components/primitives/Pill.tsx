@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { HealthStatus, JobStatusUi, RiskSeverity } from "../../types";
+import { displaySeverity } from "../../labels";
 
 type PillProps = {
   variant?: "default" | "crit" | "high" | "med" | "low" | "none" | "ok" | "stale" | "fail" | "info";
@@ -29,7 +30,8 @@ const SEVERITY_TO_VARIANT: Record<RiskSeverity, PillProps["variant"]> = {
 
 export function RiskPill({ severity, label }: { severity: RiskSeverity; label?: string }) {
   if (severity === "none") return <Pill variant="none">No risk</Pill>;
-  return <Pill variant={SEVERITY_TO_VARIANT[severity]}>{label ?? severity[0].toUpperCase() + severity.slice(1)}</Pill>;
+  const display = displaySeverity(severity) as RiskSeverity;
+  return <Pill variant={SEVERITY_TO_VARIANT[display]}>{label ?? display[0].toUpperCase() + display.slice(1)}</Pill>;
 }
 
 const HEALTH_TO_VARIANT: Record<HealthStatus, PillProps["variant"]> = {

@@ -25,7 +25,7 @@ class GeoService:
     async def list_layers(self) -> list[dict[str, Any]]:
         return [{"name": name, "endpoint": endpoint} for name, endpoint in ALLOWED_GEO_LAYERS.items()]
 
-    async def get_layer(self, layer_name: str) -> dict[str, Any] | None:
+    async def get_layer(self, layer_name: str, settings: Settings | None = None) -> dict[str, Any] | None:
         if layer_name not in ALLOWED_GEO_LAYERS:
             return None
         observation = await self.session.scalar(
@@ -40,6 +40,20 @@ class GeoService:
         )
         if observation is not None:
             return observation.raw_payload
+        if settings is not None:
+            await self.ingest_live(settings, [layer_name])
+            observation = await self.session.scalar(
+                select(SourceObservation)
+                .where(
+                    SourceObservation.source == OCEANSX_SOURCE,
+                    SourceObservation.observation_type == "geo_layer",
+                    SourceObservation.source_record_id == layer_name,
+                )
+                .order_by(desc(SourceObservation.fetched_at))
+                .limit(1)
+            )
+            if observation is not None:
+                return observation.raw_payload
         return None
 
     async def ingest_live(self, settings: Settings, layer_names: list[str] | None = None) -> dict[str, Any]:

@@ -176,8 +176,8 @@ export function getVesselEvents(vesselId: number) {
   return getJson<VesselEvent[]>(`/api/vessels/${vesselId}/events?limit=20`);
 }
 
-export function searchEntities(query: string, limit = 20) {
-  return getJson<Entity[]>(`/api/entities/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+export function searchEntities(query: string, limit = 20, offset = 0) {
+  return getJson<Entity[]>(`/api/entities/search?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`);
 }
 
 export function getEntity(entityId: number) {
@@ -211,8 +211,8 @@ export function getRiskFeed(limit = 250, includeResolved = false, flagTypes?: st
   return getJson<RiskFeedItem[]>(`/api/risk/feed?${params.toString()}`);
 }
 
-export function getEntitiesList(limit = 50) {
-  return getJson<Entity[]>(`/api/entities?limit=${limit}`);
+export function getEntitiesList(limit = 50, offset = 0) {
+  return getJson<Entity[]>(`/api/entities?limit=${limit}&offset=${offset}`);
 }
 
 export type NewsArticleItem = {

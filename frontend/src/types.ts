@@ -134,6 +134,7 @@ export type Entity = {
   external_id: string | null;
   created_at: string;
   updated_at: string;
+  unique_vessel_count?: number;
 };
 
 export type EntityRelationship = {

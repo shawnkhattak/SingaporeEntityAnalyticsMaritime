@@ -1,5 +1,4 @@
 import {
-  Activity,
   Anchor,
   CheckCircle2,
   ChevronDown,
@@ -18,9 +17,9 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { getVessel, getVesselEvents, getVesselObservations, getVesselRiskFlags, runMovements, runParticulars, runRiskRecompute } from "../../api";
 import { formatDate, formatRelative, parseBackendDate } from "../../format";
-import { closeInspectorRoute } from "../../hooks/useRoute";
+import { closeInspectorRoute, navigateBack, useRoute } from "../../hooks/useRoute";
 import { requestMapCenter } from "../../hooks/useMapCenter";
-import { countryName, flagEmoji, vesselTypeLabel } from "../../labels";
+import { countryName, displaySeverity, flagEmoji, riskLabel, vesselTypeLabel } from "../../labels";
 import { recordRecentVessel, useApp, useJobRunner, useSelection, useToasts } from "../../state/AppState";
 import type { RiskFlag, VesselDetail, VesselEvent, VesselObservation, VesselPosition, VesselSummary } from "../../types";
 import { Button } from "../primitives/Button";
@@ -28,6 +27,7 @@ import { EmptyState } from "../primitives/EmptyState";
 import { ErrorState } from "../primitives/ErrorState";
 import { EvidenceLink } from "../primitives/EvidenceLink";
 import { Skeleton } from "../primitives/Skeleton";
+import { Tabs } from "../primitives/Tabs";
 import { InspectorShell } from "./InspectorShell";
 import { RiskCard } from "./RiskCard";
 
@@ -46,10 +46,12 @@ export function VesselDetailInspector({ id }: { id: number }) {
   const [data, setData] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState(0);
   const { dispatch } = useApp();
   const { select } = useSelection();
   const runJob = useJobRunner();
   const toasts = useToasts();
+  const route = useRoute();
 
   function load() {
     setLoading(true);
@@ -65,7 +67,7 @@ export function VesselDetailInspector({ id }: { id: number }) {
           requestMapCenter({
             lng: detail.latest_position.longitude,
             lat: detail.latest_position.latitude,
-            zoom: 8,
+            zoom: 12,
           });
         }
       })
@@ -79,8 +81,15 @@ export function VesselDetailInspector({ id }: { id: number }) {
   }, [id]);
 
   if (loading && !data) {
+    const fallback = route.name === "vessel-detail" && route.from === "risk" ? "/risk" : "/vessels";
     return (
-      <InspectorShell breadcrumb="Vessel" title="Loading vessel" onClose={closeInspectorRoute}>
+      <InspectorShell
+        breadcrumb="Vessel"
+        title="Loading vessel"
+        onBack={() => navigateBack(fallback)}
+        backLabel={fallback === "/risk" ? "Back to Risk & Sanctions" : "Back to vessels"}
+        onClose={closeInspectorRoute}
+      >
         <div className="vessel-panel-loading">
           <Skeleton height={92} />
           <Skeleton height={58} />
@@ -91,8 +100,15 @@ export function VesselDetailInspector({ id }: { id: number }) {
   }
 
   if (error || !data) {
+    const fallback = route.name === "vessel-detail" && route.from === "risk" ? "/risk" : "/vessels";
     return (
-      <InspectorShell breadcrumb="Vessel" title="Could not load" onClose={closeInspectorRoute}>
+      <InspectorShell
+        breadcrumb="Vessel"
+        title="Could not load"
+        onBack={() => navigateBack(fallback)}
+        backLabel={fallback === "/risk" ? "Back to Risk & Sanctions" : "Back to vessels"}
+        onClose={closeInspectorRoute}
+      >
         <ErrorState title="Vessel unavailable" body={error ?? "No data."} onRetry={load} />
       </InspectorShell>
     );
@@ -102,9 +118,11 @@ export function VesselDetailInspector({ id }: { id: number }) {
   const latest = data.detail.latest_position;
   const activeRisk = data.risk.filter((flag) => flag.status !== "resolved");
   const topRisk = highestRisk(activeRisk);
-  const riskTone = topRisk?.severity ? (topRisk.severity as RiskTone) : activeRisk.length > 0 ? "unknown" : "clear";
+  const riskTone = topRisk?.severity ? (displaySeverity(topRisk.severity) as RiskTone) : activeRisk.length > 0 ? "unknown" : "clear";
   const sourceCounts = sourceConfidence(data.observations, data.events, data.risk);
   const positionObservations = data.observations.filter((obs) => obs.observation_type === "vessel_position");
+  const detailFallback = route.name === "vessel-detail" && route.from === "risk" ? "/risk" : "/vessels";
+  const detailBackLabel = detailFallback === "/risk" ? "Back to Risk & Sanctions" : "Back to vessels";
 
   const fromRisk = (() => {
     try { return sessionStorage.getItem("seam:return-to-risk") === "1"; } catch { return false; }
@@ -151,12 +169,12 @@ export function VesselDetailInspector({ id }: { id: number }) {
   const footer = (
     <div className="vessel-action-bar">
       <Button variant="primary" size="sm" leadingIcon={<RefreshCw size={12} />} onClick={refreshAll}>
-        Refresh all
+        Refresh vessel data
       </Button>
       <MoreActionsMenu
         items={[
           { label: "Refresh particulars", icon: <RefreshCw size={12} />, onClick: refreshParticulars },
-          { label: "Refresh movements", icon: <RefreshCw size={12} />, onClick: refreshMovements },
+          { label: "Refresh movement data", icon: <RefreshCw size={12} />, onClick: refreshMovements },
           { label: "Refresh risk", icon: <ShieldAlert size={12} />, onClick: refreshRisk },
           { label: "Copy summary", icon: <Copy size={12} />, onClick: copySummary },
         ]}
@@ -166,8 +184,10 @@ export function VesselDetailInspector({ id }: { id: number }) {
 
   return (
     <InspectorShell
-      breadcrumb={fromRisk ? "Risk feed -> Vessel" : "Vessel"}
+      breadcrumb={fromRisk ? "Risk Feed › Vessel" : "Vessel"}
       title={v.name}
+      onBack={() => navigateBack(detailFallback)}
+      backLabel={detailBackLabel}
       onClose={() => {
         try { sessionStorage.removeItem("seam:return-to-risk"); } catch { /* ignore */ }
         closeInspectorRoute();
@@ -179,38 +199,50 @@ export function VesselDetailInspector({ id }: { id: number }) {
           vessel={v}
           latest={latest}
           riskTone={riskTone}
-          activeRiskCount={activeRisk.length}
-          sourceCounts={sourceCounts}
+          riskReasons={uniqueRiskTitles(activeRisk)}
         />
 
-        <div className="vessel-tab-surface">
-          <MovementSummaryCard latest={latest} observationCount={data.observations.length} />
+        <Tabs
+          className="vessel-subtabs"
+          items={[
+            { label: "Overview" },
+            { label: "History & Sources", count: data.observations.length + data.events.length },
+          ]}
+          active={tab}
+          onChange={setTab}
+        />
 
-          <RiskInvestigationHeader risk={data.risk} />
-          {data.risk.length === 0 ? (
-            <EmptyState compact icon={<CheckCircle2 size={18} />} title="No risk flags" body="This vessel currently has no active or historical risk signals." />
-          ) : (
-            <div className="vessel-risk-list">
-              {data.risk.map((flag) => (
-                <RiskCard key={flag.id} flag={flag} subject={v.name} vesselId={id} hideSubject onOpenSubject={() => undefined} />
-              ))}
-            </div>
-          )}
+        {tab === 0 && (
+          <div className="vessel-tab-surface">
+            <MovementSummaryCard latest={latest} />
 
-          <PositionHistory observations={positionObservations.length > 0 ? positionObservations : data.observations} />
-          <PortCalls events={data.events} />
+            {data.risk.length === 0 ? (
+              <EmptyState compact icon={<CheckCircle2 size={18} />} title="No risk flags" body="This vessel currently has no active or historical risk signals." />
+            ) : (
+              <div className="vessel-risk-list">
+                {data.risk.map((flag) => (
+                  <RiskCard key={flag.id} flag={flag} subject={v.name} vesselId={id} hideSubject onOpenSubject={() => undefined} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-          <SourcesView
-            detail={data.detail}
-            observations={data.observations}
-            events={data.events}
-            risk={data.risk}
-            sourceCounts={sourceCounts}
-            onRefreshParticulars={refreshParticulars}
-            onRefreshMovements={refreshMovements}
-            onRefreshRisk={refreshRisk}
-          />
-        </div>
+        {tab === 1 && (
+          <div className="vessel-tab-surface">
+            <PositionHistory observations={positionObservations.length > 0 ? positionObservations : data.observations} />
+            <PortCalls events={data.events} onRefreshMovements={refreshMovements} />
+            <SourcesView
+              detail={data.detail}
+              events={data.events}
+              risk={data.risk}
+              sourceCounts={sourceCounts}
+              onRefreshParticulars={refreshParticulars}
+              onRefreshMovements={refreshMovements}
+              onRefreshRisk={refreshRisk}
+            />
+          </div>
+        )}
       </div>
     </InspectorShell>
   );
@@ -220,12 +252,12 @@ function VesselSummaryCard({
   vessel,
   latest,
   riskTone,
+  riskReasons,
 }: {
   vessel: VesselSummary;
   latest: VesselPosition | null;
   riskTone: RiskTone;
-  activeRiskCount: number;
-  sourceCounts: SourceCounts;
+  riskReasons: string[];
 }) {
   const specs: { label: string; value: string }[] = [];
   if (vessel.year_built != null) specs.push({ label: "Year built", value: String(vessel.year_built) });
@@ -236,6 +268,12 @@ function VesselSummaryCard({
   if (vessel.breadth_meters != null) specs.push({ label: "Breadth", value: `${vessel.breadth_meters} m` });
   if (vessel.depth_meters != null) specs.push({ label: "Depth", value: `${vessel.depth_meters} m` });
 
+  const visibleReasons = riskReasons.slice(0, 4);
+  const hiddenReasonCount = Math.max(0, riskReasons.length - visibleReasons.length);
+  const statusLine = latest
+    ? `Last seen ${formatRelative(latest.position_timestamp)}${latest.speed_knots != null ? ` · ${latest.speed_knots.toFixed(1)} kn` : ""}`
+    : "Last seen unknown";
+
   return (
     <section className={`vessel-hero vessel-summary-v2 vessel-risk-${riskTone}`}>
       <div className="vessel-hero-title-row">
@@ -245,14 +283,24 @@ function VesselSummaryCard({
         </div>
         <RiskStatusBadge tone={riskTone} />
       </div>
+      {visibleReasons.length > 0 && (
+        <div className={`vessel-risk-reasons vessel-risk-${riskTone}`}>
+          {visibleReasons.map((reason) => (
+            <span key={reason} className="vessel-risk-reason-chip">{reason}</span>
+          ))}
+          {hiddenReasonCount > 0 && (
+            <span className="vessel-risk-reason-chip is-more">+{hiddenReasonCount} more</span>
+          )}
+        </div>
+      )}
+      <div className="vessel-hero-seen">
+        <Clock size={12} />
+        <span>{statusLine}</span>
+      </div>
       <div className="vessel-hero-meta">
         <span>{formatIdentifier("IMO", vessel.imo)}</span>
         <span>{formatIdentifier("MMSI", vessel.mmsi)}</span>
         <span>{formatIdentifier("Call Sign", vessel.call_sign)}</span>
-      </div>
-      <div className="vessel-hero-seen">
-        <Clock size={12} />
-        <span>{latest ? `Last seen ${formatRelative(latest.position_timestamp)}` : "Last seen unknown"}</span>
       </div>
       {specs.length > 0 && (
         <div className="vessel-spec-row">
@@ -327,46 +375,25 @@ function MoreActionsMenu({
   );
 }
 
-function MovementSummaryCard({ latest, observationCount, expanded = false }: { latest: VesselPosition | null; observationCount: number; expanded?: boolean }) {
+function MovementSummaryCard({ latest }: { latest: VesselPosition | null }) {
+  const isStationary = latest?.speed_knots == null || latest.speed_knots < 0.5;
+  const title = isStationary ? "Current position" : "Current movement";
+  const coords = latest ? formatCoordinatePair(latest.latitude, latest.longitude) : "Unknown";
+  const speed = latest ? formatKnots(latest.speed_knots) : "Unknown";
+  const lastReport = latest ? formatRelative(latest.position_timestamp) : "Unknown";
   return (
-    <SectionCard title="Current movement" icon={<Compass size={15} />} action={latest ? <a href={`/evidence/${latest.evidence_id ?? ""}`} className={latest.evidence_id ? "" : "hidden"}>View track</a> : null}>
-      <div className="movement-grid">
-        <SpecTile label="Coordinates" value={latest ? formatCoordinatePair(latest.latitude, latest.longitude) : "Unknown"} icon={<MapPin size={13} />} />
-        <SpecTile label="Speed" value={latest ? formatKnots(latest.speed_knots) : "Unknown"} icon={<Gauge size={13} />} muted={!latest?.speed_knots} />
-        <SpecTile label="Last position" value={latest ? formatRelative(latest.position_timestamp) : "Unknown"} icon={<Clock size={13} />} />
-        {expanded && <SpecTile label="Position records" value={observationCount.toLocaleString()} icon={<FileText size={13} />} />}
-        {expanded && <SpecTile label="Status" value={latest ? movementState(latest) : "No position data"} icon={<Activity size={13} />} />}
+    <section className="movement-compact">
+      <div className="movement-compact-head">
+        <Compass size={13} />
+        <strong>{title}</strong>
+        {latest?.evidence_id != null && (
+          <a className="movement-compact-action" href={`/evidence/${latest.evidence_id}`}>View track</a>
+        )}
       </div>
-    </SectionCard>
-  );
-}
-
-function SourceConfidenceMatrix({ sourceCounts }: { sourceCounts: SourceCounts }) {
-  return (
-    <SectionCard title="Source confidence" icon={<Database size={15} />}>
-      <div className="confidence-matrix">
-        <ConfidenceCell label="Identity" value={sourceCounts.identity} hint="Sources that contributed identity or particulars data" />
-        <ConfidenceCell label="Position" value={sourceCounts.position} hint="Sources that contributed position observations" />
-        <ConfidenceCell label="Movements" value={sourceCounts.movements} hint="Port events or movement observations" />
-        <ConfidenceCell label="Risk" value={sourceCounts.risk} hint="Risk flags and evidence signals" />
-      </div>
-    </SectionCard>
-  );
-}
-
-function RiskInvestigationHeader({ risk }: { risk: RiskFlag[] }) {
-  const active = risk.filter((flag) => flag.status !== "resolved");
-  const top = highestRisk(active);
-  return (
-    <section className={`risk-investigation-head vessel-risk-${top?.severity ?? (active.length ? "unknown" : "clear")}`}>
-      <div>
-        <div className="vessel-kicker">Investigation view</div>
-        <h3>{active.length > 0 ? `${active.length} active risk flag${active.length === 1 ? "" : "s"}` : "No active risk flags"}</h3>
-      </div>
-      <div className="risk-investigation-stats">
-        <MiniStat label="Highest" value={top ? titleCase(top.severity) : "Clear"} />
-        <MiniStat label="Total" value={risk.length.toLocaleString()} />
-        <MiniStat label="Last refresh" value={risk[0] ? formatRelative(risk[0].created_at) : "None"} />
+      <div className="movement-compact-row">
+        <span><MapPin size={11} /> {coords}</span>
+        <span><Gauge size={11} /> {speed}</span>
+        <span><Clock size={11} /> {lastReport}</span>
       </div>
     </section>
   );
@@ -376,33 +403,67 @@ function PositionHistory({ observations }: { observations: VesselObservation[] }
   if (observations.length === 0) {
     return <EmptyState icon={<MapPin size={18} />} title="No position history" body="No recorded vessel source observations are available yet." />;
   }
+
+  type Group = { firstObs: VesselObservation; lat: string; lon: string; speed: string; source: string; count: number };
+  const groups: Group[] = [];
+  for (const obs of observations) {
+    const row = observationPosition(obs);
+    const stationary = row.speed !== "Unknown" && row.speed.startsWith("0.0");
+    const prev = groups[groups.length - 1];
+    if (
+      prev &&
+      stationary &&
+      prev.source === obs.source &&
+      prev.lat === row.lat &&
+      prev.lon === row.lon &&
+      prev.speed.startsWith("0.0")
+    ) {
+      prev.count += 1;
+      continue;
+    }
+    groups.push({ firstObs: obs, lat: row.lat, lon: row.lon, speed: row.speed, source: obs.source, count: 1 });
+  }
+
   return (
     <SectionCard title="Position history" icon={<FileText size={15} />}>
       <div className="position-history-table">
         <div className="position-history-head">
-          <span>Time</span><span>Latitude</span><span>Longitude</span><span>Speed</span><span>Course</span><span>Source</span>
+          <span>Time</span><span>Position</span><span>Speed</span><span>Source</span>
         </div>
-        {observations.map((obs) => {
-          const row = observationPosition(obs);
-          return (
-            <a key={obs.id} href={`/evidence/${obs.id}`} className="position-history-row">
-              <span>{formatDate(obs.observed_at ?? obs.fetched_at)}</span>
-              <span>{row.lat}</span>
-              <span>{row.lon}</span>
-              <span>{row.speed}</span>
-              <span>{row.course}</span>
-              <span>{obs.source}</span>
+        {groups.map((group) => (
+          <div key={group.firstObs.id} className="position-history-group">
+            <a href={`/evidence/${group.firstObs.id}`} className="position-history-row">
+              <span>{formatDate(group.firstObs.observed_at ?? group.firstObs.fetched_at)}</span>
+              <span className="mono">{group.lat}, {group.lon}</span>
+              <span>{group.speed}</span>
+              <span>{group.source}</span>
             </a>
-          );
-        })}
+            {group.count > 1 && (
+              <div className="position-history-note">
+                Repeated stationary reports from {group.source} (×{group.count})
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </SectionCard>
   );
 }
 
-function PortCalls({ events }: { events: VesselEvent[] }) {
+function PortCalls({ events, onRefreshMovements }: { events: VesselEvent[]; onRefreshMovements: () => void }) {
   if (events.length === 0) {
-    return <EmptyState icon={<Anchor size={18} />} title="No port calls loaded" body="Refresh movements to pull port calls when the source provides them." />;
+    return (
+      <EmptyState
+        icon={<Anchor size={18} />}
+        title="No port calls available"
+        body="No arrival or departure events have been recorded yet."
+        action={
+          <Button size="sm" leadingIcon={<RefreshCw size={12} />} onClick={onRefreshMovements}>
+            Refresh movement data
+          </Button>
+        }
+      />
+    );
   }
   return (
     <SectionCard title="Port calls" icon={<Anchor size={15} />}>
@@ -427,7 +488,6 @@ function PortCalls({ events }: { events: VesselEvent[] }) {
 
 function SourcesView({
   detail,
-  observations,
   events,
   risk,
   sourceCounts,
@@ -436,7 +496,6 @@ function SourcesView({
   onRefreshRisk,
 }: {
   detail: VesselDetail;
-  observations: VesselObservation[];
   events: VesselEvent[];
   risk: RiskFlag[];
   sourceCounts: SourceCounts;
@@ -446,31 +505,17 @@ function SourcesView({
 }) {
   return (
     <div className="sources-view">
-      <SourceConfidenceMatrix sourceCounts={sourceCounts} />
-      <SectionCard title="Refresh controls" icon={<RefreshCw size={15} />}>
+      <details className="sources-collapsed">
+        <summary>
+          <RefreshCw size={12} />
+          <span>Source controls</span>
+        </summary>
         <div className="source-refresh-grid">
-          <SourceRefreshItem title="Identity sources" sub={`${sourceCounts.identity} sources - last ${latestTimestampLabel(detail.source_timestamps)}`} action="Refresh particulars" onClick={onRefreshParticulars} />
-          <SourceRefreshItem title="Movement sources" sub={`${events.length} port events - ${sourceCounts.movements} movement sources`} action="Refresh movements" onClick={onRefreshMovements} />
-          <SourceRefreshItem title="Risk sources" sub={`${risk.length} risk flags - ${risk.filter((f) => f.evidence_id != null).length} evidence links`} action="Refresh risk" onClick={onRefreshRisk} />
+          <SourceRefreshItem title="Identity sources" sub={`${sourceCounts.identity} sources · last ${latestTimestampLabel(detail.source_timestamps)}`} action="Refresh particulars" onClick={onRefreshParticulars} />
+          <SourceRefreshItem title="Movement sources" sub={`${events.length} port events · ${sourceCounts.movements} movement sources`} action="Refresh movement data" onClick={onRefreshMovements} />
+          <SourceRefreshItem title="Risk sources" sub={`${risk.length} risk flags · ${risk.filter((f) => f.evidence_id != null).length} evidence links`} action="Refresh risk" onClick={onRefreshRisk} />
         </div>
-      </SectionCard>
-      <SectionCard title="Evidence and observations" icon={<FileText size={15} />}>
-        <div className="source-observation-list">
-          {detail.evidence_ids.map((evidenceId) => (
-            <div key={evidenceId} className="source-observation-row">
-              <span>Evidence record</span>
-              <EvidenceLink id={evidenceId} variant="chip" />
-            </div>
-          ))}
-          {observations.slice(0, 10).map((obs) => (
-            <a key={obs.id} href={`/evidence/${obs.id}`} className="source-observation-row">
-              <span>{obs.source}</span>
-              <span>{obs.observation_type}</span>
-              <span>{formatDate(obs.observed_at ?? obs.fetched_at)}</span>
-            </a>
-          ))}
-        </div>
-      </SectionCard>
+      </details>
     </div>
   );
 }
@@ -487,36 +532,6 @@ function SectionCard({ title, icon, action, children }: { title: string; icon?: 
   );
 }
 
-function SpecTile({ label, value, icon, muted = false }: { label: string; value: ReactNode; icon: ReactNode; muted?: boolean }) {
-  return (
-    <div className={`spec-tile ${muted ? "is-muted" : ""}`}>
-      <div className="spec-tile-icon">{icon}</div>
-      <div>
-        <span>{label}</span>
-        <strong>{value}</strong>
-      </div>
-    </div>
-  );
-}
-
-function ConfidenceCell({ label, value, hint }: { label: string; value: number; hint: string }) {
-  return (
-    <div className={`confidence-cell ${value > 0 ? "has-source" : ""}`} title={hint}>
-      <span>{label}</span>
-      <strong>{value > 0 ? value : "No data"}</strong>
-    </div>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="mini-stat">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
 function SourceRefreshItem({ title, sub, action, onClick }: { title: string; sub: string; action: string; onClick: () => void }) {
   return (
     <div className="source-refresh-item">
@@ -530,7 +545,7 @@ function SourceRefreshItem({ title, sub, action, onClick }: { title: string; sub
 }
 
 function RiskStatusBadge({ tone }: { tone: RiskTone }) {
-  const label = tone === "clear" ? "Clear" : `${titleCase(tone)} Risk`;
+  const label = tone === "clear" ? "No active risk found" : `${titleCase(tone)} Risk`;
   return <span className={`risk-status-badge vessel-risk-${tone}`}>{label}</span>;
 }
 
@@ -562,6 +577,19 @@ function sourceConfidence(observations: VesselObservation[], events: VesselEvent
     risk: risk.length > 0 ? 1 : 0,
     totalSources: allSources.size + (events.length > 0 && !allSources.has("Port events") ? 1 : 0),
   };
+}
+
+function uniqueRiskTitles(flags: RiskFlag[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const flag of flags) {
+    const title = riskLabel(flag.flag_type).title;
+    if (!seen.has(title)) {
+      seen.add(title);
+      out.push(title);
+    }
+  }
+  return out;
 }
 
 function highestRisk(flags: RiskFlag[]): RiskFlag | null {
@@ -596,12 +624,6 @@ function formatCoordinatePair(lat: number | null | undefined, lon: number | null
 
 function formatKnots(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)} kn` : "Unknown speed";
-}
-
-function movementState(latest: VesselPosition): string {
-  if (latest.speed_knots == null) return "Speed unknown";
-  if (latest.speed_knots < 0.5) return "Stationary";
-  return "Underway";
 }
 
 function observationPosition(obs: VesselObservation): { lat: string; lon: string; speed: string; course: string } {

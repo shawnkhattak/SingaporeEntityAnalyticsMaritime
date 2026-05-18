@@ -1,4 +1,4 @@
-import { Database } from "lucide-react";
+import { ArrowUpRight, Database } from "lucide-react";
 import { navigateTo } from "../../hooks/useRoute";
 
 type Variant = "inline" | "chip" | "button";
@@ -28,9 +28,16 @@ export function EvidenceLink({ id, variant = "inline", label, className = "", on
 
   if (variant === "chip") {
     return (
-      <button type="button" onClick={handleClick} className={`pill info ${className}`.trim()} style={{ cursor: "pointer", border: 0 }}>
-        <Database size={10} />
-        <span className="mono">#{id}</span>
+      <button
+        type="button"
+        onClick={handleClick}
+        title="Open evidence record"
+        aria-label={`Open evidence record #${id}`}
+        className={`evidence-chip ${className}`.trim()}
+      >
+        <Database size={11} />
+        <span className="mono">Evidence #{id}</span>
+        <ArrowUpRight size={11} className="evidence-chip-chevron" />
       </button>
     );
   }

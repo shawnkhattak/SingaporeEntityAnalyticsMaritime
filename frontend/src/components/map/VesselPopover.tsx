@@ -15,10 +15,23 @@ type VesselPopoverProps = {
 };
 
 export function VesselPopover({ x, y, vessel, severity, flags, onClose }: VesselPopoverProps) {
-  const top = flags.find((f) => f.status !== "resolved");
+  const activeFlags = flags.filter((f) => f.status !== "resolved");
+  const top = activeFlags[0];
   const flagName = countryName(vessel.flag_country_code);
   const flagGlyph = flagEmoji(vessel.flag_country_code);
   const type = vesselTypeLabel(vessel.vessel_type_code);
+
+  const seenReasons = new Set<string>();
+  const riskReasons: string[] = [];
+  for (const f of activeFlags) {
+    const title = riskLabel(f.flag_type).title;
+    if (!seenReasons.has(title)) {
+      seenReasons.add(title);
+      riskReasons.push(title);
+    }
+    if (riskReasons.length >= 3) break;
+  }
+  const hasRisk = activeFlags.length > 0;
 
   return (
     <div
@@ -66,10 +79,15 @@ export function VesselPopover({ x, y, vessel, severity, flags, onClose }: Vessel
       </div>
       <div className="t-faded" style={{ fontSize: 10, marginTop: 2 }}>{formatDate(vessel.position_timestamp)}</div>
 
-      {top && (
-        <div className="row" style={{ marginTop: 6, gap: 4, flexWrap: "wrap" }}>
-          <RiskPill severity={severity as never} label={riskLabel(top.flag_type).title} />
+      {hasRisk ? (
+        <div className="col" style={{ marginTop: 6, gap: 4 }}>
+          <RiskPill severity={severity as never} label={top ? riskLabel(top.flag_type).title : `${severity} risk`} />
+          {riskReasons.length > 1 && (
+            <div className="t-faded" style={{ fontSize: 10 }}>{riskReasons.slice(1).join(" · ")}</div>
+          )}
         </div>
+      ) : (
+        <div className="t-faded" style={{ fontSize: 11, marginTop: 6 }}>No active risk found</div>
       )}
 
       {/* Action row: icon-only, no big "Open vessel" button. The click
@@ -88,12 +106,12 @@ export function VesselPopover({ x, y, vessel, severity, flags, onClose }: Vessel
         )}
         <button
           className="btn ghost sm"
-          aria-label="Open vessel detail"
-          title="Open vessel"
+          aria-label="Open investigation"
+          title="Open investigation"
           onClick={() => navigateTo(`/vessels/${vessel.vessel_id}`)}
         >
           <ChevronRight size={12} />
-          Details
+          Open investigation
         </button>
       </div>
     </div>

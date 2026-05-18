@@ -90,6 +90,8 @@ export function Shell() {
   const inspectorVisible = isInspectorRoute(route);
   const fullCanvas = isFullCanvas(route);
   const focusMode = fullCanvas ? "workspace" : "map";
+  const [renderedInspectorRoute, setRenderedInspectorRoute] = useState<RouteState | null>(() => (inspectorVisible ? route : null));
+  const [inspectorExiting, setInspectorExiting] = useState(false);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setBooting(false), 760);
@@ -109,6 +111,21 @@ export function Shell() {
     if (inspectorVisible) openInspector();
     else closeInspector();
   }, [inspectorVisible, openInspector, closeInspector]);
+
+  useEffect(() => {
+    if (inspectorVisible) {
+      setRenderedInspectorRoute(route);
+      setInspectorExiting(false);
+      return;
+    }
+    if (!renderedInspectorRoute) return;
+    setInspectorExiting(true);
+    const timeout = window.setTimeout(() => {
+      setRenderedInspectorRoute(null);
+      setInspectorExiting(false);
+    }, 220);
+    return () => window.clearTimeout(timeout);
+  }, [inspectorVisible, route, renderedInspectorRoute]);
 
   useEffect(() => {
     if (route.name === "map" && state.selected) {
@@ -220,10 +237,12 @@ export function Shell() {
             <Suspense fallback={<WorkspaceLoadingFallback />}>{renderFullCanvas(route)}</Suspense>
           </ErrorBoundary>
         </FullCanvas>
-      ) : inspectorVisible ? (
-        <ErrorBoundary key={inspectorKey(route)}>
-          <Suspense fallback={<InspectorLoadingFallback />}>{renderInspector(route)}</Suspense>
-        </ErrorBoundary>
+      ) : renderedInspectorRoute ? (
+        <div className={inspectorExiting ? "inspector-exiting" : undefined}>
+          <ErrorBoundary key={inspectorKey(renderedInspectorRoute)}>
+            <Suspense fallback={<InspectorLoadingFallback />}>{renderInspector(renderedInspectorRoute)}</Suspense>
+          </ErrorBoundary>
+        </div>
       ) : null}
       <ToastViewport />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

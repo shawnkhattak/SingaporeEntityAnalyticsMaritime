@@ -15,6 +15,7 @@ class EntityRead(BaseModel):
     external_id: str | None
     created_at: datetime
     updated_at: datetime
+    unique_vessel_count: int = 0
 
 
 class EntityRelationshipRead(BaseModel):

@@ -221,7 +221,7 @@ export function OpsConsole() {
   const [referenceSummary, setReferenceSummary] = useState<Record<string, number>>({});
   const [browseRows, setBrowseRows] = useState<DevVesselBrowseRow[]>([]);
   const [browseQuery, setBrowseQuery] = useState("");
-  const [riskFilter, setRiskFilter] = useState<"all" | "flagged" | "critical" | "high" | "medium" | "low">("all");
+  const [riskFilter, setRiskFilter] = useState<"all" | "flagged" | "critical" | "medium" | "low">("all");
   const [flagFilter, setFlagFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [missingIdFilter, setMissingIdFilter] = useState<boolean>(false);
@@ -310,7 +310,8 @@ export function OpsConsole() {
   const filteredBrowse = useMemo(() => {
     const filtered = browseRows.filter((row) => {
       if (riskFilter === "flagged" && row.risk_flags_count <= 0) return false;
-      if (riskFilter !== "all" && riskFilter !== "flagged" && row.highest_risk_severity !== riskFilter) return false;
+      if (riskFilter === "critical" && row.highest_risk_severity !== "critical" && row.highest_risk_severity !== "high") return false;
+      if (riskFilter !== "all" && riskFilter !== "flagged" && riskFilter !== "critical" && row.highest_risk_severity !== riskFilter) return false;
       if (flagFilter !== "all" && row.flag_country_code !== flagFilter) return false;
       if (typeFilter !== "all" && row.vessel_type_code !== typeFilter) return false;
       if (missingIdFilter && row.imo && row.mmsi) return false;
@@ -644,7 +645,7 @@ export function OpsConsole() {
           fill
         >
           <div className="table-wrap scroll ops-jobs-table-wrap">
-            <table className="table ops-jobs-table">
+          <table className="table ops-jobs-table">
               <thead>
                 <tr>
                   <th>Job</th>
@@ -666,7 +667,7 @@ export function OpsConsole() {
                       </td>
                       <td><JobPill status={classifyJob(job.status)} label={job.status} /></td>
                       <td className="t-faded" style={{ fontSize: 11 }}>{String(job.parameters?.mode ?? "—")}</td>
-                      <td className="t-faded" style={{ fontSize: 11 }}>{formatDate(job.started_at)}</td>
+                      <td className="t-faded ops-table-time" style={{ fontSize: 11 }}>{formatDate(job.started_at)}</td>
                     </tr>
                   );
                 })}
@@ -748,7 +749,6 @@ export function OpsConsole() {
             <option value="all">Any risk</option>
             <option value="flagged">Any flag</option>
             <option value="critical">Critical</option>
-            <option value="high">High</option>
             <option value="medium">Medium</option>
             <option value="low">Low</option>
           </select>
@@ -810,7 +810,7 @@ export function OpsConsole() {
           <Button size="sm" onClick={exportBrowseCsv}>Export CSV</Button>
         </div>
         <div className="table-wrap scroll ops-vessel-table-wrap">
-          <table className="table">
+          <table className="table ops-vessel-table">
             <thead>
               <tr>
                 <th>Vessel</th>
@@ -837,10 +837,10 @@ export function OpsConsole() {
                 visible.map((row) => (
                   <tr key={row.vessel_id}>
                     <td><a className="ops-table-link" href={`/vessels/${row.vessel_id}`} title={row.name}>{row.name}</a></td>
-                    <td className="mono" style={{ fontSize: 11 }}>
+                    <td className="mono ops-id-cell" style={{ fontSize: 11 }}>
                       {row.imo ?? row.mmsi ?? row.call_sign ?? "—"}
                     </td>
-                    <td className="mono" style={{ fontSize: 11 }}>
+                    <td className="mono ops-position-cell" style={{ fontSize: 11 }}>
                       {row.latest_position
                         ? `${row.latest_position.latitude.toFixed(2)}, ${row.latest_position.longitude.toFixed(2)}`
                         : "—"}
@@ -871,11 +871,11 @@ export function OpsConsole() {
                         {row.risk_flag_types.join(", ") || "—"}
                       </span>
                     </td>
-                    <td className="t-faded" style={{ fontSize: 11 }}>
+                    <td className="t-faded ops-table-time" style={{ fontSize: 11 }}>
                       {formatDate(row.latest_position?.position_timestamp ?? row.source_updated_at)}
                     </td>
                     <td>
-                      <a href={`/vessels/${row.vessel_id}`} className="row" style={{ gap: 4, fontSize: 11 }}>
+                      <a href={`/vessels/${row.vessel_id}`} className="row ops-profile-link" style={{ gap: 4, fontSize: 11 }}>
                         <MapIcon size={11} /> View profile
                       </a>
                     </td>
@@ -1141,17 +1141,7 @@ function IssueRow({
   const accent = tone === "crit" ? "var(--risk-critical)" : "var(--risk-medium)";
   const bg = tone === "crit" ? "rgba(198,40,40,.05)" : "rgba(229,148,19,.06)";
   return (
-    <div
-      style={{
-        padding: 10,
-        background: bg,
-        borderLeft: `3px solid ${accent}`,
-        borderRadius: "var(--r-card)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 4,
-      }}
-    >
+    <div className="ops-issue-row" style={{ background: bg, borderLeftColor: accent }}>
       <div style={{ fontWeight: 600, fontSize: 13, color: "var(--navy-900)" }}>{title}</div>
       <div className="t-faded" style={{ fontSize: 11 }}>
         Last seen {when ? formatDate(when) : "unknown"} · Affects {area}

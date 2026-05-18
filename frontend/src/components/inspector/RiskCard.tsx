@@ -48,10 +48,8 @@ export function RiskCard({ flag, subject, evidencePayload, conflictDetails, vess
   const runJob = useJobRunner();
   const label = riskLabel(flag.flag_type);
   const stripeTone =
-    flag.severity === "critical"
+    flag.severity === "critical" || flag.severity === "high"
       ? "stripe-crit"
-      : flag.severity === "high"
-      ? "stripe-high"
       : flag.severity === "medium"
       ? "stripe-med"
       : "stripe-low";
@@ -67,18 +65,18 @@ export function RiskCard({ flag, subject, evidencePayload, conflictDetails, vess
   const sourceDescription = label.body;
 
   return (
-    <div className={`card ${stripeTone}`} style={{ padding: "10px 12px 10px 14px" }}>
-      {/* Row 1 — risk type is now the primary heading */}
+    <div className={`card ${stripeTone}`} style={{ padding: "8px 10px 8px 12px" }}>
+      {/* Row 1 — risk type is the primary heading */}
       <div className="row" style={{ gap: 6, alignItems: "center" }}>
         <span style={{ color: label.toneClass === "crit" ? "var(--risk-critical)" : "var(--navy-700)" }}>
           {KIND_ICONS[label.kind]}
         </span>
-        <strong style={{ flex: 1, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <strong style={{ flex: 1, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {label.title}
         </strong>
         <RiskPill severity={flag.severity as never} />
-        <Pill variant={isResolved ? "ok" : "info"}>{isResolved ? "Resolved" : "Active"}</Pill>
-        <span className="t-faded" style={{ fontSize: 11 }} title={formatDate(flag.created_at)}>
+        {isResolved && <Pill variant="ok">Resolved</Pill>}
+        <span className="t-faded" style={{ fontSize: 10.5 }} title={formatDate(flag.created_at)}>
           {formatRelative(flag.created_at)}
         </span>
       </div>
@@ -119,25 +117,41 @@ export function RiskCard({ flag, subject, evidencePayload, conflictDetails, vess
       ) : label.kind === "high_risk_flag" ? (
         <HighRiskFlagSummary summary={flag.summary} />
       ) : (
-        <div className="t-sm" style={{ marginTop: 6, lineHeight: 1.5 }}>
-          {expanded ? sourceDescription : truncate(sourceDescription, 120)}
-          {sourceDescription.length > 120 && (
+        <div className="t-sm" style={{ marginTop: 4, lineHeight: 1.4, fontSize: 12 }}>
+          {expanded ? sourceDescription : truncate(sourceDescription, 90)}
+          {sourceDescription.length > 90 && (
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}
-              style={{ background: "none", border: 0, color: "var(--ocean-500)", cursor: "pointer", fontSize: 12, padding: 0, marginLeft: 4 }}
+              style={{ background: "none", border: 0, color: "var(--ocean-500)", cursor: "pointer", fontSize: 11.5, padding: 0, marginLeft: 4 }}
             >
               {expanded ? "less" : "more"}
             </button>
           )}
           {expanded && flag.summary && flag.summary !== sourceDescription && (
-            <div className="t-faded" style={{ fontSize: 12, marginTop: 4, fontStyle: "italic" }}>{flag.summary}</div>
+            <div className="t-faded" style={{ fontSize: 11.5, marginTop: 3, fontStyle: "italic" }}>{flag.summary}</div>
           )}
         </div>
       )}
 
+      {label.whyItMatters && (
+        <div
+          style={{
+            marginTop: 4,
+            paddingLeft: 8,
+            borderLeft: "2px solid var(--ocean-300, rgba(58,127,184,.35))",
+            color: "var(--slate-500)",
+            fontSize: 11.5,
+            lineHeight: 1.4,
+            fontStyle: "italic",
+          }}
+        >
+          {label.whyItMatters}
+        </div>
+      )}
+
       {/* Row 4 — actions */}
-      <div className="row" style={{ gap: 4, marginTop: 8, flexWrap: "wrap" }}>
+      <div className="row" style={{ gap: 4, marginTop: 6, flexWrap: "wrap" }}>
         {flag.evidence_id != null && (
           <button
             type="button"

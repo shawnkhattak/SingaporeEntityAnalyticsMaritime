@@ -627,7 +627,7 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
 .vessel-risk-list {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 5px;
 }
 .position-history-table,
 .port-call-table,
@@ -649,7 +649,18 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
 }
 .position-history-head,
 .position-history-row {
-  grid-template-columns: minmax(100px, 1.25fr) .7fr .7fr .7fr .7fr .9fr;
+  grid-template-columns: minmax(110px, 1.3fr) 1.4fr .6fr .8fr;
+}
+.position-history-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.position-history-note {
+  padding: 2px 12px 6px;
+  color: var(--slate-500);
+  font-size: 10.5px;
+  font-style: italic;
 }
 .port-call-head,
 .port-call-row {
@@ -731,6 +742,169 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
   justify-content: space-between;
 }
 .vessel-action-bar > :first-child { flex: 0 0 auto; }
+
+/* Risk reasons row inside hero — chip list summarising why the vessel
+   is flagged, capped at 4 in the inspector. Severity colour rides on
+   the surrounding .vessel-risk-* tone class. */
+.vessel-risk-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.vessel-risk-reason-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid rgba(210, 228, 240, .9);
+  background: rgba(255, 255, 255, .85);
+  color: var(--navy-700);
+  white-space: nowrap;
+}
+.vessel-risk-reason-chip.is-more {
+  color: var(--slate-500);
+  background: transparent;
+  border-style: dashed;
+}
+.vessel-risk-reasons.vessel-risk-critical .vessel-risk-reason-chip:not(.is-more) {
+  border-color: rgba(198, 40, 40, .25);
+  background: rgba(198, 40, 40, .07);
+  color: var(--risk-critical);
+}
+.vessel-risk-reasons.vessel-risk-high .vessel-risk-reason-chip:not(.is-more) {
+  border-color: rgba(224, 74, 31, .25);
+  background: rgba(224, 74, 31, .07);
+  color: var(--risk-high);
+}
+.vessel-risk-reasons.vessel-risk-medium .vessel-risk-reason-chip:not(.is-more) {
+  border-color: rgba(229, 148, 19, .26);
+  background: rgba(229, 148, 19, .08);
+  color: var(--risk-medium);
+}
+.vessel-risk-reasons.vessel-risk-low .vessel-risk-reason-chip:not(.is-more) {
+  border-color: rgba(229, 193, 0, .28);
+  background: rgba(229, 193, 0, .10);
+  color: #8a7600;
+}
+
+/* Evidence chip — strong clickable affordance. Replaces the soft "pill info" */
+.evidence-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 8px;
+  border: 1px solid var(--ocean-200, rgba(58, 127, 184, .35));
+  border-radius: 999px;
+  background: var(--white, #fff);
+  color: var(--ocean-600, #2b6da3);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--motion-fast, 120ms) var(--ease-out, ease-out),
+              border-color var(--motion-fast, 120ms) var(--ease-out, ease-out),
+              box-shadow var(--motion-fast, 120ms) var(--ease-out, ease-out);
+}
+.evidence-chip:hover,
+.evidence-chip:focus-visible {
+  background: var(--ocean-50, rgba(58, 127, 184, .08));
+  border-color: var(--ocean-500, #3A7FB8);
+  box-shadow: 0 1px 4px rgba(58, 127, 184, .14);
+  outline: none;
+}
+.evidence-chip .evidence-chip-chevron {
+  opacity: .7;
+}
+.evidence-chip:hover .evidence-chip-chevron,
+.evidence-chip:focus-visible .evidence-chip-chevron {
+  opacity: 1;
+}
+
+/* Sub-tabs inside the vessel inspector (Overview / History & Sources) */
+.vessel-subtabs {
+  gap: 16px;
+  border-bottom: 1px solid var(--gray-200);
+  padding: 0 2px;
+}
+.vessel-subtabs .tab {
+  padding: 8px 0 9px;
+  font-size: 12px;
+}
+
+/* Compact "Current position" card — single-line metric strip under the hero */
+.movement-compact {
+  border: 1px solid rgba(230, 233, 238, .95);
+  border-radius: 12px;
+  background: var(--white, #fff);
+  padding: 9px 12px 10px;
+  box-shadow: 0 4px 14px rgba(14, 34, 53, .04);
+}
+.movement-compact-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--navy-900);
+  font-size: 12px;
+}
+.movement-compact-head strong { font-size: 12.5px; }
+.movement-compact-head svg { color: var(--ocean-600); }
+.movement-compact-action {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ocean-600);
+  text-decoration: none;
+}
+.movement-compact-action:hover { text-decoration: underline; }
+.movement-compact-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--navy-700);
+}
+.movement-compact-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.movement-compact-row svg { color: var(--slate-400); }
+
+/* Source controls — collapsed details element at the bottom of Sources */
+.sources-collapsed {
+  border: 1px solid rgba(230, 233, 238, .95);
+  border-radius: 12px;
+  background: rgba(248, 249, 251, .6);
+  padding: 0 12px;
+}
+.sources-collapsed > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 9px 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--slate-500);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  user-select: none;
+}
+.sources-collapsed > summary::-webkit-details-marker { display: none; }
+.sources-collapsed > summary::after {
+  content: "▾";
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--slate-400);
+  transition: transform var(--motion-fast, 120ms) var(--ease-out, ease-out);
+}
+.sources-collapsed[open] > summary::after { transform: rotate(180deg); }
+.sources-collapsed > .source-refresh-grid {
+  padding-bottom: 10px;
+}
 
 .vessel-summary-v2 {
   padding: 14px 16px;
@@ -838,13 +1012,13 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .position-history-head,
-  .position-history-row,
+  .position-history-row {
+    grid-template-columns: minmax(90px, 1fr) 1.2fr .5fr .7fr;
+  }
   .port-call-head,
   .port-call-row {
     grid-template-columns: minmax(100px, 1fr) .8fr .8fr;
   }
-  .position-history-head span:nth-child(n+4),
-  .position-history-row span:nth-child(n+4),
   .port-call-head span:nth-child(n+4),
   .port-call-row span:nth-child(n+4) {
     display: none;
@@ -887,8 +1061,8 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
-  max-height: 340px;
-  overflow: hidden;
+  height: 326px;
+  min-height: 0;
 }
 .ops-recent-grid > .panel-solid {
   min-height: 0;
@@ -896,11 +1070,20 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
 .ops-console {
   gap: 12px;
   padding-bottom: 30px;
+  width: min(100%, 1480px);
+  margin: 0 auto;
 }
 .ops-page-header {
   margin-bottom: 2px;
   align-items: flex-start;
   gap: 10px;
+  flex-wrap: wrap;
+}
+.ops-page-header > div:first-child {
+  min-width: min(520px, 100%);
+}
+.ops-page-header .btn {
+  flex: 0 0 auto;
 }
 .ops-panel {
   padding: 12px;
@@ -908,10 +1091,11 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
   border-color: var(--gray-200);
 }
 .ops-panel-compact {
-  padding: 10px 12px;
+  padding: 8px 12px;
 }
 .ops-panel-compact .ops-panel-header {
   padding-bottom: 0;
+  min-height: 20px;
 }
 .ops-panel-fill {
   display: flex;
@@ -942,6 +1126,9 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
 }
 .ops-two-col-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.ops-two-col-grid > .ops-panel {
+  min-height: 178px;
 }
 .ops-action-grid {
   grid-template-columns: minmax(0, 1.16fr) minmax(0, 1fr) minmax(0, 1fr);
@@ -986,6 +1173,14 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
 .ops-data-rows {
   gap: 6px;
 }
+.ops-issue-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 10px;
+  border-left: 3px solid var(--gray-300);
+  border-radius: var(--r-card);
+}
 .ops-health-row {
   min-height: 58px;
   padding: 8px 10px;
@@ -1008,7 +1203,7 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
   justify-content: flex-start;
   gap: 8px;
   min-height: 30px;
-  width: min(100%, 270px);
+  width: 100%;
 }
 .ops-run-button > svg:last-child {
   margin-left: auto;
@@ -1044,12 +1239,24 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
   margin-bottom: 10px;
 }
 .ops-filter-search {
-  flex: 1 1 260px;
+  flex: 1 1 320px;
+  min-width: 260px;
+}
+.ops-filter-row .select {
+  flex: 0 1 158px;
+  min-width: 138px;
+  max-width: 190px;
+}
+.ops-filter-row > .btn:last-child {
+  margin-left: auto;
 }
 .ops-checkbox-filter {
   min-height: 32px;
   gap: 6px;
-  padding: 0 4px;
+  padding: 0 8px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--r-btn);
+  background: var(--white);
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
@@ -1151,6 +1358,7 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
   gap: 6px;
   padding: 6px 8px;
   border-bottom: 1px solid var(--gray-100);
+  min-height: 31px;
 }
 .ops-log-message {
   flex: 1;
@@ -1182,9 +1390,45 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.ops-jobs-table,
+.ops-vessel-table {
+  table-layout: fixed;
+}
+.ops-table-time,
+.ops-id-cell,
+.ops-position-cell,
+.ops-profile-link {
+  white-space: nowrap;
+}
+.ops-table-time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .ops-table-primary {
   font-size: 12px;
   font-weight: 500;
+}
+.ops-vessel-table th:first-child,
+.ops-vessel-table td:first-child { width: 16%; }
+.ops-vessel-table th:nth-child(2),
+.ops-vessel-table td:nth-child(2) { width: 12%; }
+.ops-vessel-table th:nth-child(3),
+.ops-vessel-table td:nth-child(3) { width: 12%; }
+.ops-vessel-table th:nth-child(4),
+.ops-vessel-table td:nth-child(4) { width: 7%; text-align: center; }
+.ops-vessel-table th:nth-child(5),
+.ops-vessel-table td:nth-child(5) { width: 13%; }
+.ops-vessel-table th:nth-child(6),
+.ops-vessel-table td:nth-child(6) { width: 10%; }
+.ops-vessel-table th:nth-child(7),
+.ops-vessel-table td:nth-child(7) { width: 15%; }
+.ops-vessel-table th:nth-child(8),
+.ops-vessel-table td:nth-child(8) { width: 11%; }
+.ops-vessel-table th:nth-child(9),
+.ops-vessel-table td:nth-child(9) { width: 104px; }
+.ops-profile-link {
+  justify-content: flex-end;
+  color: var(--ocean-600);
 }
 .ops-pagination {
   margin-top: 10px;
@@ -1192,6 +1436,13 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
   gap: 10px;
   align-items: center;
   padding-top: 2px;
+}
+.ops-pagination .t-muted {
+  padding: 4px 10px;
+  border: 1px solid var(--gray-100);
+  border-radius: var(--r-pill);
+  background: var(--gray-50);
+  white-space: nowrap;
 }
 .ops-console .table th,
 .ops-console .table td {
@@ -1201,13 +1452,25 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.ops-console .btn:disabled {
+  background: var(--gray-50);
+  border-color: var(--gray-200);
+  color: var(--slate-500);
+  opacity: .72;
+}
+.ops-action-group textarea.textarea {
+  min-height: 54px;
+}
+.ops-csv-dropzone {
+  min-height: 46px;
+}
 @media (max-width: 1180px) {
   .ops-status-strip,
   .ops-action-grid,
   .ops-data-grid,
   .ops-recent-grid {
     grid-template-columns: 1fr;
-    max-height: none;
+    height: auto;
   }
   .ops-two-col-grid {
     grid-template-columns: 1fr;
@@ -1847,6 +2110,10 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   from { opacity: 0; transform: translateX(-12px); }
   to   { opacity: 1; transform: translateX(0); }
 }
+@keyframes slide-out-left {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-14px); }
+}
 @keyframes slide-in-right {
   from { opacity: 0; transform: translateX(12px); }
   to   { opacity: 1; transform: translateX(0); }
@@ -2262,6 +2529,10 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   animation: slide-in-left var(--motion-base) var(--ease-out) both;
   will-change: transform, opacity;
 }
+.inspector-exiting .inspector {
+  pointer-events: none;
+  animation: slide-out-left var(--motion-base) var(--ease-in-out) both;
+}
 .shell.panel-expanded .inspector { left: 320px; }
 .shell.panel-expanded .fullcanvas { left: 320px; }
 
@@ -2274,7 +2545,8 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
   flex: 0 0 auto;
 }
 .inspector-tabs { padding: 0 18px; flex: 0 0 auto; }
-.inspector-body { flex: 1; overflow: auto; padding: 18px; }
+.inspector-body { flex: 1; overflow: auto; padding: 18px; scrollbar-width: none; }
+.inspector-body::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .inspector-foot {
   padding: 12px 18px;
   background: var(--gray-50);
@@ -2357,11 +2629,21 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
 }
 .map-status {
   position: fixed; bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 20;
   padding: 6px 14px;
   display: flex; align-items: center; gap: 14px;
   font-size: 12px;
   pointer-events: auto;
+  transition: left var(--motion-base) var(--ease-in-out),
+              transform var(--motion-base) var(--ease-in-out),
+              box-shadow var(--motion-fast) var(--ease-out),
+              border-color var(--motion-fast) var(--ease-out);
+  will-change: left, transform;
+}
+.shell.panel-expanded .map-status {
+  left: calc(50% + 160px);
 }
 .map-refresh-button {
   transition: background var(--motion-fast) var(--ease-out),

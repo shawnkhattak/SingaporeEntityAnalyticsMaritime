@@ -1,6 +1,6 @@
 import maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getGeoLayer, loadMapVessels } from "../../api";
+import { getEntityVessels, getGeoLayer, loadMapVessels } from "../../api";
 import { onMapCenter } from "../../hooks/useMapCenter";
 import { usePoll } from "../../hooks/usePoll";
 import { useApp, useFilters, useSelection } from "../../state/AppState";
@@ -55,9 +55,11 @@ const BASE_STYLE: maplibregl.StyleSpecification = {
   ],
 };
 
+// "high" is treated as the same tier as "critical" everywhere in the UI
+// (display-only merge — backend may still emit either value).
 const SEVERITY_COLOR: Record<string, string> = {
   critical: "#C62828",
-  high: "#E04A1F",
+  high: "#C62828",
   medium: "#E59413",
   low: "#D8C76B",
   none: "#3FB6C9",
@@ -67,6 +69,22 @@ const SEVERITY_COLOR: Record<string, string> = {
 // the operating picture analysts open the tool against.
 const DEFAULT_CENTER: [number, number] = [103.85, 1.29];
 const DEFAULT_ZOOM = 9.2;
+const OCEANSX_PORTS_LAYER = "ports_p";
+const OCEANSX_PORTS_SOURCE_ID = "geo-ports_p";
+const OCEANSX_PORTS_HALO_LAYER_ID = "geo-ports_p-halo";
+const OCEANSX_PORTS_POINT_LAYER_ID = "geo-ports_p-point";
+const OCEANSX_PORTS_LABEL_LAYER_ID = "geo-ports_p-label";
+const OCEANSX_PORT_LABEL: maplibregl.ExpressionSpecification = [
+  "coalesce",
+  ["get", "name"],
+  ["get", "NAME"],
+  ["get", "portName"],
+  ["get", "PORT_NAME"],
+  ["get", "port_name"],
+  ["get", "PORT_NM"],
+  ["get", "description"],
+  "Port",
+];
 
 const geoCache = new Map<string, GeoJSON.FeatureCollection>();
 
@@ -115,7 +133,7 @@ function buildVesselArrow(fill: string): { width: number; height: number; data: 
 
 const VESSEL_ICON_IDS: Record<string, string> = {
   critical: "vessel-critical",
-  high: "vessel-high",
+  high: "vessel-critical",
   medium: "vessel-medium",
   low: "vessel-low",
   none: "vessel-none",
@@ -127,7 +145,7 @@ const RISK_SORT_KEY: maplibregl.ExpressionSpecification = [
   "critical",
   50,
   "high",
-  40,
+  50,
   "medium",
   30,
   "low",
@@ -135,12 +153,22 @@ const RISK_SORT_KEY: maplibregl.ExpressionSpecification = [
   0,
 ];
 
-function vesselFocusOpacity(selectedId: number): number | maplibregl.ExpressionSpecification {
-  if (selectedId === -1) return 0.95;
-  return ["case", ["==", ["get", "vessel_id"], selectedId], 1, 0.16];
+function focusMatchExpression(focusedIds: number[]): maplibregl.ExpressionSpecification {
+  return ["in", ["get", "vessel_id"], ["literal", focusedIds]];
 }
 
-function riskHaloFocusOpacity(selectedId: number): number | maplibregl.ExpressionSpecification {
+function focusFilterExpression(focusedIds: number[]): maplibregl.FilterSpecification {
+  if (focusedIds.length === 0) return ["==", ["get", "vessel_id"], -1];
+  return focusMatchExpression(focusedIds) as maplibregl.FilterSpecification;
+}
+
+function vesselFocusOpacity(focusedIds: number[] | null): number | maplibregl.ExpressionSpecification {
+  if (!focusedIds) return 0.95;
+  if (focusedIds.length === 0) return 0.95;
+  return ["case", focusMatchExpression(focusedIds), 1, 0.11];
+}
+
+function riskHaloFocusOpacity(focusedIds: number[] | null): number | maplibregl.ExpressionSpecification {
   const normalOpacity: maplibregl.ExpressionSpecification = [
     "match",
     ["get", "severity"],
@@ -162,13 +190,14 @@ function riskHaloFocusOpacity(selectedId: number): number | maplibregl.Expressio
     0.08,
     0.34,
   ];
-  if (selectedId === -1) return normalOpacity;
-  return ["case", ["==", ["get", "vessel_id"], selectedId], selectedOpacity, dimmedOpacity];
+  if (!focusedIds) return normalOpacity;
+  if (focusedIds.length === 0) return normalOpacity;
+  return ["case", focusMatchExpression(focusedIds), selectedOpacity, dimmedOpacity];
 }
 
-function vesselSortKey(selectedId: number): maplibregl.ExpressionSpecification {
-  if (selectedId === -1) return RISK_SORT_KEY;
-  return ["case", ["==", ["get", "vessel_id"], selectedId], 100, RISK_SORT_KEY];
+function vesselSortKey(focusedIds: number[] | null): maplibregl.ExpressionSpecification {
+  if (!focusedIds || focusedIds.length === 0) return RISK_SORT_KEY;
+  return ["case", focusMatchExpression(focusedIds), 100, RISK_SORT_KEY];
 }
 
 type PopoverState = { x: number; y: number; vessel: VesselMapFeature; severity: string } | null;
@@ -178,6 +207,7 @@ export function MapCanvas() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [ready, setReady] = useState(false);
   const [popover, setPopover] = useState<PopoverState>(null);
+  const [entityFocusVesselIds, setEntityFocusVesselIds] = useState<number[] | null>(null);
   const { state, dispatch } = useApp();
   const { filters } = useFilters();
   const { select, clear } = useSelection();
@@ -266,7 +296,7 @@ export function MapCanvas() {
             SEVERITY_COLOR.low,
             SEVERITY_COLOR.none,
           ],
-          "circle-opacity": riskHaloFocusOpacity(-1),
+          "circle-opacity": riskHaloFocusOpacity(null),
           "circle-blur": 0.4,
         },
       });
@@ -319,16 +349,54 @@ export function MapCanvas() {
         },
       });
 
+      // Outer halo for the selected vessel — wider, faint ring so the
+      // selected marker reads above unselected vessels even at small zoom.
+      map.addLayer({
+        id: "vessels-selected-outer",
+        type: "circle",
+        source: "vessels",
+        filter: ["==", ["get", "vessel_id"], -1],
+        paint: {
+          "circle-radius": 22,
+          "circle-color": "rgba(58,127,184,0)",
+          "circle-stroke-color": "#3A7FB8",
+          "circle-stroke-width": 1.5,
+          "circle-stroke-opacity": 0.45,
+        },
+      });
+
       map.addLayer({
         id: "vessels-selected",
         type: "circle",
         source: "vessels",
         filter: ["==", ["get", "vessel_id"], -1],
         paint: {
-          "circle-radius": 14,
-          "circle-color": "rgba(58,127,184,0.22)",
+          "circle-radius": 16,
+          "circle-color": "rgba(58,127,184,0.32)",
           "circle-stroke-color": "#3A7FB8",
-          "circle-stroke-width": 2,
+          "circle-stroke-width": 3,
+        },
+      });
+
+      map.addLayer({
+        id: "vessels-entity-focus-label",
+        type: "symbol",
+        source: "vessels",
+        filter: ["==", ["get", "vessel_id"], -1],
+        layout: {
+          "text-field": ["get", "name"],
+          "text-size": 11,
+          "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
+          "text-offset": [0, 1.55],
+          "text-anchor": "top",
+          "text-allow-overlap": false,
+          "text-ignore-placement": false,
+        },
+        paint: {
+          "text-color": "#15324B",
+          "text-halo-color": "rgba(255,255,255,0.94)",
+          "text-halo-width": 1.6,
+          "text-opacity": 0.95,
         },
       });
 
@@ -453,31 +521,144 @@ export function MapCanvas() {
     if (src) src.setData(fc);
   }, [filteredVessels, state.riskByVessel, ready]);
 
-  // Selected vessel highlight.
+  useEffect(() => {
+    if (state.selected?.kind !== "entity") {
+      setEntityFocusVesselIds(null);
+      return;
+    }
+
+    let cancelled = false;
+    setEntityFocusVesselIds(null);
+    getEntityVessels(state.selected.id)
+      .then((vessels) => {
+        if (cancelled) return;
+        const ids = Array.from(new Set(vessels.map((vessel) => vessel.id).filter((id) => Number.isFinite(id))));
+        setEntityFocusVesselIds(ids);
+      })
+      .catch(() => {
+        if (!cancelled) setEntityFocusVesselIds([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state.selected]);
+
+  // Selected vessel/entity highlight.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    const id = state.selected?.kind === "vessel" ? state.selected.id : -1;
+    const focusedIds =
+      state.selected?.kind === "vessel"
+        ? [state.selected.id]
+        : state.selected?.kind === "entity"
+          ? entityFocusVesselIds
+          : null;
+    const selectedFilter = focusFilterExpression(focusedIds ?? []);
+    if (map.getLayer("vessels-selected-outer")) {
+      map.setFilter("vessels-selected-outer", selectedFilter);
+    }
     if (map.getLayer("vessels-selected")) {
-      map.setFilter("vessels-selected", ["==", ["get", "vessel_id"], id]);
+      map.setFilter("vessels-selected", selectedFilter);
+    }
+    if (map.getLayer("vessels-entity-focus-label")) {
+      const labelFilter =
+        state.selected?.kind === "entity" && focusedIds && focusedIds.length > 0
+          ? selectedFilter
+          : (["==", ["get", "vessel_id"], -1] as maplibregl.FilterSpecification);
+      map.setFilter("vessels-entity-focus-label", labelFilter);
     }
     if (map.getLayer("vessels-point")) {
-      map.setLayoutProperty("vessels-point", "symbol-sort-key", vesselSortKey(id));
-      map.setPaintProperty("vessels-point", "icon-opacity", vesselFocusOpacity(id));
+      map.setLayoutProperty("vessels-point", "symbol-sort-key", vesselSortKey(focusedIds));
+      map.setPaintProperty("vessels-point", "icon-opacity", vesselFocusOpacity(focusedIds));
     }
     if (map.getLayer("vessels-halo")) {
-      map.setPaintProperty("vessels-halo", "circle-opacity", riskHaloFocusOpacity(id));
+      map.setPaintProperty("vessels-halo", "circle-opacity", riskHaloFocusOpacity(focusedIds));
     }
-    if (id === -1) setPopover(null);
-  }, [state.selected, ready]);
+    if (!focusedIds) setPopover(null);
+  }, [state.selected, entityFocusVesselIds, ready]);
 
   // Geo overlays driven by filters.enabledGeoLayers.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
     const enabled = Array.from(filters.enabledGeoLayers);
+    const showOceansXPorts = filters.enabledGeoLayers.has(OCEANSX_PORTS_LAYER);
+
+    if (!showOceansXPorts) {
+      if (map.getLayer(OCEANSX_PORTS_LABEL_LAYER_ID)) map.removeLayer(OCEANSX_PORTS_LABEL_LAYER_ID);
+      if (map.getLayer(OCEANSX_PORTS_POINT_LAYER_ID)) map.removeLayer(OCEANSX_PORTS_POINT_LAYER_ID);
+      if (map.getLayer(OCEANSX_PORTS_HALO_LAYER_ID)) map.removeLayer(OCEANSX_PORTS_HALO_LAYER_ID);
+      if (map.getSource(OCEANSX_PORTS_SOURCE_ID)) map.removeSource(OCEANSX_PORTS_SOURCE_ID);
+    } else if (!map.getSource(OCEANSX_PORTS_SOURCE_ID)) {
+      void (async () => {
+        let data = geoCache.get(OCEANSX_PORTS_LAYER);
+        if (!data) {
+          try {
+            const fetched = (await getGeoLayer(OCEANSX_PORTS_LAYER)) as unknown as GeoJSON.FeatureCollection;
+            if (!fetched || !fetched.features) return;
+            geoCache.set(OCEANSX_PORTS_LAYER, fetched);
+            data = fetched;
+          } catch {
+            return;
+          }
+        }
+        if (map.getSource(OCEANSX_PORTS_SOURCE_ID)) return;
+        map.addSource(OCEANSX_PORTS_SOURCE_ID, { type: "geojson", data });
+        map.addLayer({
+          id: OCEANSX_PORTS_HALO_LAYER_ID,
+          type: "circle",
+          source: OCEANSX_PORTS_SOURCE_ID,
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 8, 10, 14, 13, 22],
+            "circle-color": "rgba(229,148,19,0.14)",
+            "circle-stroke-color": "rgba(229,148,19,0.45)",
+            "circle-stroke-width": 1,
+          },
+        }, "vessels-halo");
+        map.addLayer({
+          id: OCEANSX_PORTS_POINT_LAYER_ID,
+          type: "circle",
+          source: OCEANSX_PORTS_SOURCE_ID,
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 3, 10, 4.5, 13, 6],
+            "circle-color": "#E59413",
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 1.4,
+            "circle-opacity": 0.92,
+          },
+        }, "vessels-halo");
+        map.addLayer({
+          id: OCEANSX_PORTS_LABEL_LAYER_ID,
+          type: "symbol",
+          source: OCEANSX_PORTS_SOURCE_ID,
+          minzoom: 10,
+          layout: {
+            "text-field": OCEANSX_PORT_LABEL,
+            "text-size": 11,
+            "text-offset": [0, 1.4],
+            "text-anchor": "top",
+            "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
+            "text-allow-overlap": false,
+          },
+          paint: {
+            "text-color": "#6F4A00",
+            "text-halo-color": "rgba(255,255,255,0.92)",
+            "text-halo-width": 1.5,
+          },
+        }, "vessels-point");
+      })();
+    }
+
     const present = new Set<string>();
-    enabled.forEach((name) => present.add(`geo-${name}`));
+    enabled
+      .filter((name) => name !== OCEANSX_PORTS_LAYER)
+      .forEach((name) => present.add(`geo-${name}`));
+    if (showOceansXPorts) {
+      present.add(OCEANSX_PORTS_HALO_LAYER_ID);
+      present.add(OCEANSX_PORTS_POINT_LAYER_ID);
+      present.add(OCEANSX_PORTS_LABEL_LAYER_ID);
+    }
 
     // Remove layers no longer enabled.
     map.getStyle().layers?.forEach((layer) => {
@@ -489,7 +670,7 @@ export function MapCanvas() {
     });
 
     // Add newly enabled.
-    enabled.forEach(async (name) => {
+    enabled.filter((name) => name !== OCEANSX_PORTS_LAYER).forEach(async (name) => {
       const id = `geo-${name}`;
       if (map.getSource(id)) return;
       let data = geoCache.get(name);

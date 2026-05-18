@@ -41,7 +41,7 @@ export function MapStatusStrip({ vesselCount, runJob }: MapStatusStripProps) {
   }, [newest]);
 
   return (
-    <div className="map-status glass" style={{ left: "50%", transform: "translateX(-50%)" }}>
+    <div className="map-status glass">
       <span title="Vessels from the most recent OCEANS-X snapshot. Total in DB (including older snapshots) is shown in Operations.">
         Showing <strong>{vesselCount}</strong> {vesselCount === 1 ? "vessel" : "vessels"} <span className="t-muted">· latest snapshot</span>
       </span>

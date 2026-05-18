@@ -1,9 +1,9 @@
 import { Building2, ChevronDown, Database, Link2, Ship } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getEntity, getEntityRelationships, getEntityRiskFlags, getEntityVessels } from "../../api";
-import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
+import { closeInspectorRoute, navigateBack, navigateTo, useRoute } from "../../hooks/useRoute";
 import { countryName, flagEmoji, riskLabel } from "../../labels";
-import { recordRecent, useApp } from "../../state/AppState";
+import { recordRecent, useApp, useSelection } from "../../state/AppState";
 import type { Entity, EntityRelationship, RiskFlag, VesselSummary } from "../../types";
 import { EmptyState } from "../primitives/EmptyState";
 import { ErrorState } from "../primitives/ErrorState";
@@ -29,6 +29,8 @@ export function EntityDetailInspector({ id }: { id: number }) {
   const [data, setData] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { dispatch } = useApp();
+  const { select } = useSelection();
+  const route = useRoute();
 
   function load() {
     setError(null);
@@ -36,6 +38,7 @@ export function EntityDetailInspector({ id }: { id: number }) {
       .then(([entity, vessels, relationships, risk]) => {
         setData({ entity, vessels, relationships, risk });
         dispatch({ type: "CACHE_ENTITY_RISK", id, flags: risk });
+        select({ kind: "entity", id });
         recordRecent("entity", id, entity.name);
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
@@ -48,14 +51,26 @@ export function EntityDetailInspector({ id }: { id: number }) {
 
   if (error) {
     return (
-      <InspectorShell breadcrumb="Entity" title="Could not load" onClose={closeInspectorRoute}>
+      <InspectorShell
+        breadcrumb="Entity"
+        title="Could not load"
+        onBack={() => navigateBack(route.name === "entity-detail" && route.from === "risk" ? "/risk" : "/entities")}
+        backLabel={route.name === "entity-detail" && route.from === "risk" ? "Back to Risk & Sanctions" : "Back to entities"}
+        onClose={closeInspectorRoute}
+      >
         <ErrorState body={error} onRetry={load} />
       </InspectorShell>
     );
   }
   if (!data) {
     return (
-      <InspectorShell breadcrumb="Entity" title="Loading..." onClose={closeInspectorRoute}>
+      <InspectorShell
+        breadcrumb="Entity"
+        title="Loading..."
+        onBack={() => navigateBack(route.name === "entity-detail" && route.from === "risk" ? "/risk" : "/entities")}
+        backLabel={route.name === "entity-detail" && route.from === "risk" ? "Back to Risk & Sanctions" : "Back to entities"}
+        onClose={closeInspectorRoute}
+      >
         <Skeleton height={80} />
       </InspectorShell>
     );
@@ -63,11 +78,15 @@ export function EntityDetailInspector({ id }: { id: number }) {
 
   const entity = data.entity;
   const groupedVessels = groupRelatedVessels(data.vessels, data.relationships);
+  const detailFallback = route.name === "entity-detail" && route.from === "risk" ? "/risk" : "/entities";
+  const detailBackLabel = route.name === "entity-detail" && route.from === "risk" ? "Back to Risk & Sanctions" : "Back to entities";
 
   return (
     <InspectorShell
       breadcrumb="Entity"
       title={entity.name}
+      onBack={() => navigateBack(detailFallback)}
+      backLabel={detailBackLabel}
       onClose={closeInspectorRoute}
     >
       <div className="col entity-detail-page">

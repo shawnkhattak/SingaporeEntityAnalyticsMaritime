@@ -7,7 +7,13 @@ import { MultiSelect } from "../primitives/MultiSelect";
 import type { RiskSeverity } from "../../types";
 import { DEFAULT_FILTERS } from "../../types";
 
-const SEVERITIES: RiskSeverity[] = ["critical", "high", "medium", "low"];
+// "high" and "critical" are shown as a single tier; selecting the
+// Critical chip toggles both backend values together.
+const SEVERITY_CHIPS: { label: string; values: RiskSeverity[]; tone: "crit" | "med" | "low" }[] = [
+  { label: "Critical", values: ["critical", "high"], tone: "crit" },
+  { label: "Medium", values: ["medium"], tone: "med" },
+  { label: "Low", values: ["low"], tone: "low" },
+];
 
 const VESSEL_TYPE_FALLBACK: ReferenceItem[] = [
   { code: "Cargo", label: "Cargo" },
@@ -63,10 +69,14 @@ export function MapFilters() {
       .map((code) => ({ code, label: code }));
   }, [flagStates, state.vessels]);
 
-  function toggleSeverity(s: RiskSeverity) {
+  function toggleSeverityGroup(values: RiskSeverity[]) {
     const next = new Set(filters.riskSeverities);
-    if (next.has(s)) next.delete(s);
-    else next.add(s);
+    const allSelected = values.every((v) => next.has(v));
+    if (allSelected) {
+      values.forEach((v) => next.delete(v));
+    } else {
+      values.forEach((v) => next.add(v));
+    }
     setFilters({ ...filters, riskSeverities: next });
   }
 
@@ -93,14 +103,14 @@ export function MapFilters() {
         <div style={{ padding: "0 4px 4px", display: "flex", flexDirection: "column", gap: 12 }}>
           <FilterGroup label="Risk severity">
             <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
-              {SEVERITIES.map((s) => (
+              {SEVERITY_CHIPS.map((chip) => (
                 <Chip
-                  key={s}
-                  tone={s === "critical" ? "crit" : s === "high" ? "high" : s === "medium" ? "med" : "low"}
-                  selected={filters.riskSeverities.has(s)}
-                  onClick={() => toggleSeverity(s)}
+                  key={chip.label}
+                  tone={chip.tone}
+                  selected={chip.values.every((v) => filters.riskSeverities.has(v))}
+                  onClick={() => toggleSeverityGroup(chip.values)}
                 >
-                  {s[0].toUpperCase() + s.slice(1)}
+                  {chip.label}
                 </Chip>
               ))}
             </div>

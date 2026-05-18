@@ -11,12 +11,18 @@ import { Pill, RiskPill } from "../primitives/Pill";
 import { Skeleton } from "../primitives/Skeleton";
 import type { IdentityConflictDetail, RiskFeedItem, RiskFlag, RiskSeverity } from "../../types";
 import { requestMapCenter } from "../../hooks/useMapCenter";
-import { closeInspectorRoute, navigateTo } from "../../hooks/useRoute";
+import { closeInspectorRoute, navigateBack, navigateTo } from "../../hooks/useRoute";
 import { riskLabel, type RiskKind } from "../../labels";
 import { getHumanReadableSanctionSources } from "../../sanctionsSource";
 import { InspectorShell } from "./InspectorShell";
 
-const SEVERITIES: RiskSeverity[] = ["critical", "high", "medium", "low"];
+// "high" + "critical" render as a single Critical tier. Selecting it
+// adds both severity values to the filter set.
+const SEVERITY_CHIPS: { label: string; values: RiskSeverity[]; tone: "crit" | "med" | "low" }[] = [
+  { label: "Critical", values: ["critical", "high"], tone: "crit" },
+  { label: "Medium", values: ["medium"], tone: "med" },
+  { label: "Low", values: ["low"], tone: "low" },
+];
 const KIND_FILTERS: { kind: RiskKind; label: string; icon: React.ReactNode }[] = [
   { kind: "sanctioned", label: "Sanctioned", icon: <Scale size={11} /> },
   { kind: "detained", label: "Detained", icon: <Anchor size={11} /> },
@@ -148,6 +154,8 @@ export function RiskFeedInspector() {
     <InspectorShell
       breadcrumb="Risk & Sanctions"
       title={`Risk & Sanctions · ${filtered.length}`}
+      onBack={() => navigateBack("/map")}
+      backLabel="Back to previous page"
       onClose={closeInspectorRoute}
       footer={
         <Button
@@ -164,14 +172,14 @@ export function RiskFeedInspector() {
       }
     >
       <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
-        {SEVERITIES.map((s) => (
+        {SEVERITY_CHIPS.map((chip) => (
           <Chip
-            key={s}
-            tone={s === "critical" ? "crit" : s === "high" ? "high" : s === "medium" ? "med" : "low"}
-            selected={severityFilters.has(s)}
-            onClick={() => setSeverityFilters((curr) => toggleSeverityFilter(curr, s))}
+            key={chip.label}
+            tone={chip.tone}
+            selected={chip.values.every((v) => severityFilters.has(v))}
+            onClick={() => setSeverityFilters((curr) => toggleSeverityGroup(curr, chip.values))}
           >
-            {s[0].toUpperCase() + s.slice(1)} · {severityCounts[s] ?? 0}
+            {chip.label} · {chip.values.reduce((sum, v) => sum + (severityCounts[v] ?? 0), 0)}
           </Chip>
         ))}
       </div>
@@ -231,7 +239,7 @@ export function RiskFeedInspector() {
               try { sessionStorage.setItem("seam:return-to-risk", "1"); } catch { /* ignore */ }
               if (group.vesselId != null) {
                 const v = state.vessels.find((x) => x.vessel_id === group.vesselId);
-                if (v) requestMapCenter({ lng: v.longitude, lat: v.latitude, zoom: 8 });
+                if (v) requestMapCenter({ lng: v.longitude, lat: v.latitude, zoom: 12 });
                 navigateTo(`/vessels/${group.vesselId}?from=risk`);
               } else if (group.entityId != null) {
                 navigateTo(`/entities/${group.entityId}?from=risk`);
@@ -246,10 +254,8 @@ export function RiskFeedInspector() {
 
 function RiskGroupCard({ group, onOpenSubject }: { group: RiskGroup; onOpenSubject: () => void }) {
   const stripeTone =
-    group.severity === "critical"
+    group.severity === "critical" || group.severity === "high"
       ? "stripe-crit"
-      : group.severity === "high"
-      ? "stripe-high"
       : group.severity === "medium"
       ? "stripe-med"
       : "stripe-low";
@@ -459,10 +465,11 @@ function highestSeverity(severities: string[]): RiskSeverity {
   return sorted[0] ?? "none";
 }
 
-function toggleSeverityFilter(current: Set<RiskSeverity>, severity: RiskSeverity): Set<RiskSeverity> {
+function toggleSeverityGroup(current: Set<RiskSeverity>, values: RiskSeverity[]): Set<RiskSeverity> {
   const next = new Set(current);
-  if (next.has(severity)) next.delete(severity);
-  else next.add(severity);
+  const allSelected = values.every((v) => next.has(v));
+  if (allSelected) values.forEach((v) => next.delete(v));
+  else values.forEach((v) => next.add(v));
   return next;
 }
 

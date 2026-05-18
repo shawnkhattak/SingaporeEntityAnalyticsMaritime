@@ -260,59 +260,77 @@ type RiskLabel = {
   kind: RiskKind;
   title: string;
   body: string;
+  whyItMatters?: string;
   toneClass: "crit" | "high" | "med" | "low" | "info";
 };
 
 const RISK_LABELS: Record<string, RiskLabel> = {
   sanctions_match: {
     kind: "sanctioned",
-    title: "Sanctioned",
-    body: "Vessel or owner matches an entry on a sanctions list (OFAC, EU, UK HMT, or OpenSanctions). Treat all interactions with elevated due-diligence.",
+    title: "Sanctions match",
+    body: "This vessel matches a name or identifier on a public sanctions list (OFAC, EU, UK HMT, or OpenSanctions).",
+    whyItMatters: "Operating with a sanctioned vessel may carry secondary-sanction exposure. Verify the match against the linked evidence before acting.",
     toneClass: "crit",
   },
   sanctions: {
     kind: "sanctioned",
-    title: "Sanctioned",
-    body: "Vessel or owner matches an entry on a sanctions list. Treat all interactions with elevated due-diligence.",
+    title: "Sanctions match",
+    body: "This vessel matches a name or identifier on a public sanctions list.",
+    whyItMatters: "Operating with a sanctioned vessel may carry secondary-sanction exposure. Verify the match against the linked evidence before acting.",
     toneClass: "crit",
   },
   detained: {
     kind: "detained",
     title: "Detained at port",
-    body: "Vessel is currently detained by port state control. Cannot sail until deficiencies are cleared.",
+    body: "Port state control is currently holding this vessel and it cannot sail until deficiencies are cleared.",
+    whyItMatters: "Active detentions indicate serious safety, crew, or compliance findings that may delay onward voyages and trigger re-inspection.",
     toneClass: "high",
   },
   port_state_detention: {
     kind: "detained",
     title: "Detained at port",
-    body: "Port state control has detained this vessel. Deficiencies must be cleared before departure.",
+    body: "Port state control is currently holding this vessel. Deficiencies must be cleared before departure.",
+    whyItMatters: "Active detentions indicate serious safety, crew, or compliance findings that may delay onward voyages and trigger re-inspection.",
     toneClass: "high",
   },
   maritime_watchlist: {
     kind: "watchlist",
-    title: "On maritime watchlist",
-    body: "Vessel appears on an internal maritime watchlist. Review the linked evidence to understand why it was flagged.",
+    title: "Watchlist match",
+    body: "Vessel appears on an internal maritime watchlist.",
+    whyItMatters: "Review the linked evidence to understand why it was flagged and whether the underlying concern is still active.",
     toneClass: "high",
   },
   high_risk_flag_country: {
     kind: "high_risk_flag",
     title: "High-risk flag state",
     body: "Vessel is registered under a flag state designated high-risk for sanctions or proliferation concerns.",
+    whyItMatters: "High-risk flag states are common vehicles for sanctions evasion. Cross-check ownership and recent port calls before clearing the vessel.",
     toneClass: "high",
   },
   conflicting_identity: {
     kind: "identity_conflict",
-    title: "Conflicting identity",
-    body: "Multiple source observations report different names or particulars for this IMO. May indicate identity spoofing.",
+    title: "Identity conflict",
+    body: "Same IMO appears with conflicting identifiers across sources.",
+    whyItMatters: "Identity discrepancies are a common indicator of deceptive shipping practices and false-flag operations.",
     toneClass: "low",
   },
   negative_news_mention: {
     kind: "news",
-    title: "Negative news mention",
-    body: "Vessel was named in adverse news coverage. Open the linked evidence to read the original article.",
+    title: "Adverse news mention",
+    body: "Vessel was named in adverse news coverage.",
+    whyItMatters: "News reporting often surfaces incidents before formal sources update. Open the linked article to confirm what was reported.",
     toneClass: "med",
   },
 };
+
+/**
+ * Display-side severity collapse. SEAM combines "high" and "critical"
+ * into a single tier in the UI — the backend still stores both values
+ * but every visible badge, color, chip, and filter treats them as one.
+ */
+export function displaySeverity(severity: string | null | undefined): string {
+  return severity === "high" ? "critical" : (severity ?? "none");
+}
 
 export function riskLabel(flag_type: string): RiskLabel {
   return (
