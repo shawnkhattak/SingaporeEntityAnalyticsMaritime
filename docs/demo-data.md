@@ -1,9 +1,25 @@
 # Demo Data
 
-The demo bootstrap path is `POST /api/dev/ingestion/refresh-live`.
+The demo bootstrap path is:
 
-Refresh-live calls current OCEANS-X positions, selected particulars, selected movements, due-arrive/due-depart port activity, OCEANS-X geo layers, configured RSS feeds, and risk recompute. It does not spend OpenSanctions quota automatically; use the sanctions CSV import or run the confirmed OpenSanctions maritime API action separately.
+```text
+POST /api/dev/ingestion/refresh-live
+```
 
-For a fuller demo dataset, run **Map vessel particulars** from `/operations` after a positions snapshot. It fetches particulars for every current map vessel with an IMO, waits briefly between OCEANS-X calls, and saves observations, vessel fields, entities, and relationships to the database.
+Use it to refresh the main live sources that are safe for a demo run. It does not spend OpenSanctions live API quota automatically; use sanctions CSV import or the explicitly confirmed OpenSanctions action when needed.
 
-The map reads the latest successful positions snapshot through `/api/map/vessels?scope=latest-snapshot`. The accumulated vessel table can be larger than the live map count.
+## Recommended Demo Prep
+
+1. Run an OCEANS-X positions snapshot.
+2. Run map-vessel particulars enrichment for all current map vessels with IMO numbers.
+3. Import OpenSanctions maritime CSV or run the confirmed API action.
+4. Refresh RSS/news.
+5. Recompute risk flags.
+6. Open `/map`, `/risk`, `/entities`, `/vessels`, and `/news` once to confirm data appears.
+
+## Notes
+
+- The map reads the latest successful positions snapshot through `/api/map/vessels?scope=latest-snapshot`.
+- The accumulated vessel table can be larger than the live map count.
+- Entity coverage improves after particulars enrichment because owners/operators/managers come from vessel particulars.
+- Port activity ingestion is paused; do not rely on it for a clean demo story.

@@ -1,33 +1,48 @@
 # SEAM V2 Charter
 
-SEAM V2 is a portfolio-first, evidence-driven maritime intelligence rebuild focused on Singapore maritime activity. Version 1 optimizes for clarity, setup reliability, traceable facts, and interview/demo value rather than commercial hardening.
+SEAM V2 is a desktop-first, evidence-driven maritime intelligence platform focused on Singapore maritime activity. It prioritizes a polished analyst demo, source traceability, operational clarity, and a coherent product story over commercial hardening.
 
-## V1 Scope
+## Product Promise
 
-- Backend-owned ingestion from OCEANS-X and supporting reference sources.
-- PostgreSQL with PostGIS for canonical vessel, position, event, entity, relationship, risk flag, and evidence data.
-- Manual-first ingestion controls under development routes.
-- A frontend that exposes `/operations` (`/ops` and `/dev` aliases), vessel search/detail, ports, risk/sanctions/news feeds, map, `/roadmap`, and `/schema`.
-- Raw source payload retention, payload hashes, source timestamps, and evidence references for generated relationships and flags.
+SEAM helps an analyst answer:
 
-## V1 Non-Goals
+- What vessels are active on the map right now?
+- Which vessels carry sanctions, detention, watchlist, identity, flag, or adverse-news risk?
+- Which companies, owners, operators, ship managers, and ISM managers are tied to those vessels?
+- What source payload produced each claim?
+- How fresh and reliable are the underlying data sources?
 
-- No user authentication.
-- No AI features.
+## Current Scope
+
+- Live OCEANS-X positions, particulars, movements, and available geo layers.
+- OpenSanctions maritime ingestion through protected API and CSV paths.
+- RSS.app maritime/social/search intelligence bundles.
+- PostgreSQL/PostGIS canonical storage for vessels, latest positions, events, entities, relationships, risk flags, news, jobs, logs, source health, and evidence observations.
+- Map-first React workspace with inspectors for vessels, entities, ports, Risk & Sanctions, news, evidence, and operations.
+- Deterministic categorical risk flags with human-readable UI.
+- Evidence retention with raw payloads and payload hashes.
+- Development-only ingestion actions under `/api/dev/*`.
+
+## Non-Goals
+
+- No user authentication or authorization.
+- No AI-generated summaries, matching, or risk explanations.
 - No numeric composite risk score.
-- No TimescaleDB.
-- No scheduler or background worker in the first clean shell.
-- No frontend calls directly to OCEANS-X.
-- No fake demo data; use current live source refreshes for demos.
+- No production scheduler or background worker.
+- No direct frontend calls to OCEANS-X.
+- No full mobile workflow; narrow screens show a desktop-required gate.
+- No commercial multi-tenant hardening.
 
-## Build Rules
+## Product Guardrails
 
-- Finish one stage before starting the next.
+- Do not show analysis that cannot be traced to a source observation.
 - Do not add a page before its data contract exists.
-- Do not add an ingestion job without ingestion logs and source health.
-- Keep write actions under `/api/dev/*`.
-- Prefer cutting feature breadth before cutting evidence quality or boot reliability.
+- Prefer clear categorical risk over pseudo-precise scoring.
+- Keep Operations honest: stale/failing sources should be visible.
+- Keep write actions development-gated.
+- Prefer cutting feature breadth before weakening evidence quality, boot reliability, or map clarity.
 
-## Current Workspace Note
+## Current Retired/Paused Areas
 
-This workspace started as a fresh folder containing only planning documents. There is no local Git history or legacy app checkout here, so creating a `legacy-v1` tag and capturing old screenshots are not possible from this directory.
+- Graph UI is retired from the product surface for now because it was not useful enough for the demo workflow. Backend code may remain, but docs and navigation should not position it as a primary feature.
+- Port activity ingestion is paused until OCEANS-X port/movement behavior is reliable enough to demo cleanly.

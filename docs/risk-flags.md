@@ -1,18 +1,40 @@
 # Risk Flags
 
-V1 risk is deterministic and categorical. There is no numeric score.
+SEAM risk is deterministic and categorical. There is no numeric composite score.
 
-## Active Rules And Sources
+## Active Risk Kinds
 
-- `high_risk_flag_country`: vessel flag country is configured as high risk.
-- `conflicting_identity`: source observations contain conflicting identity values.
-- `sanctions_match`: exact or strong sanctions match.
-- `maritime_watchlist`: OpenSanctions maritime watchlist match.
-- `negative_news_mention`: deterministic news mention.
+- `sanctions_match` — exact or strong OpenSanctions maritime match.
+- `maritime_watchlist` — OpenSanctions maritime watchlist or related maritime topic.
+- `detained` / detention-like topics — maritime detention records when mapped from source topics.
+- `high_risk_flag_country` — vessel flag country is configured as high risk.
+- `conflicting_identity` — meaningful identity fields disagree across source observations.
+- `negative_news_mention` — deterministic news mention.
 
-The historical `unknown_ownership` rule is retired. OCEANS-X ownership coverage is mostly Singapore-flagged, so absence of an ownership relationship is not treated as a risk signal.
+The historical `unknown_ownership` rule is retired. OCEANS-X ownership coverage is uneven and mostly Singapore-focused, so missing ownership data is not treated as risk.
 
-## API
+Identity conflict is treated as low risk unless combined with stronger signals. Vessel type and slight dimension differences are not included as source-mismatch conflicts.
+
+## Unified Feed
+
+Risk and sanctions are shown together at:
+
+```text
+GET /api/risk/feed?limit=250
+```
+
+Useful variants:
+
+```text
+GET /api/risk/feed?limit=500&flag_types=sanctions_match
+GET /api/risk/feed?limit=500&include_resolved=true
+```
+
+`flag_types` can be repeated for OR semantics.
+
+The frontend groups connected alerts so one vessel appears once in the Risk & Sanctions panel. Each card can contain sanctions, watchlist, identity, high-risk flag, adverse news, and detention rows.
+
+## Recompute
 
 Recompute all risk:
 
@@ -26,11 +48,12 @@ Recompute one vessel:
 POST /api/dev/risk/recompute?vessel_id=123
 ```
 
-Load the aggregated feed used by the Risk and Sanctions inspectors:
+## Sanctions Source Labels
 
-```text
-GET /api/risk/feed?limit=250
-GET /api/risk/feed?limit=500&flag_types=sanctions_match
-```
+Sanctions cards should display human-readable OpenSanctions dataset labels, for example:
 
-`include_resolved=true` includes resolved flags. `flag_types` can be repeated for OR semantics.
+- `ca_dfatd_sema_sanctions` → Canada SEMA Sanctions List.
+- `us_ofac_sdn` → U.S. OFAC SDN List.
+- `eu_fsf` → EU Financial Sanctions List.
+
+If a dataset is unknown, SEAM converts snake_case into readable title case instead of showing raw technical IDs when possible.

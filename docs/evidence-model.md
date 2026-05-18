@@ -13,4 +13,4 @@ Read models link back to observations through evidence IDs:
 
 `vessel_positions_latest.snapshot_job_id` is not evidence; it is snapshot membership metadata used by `/api/map/vessels?scope=latest-snapshot`.
 
-Graph edges that claim evidence must resolve through `GET /api/evidence/{observation_id}`. The V1 graph does not infer hidden ownership; it only renders relationships derived from stored particulars, port events, sanctions/news matches, or explicit deterministic rules added later.
+Relationship, risk, sanctions, news, movement, and position views should all resolve evidence through `GET /api/evidence/{observation_id}`. SEAM does not infer hidden ownership; it only renders relationships derived from stored particulars, source observations, sanctions/news matches, or explicit deterministic rules.

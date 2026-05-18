@@ -30,4 +30,13 @@ Source badge contract:
 
 Endpoint: `POST /api/dev/ingestion/news`
 
+The app refreshes RSS/news on an hourly cadence when the frontend refresh loop is active. The News panel shows:
+
+- **All** — latest 50 stories by publication date.
+- **Social** — SEAM Singapore Social Media Intel.
+- **Watchlist** — SEAM Entity Watchlist.
+- **Maritime** — SEAM Singapore Maritime Intel.
+
+Bundle tabs can include articles beyond the latest 50 shown in All.
+
 The ingester stores source title, source badge, RSS.app bundle name, URL, publication time, summary/excerpt, raw payload, and entity/vessel links found by exact case-insensitive name matching. No AI summaries are generated in V1.

@@ -1,8 +1,11 @@
 # Graph
 
-`/graph` uses backend graph APIs only:
+The graph UI is retired from the current SEAM product surface because it was not useful enough for the demo workflow.
 
-- `GET /api/graph/vessels/{vessel_id}`
-- `GET /api/graph/entities/{entity_id}`
+Backend graph code may still exist for future exploration, but repository docs, navigation, and demos should not present graph as a primary feature. Prefer the current entity detail panel for relationship analysis:
 
-Edges include evidence IDs where available. Evidence resolves through `GET /api/evidence/{observation_id}`.
+- Unique related vessels.
+- Relationship record count.
+- Role badges on vessel cards.
+- Evidence-linked relationship rows.
+- Entity-focused map highlighting.

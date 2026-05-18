@@ -55,3 +55,9 @@ Configured settings:
 - `OPENSANCTIONS_MARITIME_CSV_URL=https://data.opensanctions.org/datasets/20260510/maritime/maritime.csv`
 
 Matches are classified as `exact`, `strong`, `possible`, or `weak`. Only exact and strong OpenSanctions maritime matches create active risk flags automatically.
+
+## UI Display
+
+Sanctions are displayed inside the unified `/risk` Risk & Sanctions feed. The separate sanctions navigation path is retired in favor of one grouped risk workflow.
+
+Risk cards should show the human-readable source list behind the match, not only generic OpenSanctions wording. Dataset labels are derived from `payload.datasets`, then `payload.raw_csv_row.datasets`, then topics/source fallback.

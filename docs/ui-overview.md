@@ -1,62 +1,86 @@
 # UI Overview
 
-SEAM V2 is a map-first analyst workspace. The map is the canvas, not a feature inside a dashboard. Tools appear as floating overlays.
+SEAM V2 is a map-first desktop analyst workspace. The map stays visible for investigative flows; inspectors and command surfaces float over it.
 
-## Layout primitives
+## Shell Layout
 
-- **Shell** — viewport-filling container. Renders the persistent `MapCanvas` plus a floating `CommandPanel`. Mounts an inspector on the left or a full-canvas surface, never both.
-- **Command panel** — 296 px expanded, 60 px collapsed icon rail. Sits at `top/left/bottom: 12px`. Auto-collapses when an inspector opens unless the user manually expanded it; the inspector then shifts from `left: 84px` to `left: 320px` so they never overlap. State persists in `localStorage` (`seam:panel-collapsed`, `seam:inspector-width`).
-- **Inspector** — slides in from the left, 480 ↔ 720 px (resizable via the grip handle). Shared header with breadcrumb + title + actions, optional tabs, scrollable body, optional sticky footer. The `X` close action dismisses the inspector by replacing the route with `/map`; it does not return to the previous inspector in browser history.
-- **Full-canvas surfaces** — Schema, Operations, Roadmap. Replace the map; the command panel collapses to its rail.
+- **Command panel**: left-side navigation and map controls. It can collapse into an icon rail.
+- **Inspector**: left-side detail/list panel for vessels, entities, ports, Risk & Sanctions, news, and evidence. It supports back, resize, and close actions.
+- **Map canvas**: persistent MapLibre map for `/map` and inspector routes.
+- **Full-canvas surfaces**: Operations and Roadmap intentionally replace the map.
+- **Mobile gate**: narrow/mobile screens receive a desktop-optimized message instead of a partial mobile layout.
 
-## Map workspace
+## Navigation
 
-- **Basemap** — CartoDB Positron *no-labels* raster tiles over an ocean wash (`--ocean-100`). No place names, no roads, no buildings — coastlines and country shapes only. Saturation pulled down 0.2 so the basemap recedes behind vessel data.
-- **Vessel icons** — AIS-style triangles (tapered hull silhouette) drawn into a 64 px canvas, one pre-colored image per severity (critical / high / medium / low / none), with a baked-in white stroke. No SDF. Rotated by `heading_degrees`, falls back to `course_degrees`, falls back to north. Risky vessels sort above lower-risk vessels; a selected vessel sorts above all others.
-- **Focus state** — selecting a vessel keeps it fully opaque and increases its halo while non-focused vessels fade down, making the selected contact visually dominant without removing surrounding context.
-- **Click semantics** — left-click a triangle → opens the vessel detail inspector AND pans the map with `padding.left = 16 + panelWidth + 16 + inspectorWidth + 16` so the vessel lands in the visible map area, not behind a menu.
-- **Cluster** — `cluster: true, clusterMaxZoom: 6, clusterRadius: 40`. Cluster click expands via `getClusterExpansionZoom`.
-- **Default view** — Singapore Island, zoom 9.2.
+- `/map` is the default workspace.
+- `/vessels` and `/vessels/:id` handle vessel list/search/profile.
+- `/entities` and `/entities/:id` handle company/owner/operator/manager workflows.
+- `/risk` is the unified Risk & Sanctions feed.
+- `/news` shows RSS.app intelligence.
+- `/ports` shows port activity where available.
+- `/evidence/:id` shows raw source evidence.
+- `/operations` handles ingestion and operational state.
+- `/roadmap` explains product direction.
 
-## Floating command panel
+Inspector back buttons use real in-app history when possible. If a user lands directly on a detail route, the fallback is section-aware: vessel detail returns to Vessels, entity detail returns to Entities, and Risk-origin details return to Risk & Sanctions.
 
-Top-to-bottom: BrandHeader, GlobalSearch, PrimaryNav, MapFilters, SourceRefreshControls, KeyStatsStrip, FooterStrip.
+## Map Workspace
 
-- **Global search** — debounced 200 ms, fans out to vessel/entity search and numeric-evidence lookup; results show in a popover.
-- **Map filters** — risk severity chips, vessel-type multi-select, flag-state multi-select, geo-layer toggles (from `/api/geo/layers`), time window (live / 1h / 6h / 24h / 7d), port-activity overlay radio.
-- **Source refresh controls** — every ingestion endpoint with health pills, danger styling on the OpenSanctions API call (consumes 1 quota request — gated by a confirm modal).
-- **Key stats** — four tiles reading `useStatsSnapshot()`: Live vessels, Port events, Sanctions records, Risk flags. `Live vessels` uses the loaded map snapshot count and does not fall back to the total vessels table when the snapshot is empty.
-- **Footer** — live backend dot (pulses red when offline), greyscale map wash via `.shell.offline`.
+- Vessel markers are AIS-style triangles with heading/course rotation.
+- Risk severity colors are available on first map load.
+- Selecting one vessel fades other vessels and emphasizes the selected marker.
+- Selecting an entity focuses all related vessels, fades the rest, and labels only the related vessels.
+- Map centering accounts for open side panels so the selected vessel lands in free map space.
+- OCEANS-X ports can be toggled when the live geo layer is available.
+- The bottom map status strip slides to stay centered in the visible map area when panels open.
 
-## Command palette (⌘K)
+## Vessel Profile
 
-Centered modal with multi-collection search:
+The vessel panel is designed as a maritime intelligence profile, not a database table. It shows:
 
-- **Go to** — every primary route with icon + path label.
-- **Vessels / Entities / Evidence (numeric query) / Risk flags / Sanctions / Recent** — 5 results per section, contextual metadata per kind.
-- Keyboard: `↑↓` navigate · `↵` open · `Esc` close · `⌘K` toggle. Footer strip shows kbd hints and the result count.
-- `role="listbox"` with `aria-activedescendant` so screen readers announce the active row. Hover and keyboard navigation stay in sync via a single `activeIndex`.
+- Vessel identity: name, IMO, MMSI, call sign, flag, type.
+- Current movement: coordinates, speed, course/heading, position age.
+- Particulars: year built, tonnage, length, breadth, depth.
+- Risk: top active flags, evidence IDs, source lists.
+- Movements/position history and port calls.
+- Source confidence and refresh actions.
 
-## Evidence-first surfaces
+## Entity Detail
 
-- **EvidenceLink primitive** — `inline` (mono "#1234" with database icon), `chip` (filled pill), `button` (full button). Used wherever an evidence reference appears.
-- **EvidenceInspector** — Copy ID, Copy Hash, **Verify Hash** (SubtleCrypto SHA-256 over canonical JSON matching the backend `stable_payload_hash`), View Raw Source (opens `raw_payload.url`), Linked-subjects chips derived from payload keys (`vessel_id`, `entity_id`, `imo`, `mmsi`, `port_code`, …), pretty-printed JSON viewer with syntax highlighting.
+The entity panel is one unified page instead of separate subtabs. It shows:
 
-## Risk humanization
+- Entity summary and quick stats.
+- Unique related vessels, deduped by IMO.
+- Relationship record count.
+- Risk flags.
+- Relationship records collapsed by default.
+- Role badges on vessel cards when the same vessel has multiple roles.
 
-`labels.ts` maps backend `flag_type` strings to a `riskLabel()` object with:
+## Risk & Sanctions
 
-- `title` — human-readable name (Sanctioned, Detained at port, On maritime watchlist, …).
-- `body` — written explanation.
-- `kind` — semantic group (`sanctioned`, `detained`, `watchlist`, `news`, `high_risk_flag`, `identity_conflict`, `other`).
-- `toneClass` — pill variant.
+Risk and sanctions are merged into one feed because sanctions are a risk signal. Cards are grouped by vessel/entity and show:
 
-`/api/risk/feed` loads aggregated vessel/entity flags for the Risk and Sanctions inspectors in one request. `RiskCard.tsx` renders subject + status + relative time, severity pill + kind pill (with `Scale` for sanctioned, `Anchor` for detained, `ShieldAlert` otherwise) + source attribution, expandable description + Evidence chip + Open + per-vessel Recompute.
+- Overall severity and status.
+- Connected alert count.
+- Structured alert rows with icons.
+- Sanctions list names in readable labels.
+- Identity conflict values directly on the card.
+- Evidence and View details actions.
 
-## Motion + accessibility
+## News
 
-- Centralized tokens: `--motion-fast (120ms) / --motion-base (220ms) / --motion-slow (360ms)`; easings `--ease-out / --ease-in-out / --ease-pop`.
-- Inspector slides in from the left; vessel popover pops with a bounce; nav active bar animates the scale; offline status dot pulses.
-- `@media (prefers-reduced-motion: reduce)` collapses every animation and transition to 1 ms.
-- Every emoji flag carries `title=` + `aria-label=` set to the full country name.
-- `*:focus-visible` shows a 2 px `--ocean-500` ring with 2 px offset.
+The news panel uses compact cards with title, snippet, time, source badge/logo, and original link. Tabs separate:
+
+- All.
+- Social.
+- Watchlist.
+- Maritime.
+
+## Motion And Accessibility
+
+- Motions are quick and subtle: panel open/close, route focus transitions, dropdowns, cards, buttons, loading, and success/error feedback.
+- `prefers-reduced-motion` is respected.
+- Icons have labels/tooltips where meaning is not obvious.
+- Collapsed navigation has hover tooltips.
+- Buttons use visible focus states.
+- Risk is not communicated by color alone; labels and severity text are shown.

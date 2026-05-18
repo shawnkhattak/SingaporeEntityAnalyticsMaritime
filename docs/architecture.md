@@ -1,50 +1,52 @@
 # Architecture
 
-SEAM V2 runs three services: a React (Vite 6) frontend, a FastAPI backend, and PostgreSQL/PostGIS. All compose nodes are described in `docker-compose.yml`.
+SEAM V2 runs as three local services: a React/Vite frontend, a FastAPI backend, and PostgreSQL/PostGIS. Docker Compose wires the services for local development and demo use.
 
 ## Backend
 
-- **Routing**: `app/api/routes/*.py` — thin handlers calling services. Write/mutation routes are under `/api/dev/*` and gated behind `feature_mutations` (development-only).
-- **Services**: `app/services/*.py` own queries and workflow logic — `ingestion` (OCEANS-X positions/particulars/movements/port-activity + OpenSanctions + RSS news), `risk` (deterministic recompute + aggregated feed), `map`, `vessels`, `entities`, `graph`, `geo`, `ports`, `dev_console`.
-- **Clients**: `app/clients/oceansx.py` is the only file that calls OCEANS-X. The frontend never reaches out to maritime providers directly.
-- **Evidence spine**: `source_observations` stores every ingested payload with source, observation type, source record ID, observed/fetched timestamps, payload hash (`stable_payload_hash` — sorted-keys + ASCII-safe JSON), and the raw JSON.
-- **Read models** (`vessel_positions_latest`, `port_events`, `relationships`, `risk_flags`, `sanctions_records`, `news_articles`, `news_links`) carry `evidence_id` foreign keys back to `source_observations` where the source payload produced an evidence record.
-- **Latest snapshot membership**: `vessel_positions_latest.snapshot_job_id` marks which OCEANS-X positions snapshot last produced each vessel row. `/api/map/vessels` defaults to `scope=latest-snapshot`, so the map count follows the latest successful upstream snapshot instead of falling back to the accumulated latest-position table.
-- **IMO 0 filtering**: `_clean_identifier` in `ingestion.py` treats "0" / "00" / "n/a" / "null" as missing so AIS contacts without an IMO don't dedupe into a single ghost vessel. Read services (`map`, `vessels`, `dev_console`) also `WHERE imo IS NULL OR imo NOT IN ('0','00','000','0000')` as defense-in-depth.
+- **Routes**: `backend/app/api/routes/*.py` are thin FastAPI handlers. Development write actions live under `/api/dev/*` and are gated by environment/feature settings.
+- **Services**: `backend/app/services/*.py` owns workflow logic for ingestion, risk, map reads, vessels, entities, geo layers, ports, evidence, metadata, and operations.
+- **Clients**: `backend/app/clients/oceansx.py` is the only OCEANS-X client. The frontend never calls maritime providers directly.
+- **Evidence spine**: `source_observations` stores source, observation type, source record ID, observed/fetched timestamps, raw JSON payload, and a stable payload hash.
+- **Read models**: latest positions, port events, entity relationships, sanctions records, risk flags, news articles, jobs, logs, source health, and table counts are derived from stored source data.
+- **Latest map snapshot**: `vessel_positions_latest.snapshot_job_id` lets `/api/map/vessels?scope=latest-snapshot` show the latest upstream snapshot instead of every vessel ever accumulated.
+- **Entity relationship model**: entities currently focus on companies, owners, operators, ship managers, and ISM managers. Vessel counts are deduped by IMO.
 
 ## Frontend
 
-A hand-rolled SPA over a fixed-position layout. See `frontend/src/`:
+- **Shell**: `frontend/src/components/Shell.tsx` owns the persistent map, command panel, inspector/full-canvas switching, boot animation, and desktop-only gate.
+- **Routing**: `frontend/src/hooks/useRoute.ts` uses `pushState` and a custom `seam:navigate` event. It also tracks in-app route depth so inspector back buttons can use real history with safe fallbacks.
+- **State**: `frontend/src/state/AppState.tsx` stores filters, selection, panel state, inspector width, toasts, running jobs, vessel cache, source health, jobs, risk caches, and table counts.
+- **Map**: `frontend/src/components/map/MapCanvas.tsx` owns one MapLibre instance. It renders vessel triangles, risk halos, clusters, selected-vessel focus, entity multi-vessel focus, entity-only labels, and optional geo layers.
+- **Inspectors**: `frontend/src/components/inspector/` contains vessel, entity, ports, Risk & Sanctions, news, evidence, and list panels. All use `InspectorShell`.
+- **Operations**: `frontend/src/components/canvas/OpsConsole.tsx` is the operational control surface for source health, ingestion jobs/logs, table counts, and source refresh actions.
+- **Primitives**: shared buttons, inputs, pills, chips, tabs, modals, toasts, skeletons, empty states, JSON viewer, and evidence links live under `frontend/src/components/primitives/`.
 
-- **Shell** (`components/Shell.tsx`) owns the persistent map + command-panel layout. Routing uses `hooks/useRoute.ts` (pushState + a custom `seam:navigate` event so every `useRoute` instance stays in sync). Inspector close and Escape use `closeInspectorRoute()`, replacing the current URL with `/map` rather than walking browser history.
-- **State** (`state/AppState.tsx`) — single context/reducer for filters, selection, panel collapse, inspector width, toasts, running jobs, vessels cache, source health, jobs, risk caches, table counts. Exposes `useStatsSnapshot()` as the canonical count selector so every dashboard tile reads the same backend keys.
-- **Command panel** (`components/command-panel/`) — Brand · Global search · Primary nav · Map filters · Source refresh controls · Key stats strip · Footer.
-- **Map canvas** (`components/map/MapCanvas.tsx`) — one MapLibre instance for the SPA lifetime. CartoDB Positron no-labels basemap, AIS-style vessel triangle icons (pre-colored per severity, rotated by `heading_degrees` → `course_degrees` → 0), clustered at low zoom. Click → fly to a center padded by the panel + inspector geometry.
-- **Inspectors** (`components/inspector/`) — share `InspectorShell` with tabs, close, and resize controls. Vessels / Entities / Ports / Risk / News / Sanctions / Evidence. `RiskCard.tsx` is the canonical 3-row risk row used in the risk feed and vessel detail.
-- **Full-canvas surfaces** (`components/canvas/`) — `GraphCanvas` (React Flow with legend; auto-loads from `?subject=…&id=…`), `SchemaCanvas` (domain-color legend in toolbar), `OpsConsole` (ingestion console).
-- **Primitives** (`components/primitives/`) — Button, Input, Pill family, Chip, Tabs, Tooltip, Modal, Toast, EmptyState (compact + standard variants), Skeleton, ErrorState, ErrorBoundary, JsonViewer, `EvidenceLink` (inline/chip/button), CommandPalette.
-- **Labels** (`labels.ts`) — `countryName`, `flagEmoji` (Unicode regional indicator codepoints), `vesselTypeLabel` for MPA 2–3 letter codes, `riskLabel` for human-readable risk titles + bodies + semantic kinds (sanctioned, detained, watchlist, adverse news, high-risk flag, identity conflict).
-- **Format** (`format.ts`) — `parseBackendDate` treats naive UTC backend timestamps as UTC; `formatDate` and `formatRelative` render in `APP_TIME_ZONE = "America/Chicago"`.
+## Refresh Model
 
-## Auto-refresh model
+SEAM has no production scheduler. Refresh is explicit or frontend-controlled:
 
-SEAM has no backend scheduler. Auto-refresh is a frontend `usePoll` cadence anchored in `App.tsx`:
-
-- OCEANS-X positions snapshot every 10 min.
-- RSS/news feeds every 60 min.
-- Backend health every 15 s.
-- Map vessel list every 30 s while the time-window filter is `live`; it requests `/api/map/vessels?limit=5000&scope=latest-snapshot`.
-- `loadDevState()` every 60 s outside `/operations`, every 10 s inside.
-
-`usePoll` pauses on `document.visibilitychange === "hidden"` and skips if a snapshot is already in flight.
+- Map vessel data refreshes while `/map` is visible.
+- OCEANS-X source refresh is intentionally controlled from Operations and app-level refresh flows.
+- RSS/news refreshes hourly.
+- OCEANS-X source health is considered stale after 15 minutes, not one minute.
+- Operations/dev polling runs when Operations is visible; it should not globally flood `/map`.
+- `usePoll` pauses when the document is hidden.
 
 ## Configuration
 
-`.env` reads:
+`.env` and backend settings cover:
 
-- `MAX_REQUESTS_PER_RUN` — OCEANS-X snapshot row cap (default raised to 5000).
 - `OCEANSX_API_KEY`, `OCEANSX_BASE_URL`.
-- `OPENSANCTIONS_*` for sanctions API access and maritime CSV URL.
-- `NEWS_RSS_URLS` comma-separated. Defaults to the three RSS.app JSON Feed 1.1 bundles documented in `docs/sources/news.md`.
+- `OPENSANCTIONS_*` API/CSV settings.
+- `NEWS_RSS_URLS`, defaulting to the three RSS.app JSON Feed 1.1 bundles in [sources/news.md](sources/news.md).
+- `MAX_REQUESTS_PER_RUN` and source-specific request limits.
 
-The frontend reads `VITE_API_BASE_URL` (default `http://localhost:8000`).
+Frontend configuration:
+
+- `VITE_API_BASE_URL` defaults to `http://localhost:8000`.
+
+## Retired/Paused Areas
+
+- Graph UI is not part of the current product surface.
+- Port activity ingestion is paused for now; raw OCEANS-X movements may still contain location codes useful for future port analytics.

@@ -2,6 +2,8 @@
 
 Port activity stays manual-first and evidence-backed.
 
+> Current status: port activity ingestion is paused for the demo because source behavior is not reliable enough yet. Movement ingestion can still be useful where OCEANS-X returns movement/location fields.
+
 ## Source
 
 - Live endpoints:
@@ -16,7 +18,7 @@ The `date` value sent to OCEANS-X is formatted as `YYYYMMDD`; SEAM's public dev 
 - `POST /api/dev/ingestion/vessel-movements/{vessel_id}?mode=live`
 - `POST /api/dev/ingestion/port-activity?kind=due-arrive|due-depart&mode=live&date=YYYY-MM-DD`
 
-The Ports inspector loads the selected/current local date and refreshes arrivals and departures through the same trigger. The read API is:
+When enabled, the Ports inspector loads the selected/current local date and refreshes arrivals and departures through the same trigger. The read API is:
 
 - `GET /api/ports/activity?kind=due-arrive|due-depart&date=YYYY-MM-DD&limit=100`
 

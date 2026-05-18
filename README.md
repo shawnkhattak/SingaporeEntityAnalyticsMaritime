@@ -1,17 +1,31 @@
 # SEAM V2
 
-SEAM V2 is a portfolio-first **maritime intelligence platform** built around an evidence-backed analyst workspace. It fuses live OCEANS-X AIS positions, vessel particulars, OpenSanctions, and RSS news into a map-first SPA — every relationship and risk flag traces back to the source observation that produced it.
+SEAM V2 is a desktop-first maritime intelligence workspace for tracking vessels, understanding ownership/operator networks, monitoring sanctions and risk signals, and preserving the evidence behind every claim.
 
-> Repo: [shawnkhattak/SingaporeEntityAnalyticsMaritime](https://github.com/shawnkhattak/SingaporeEntityAnalyticsMaritime)
+The app is built around a live map of Singapore-area vessel activity. OCEANS-X supplies positions, particulars, movements, and available geospatial context; OpenSanctions supplies maritime sanctions/watchlist evidence; RSS.app supplies maritime news and social/search intelligence. SEAM stores each source payload as evidence, then builds analyst-friendly map, vessel, entity, risk, news, and operations views on top.
 
-## Highlights
+> Repository: [shawnkhattak/SingaporeEntityAnalyticsMaritime](https://github.com/shawnkhattak/SingaporeEntityAnalyticsMaritime)
 
-- **Map-first workspace** — one persistent MapLibre canvas under a floating command panel, inspectors slide in on the left, full-canvas surfaces (Schema / Operations / Roadmap) replace the map only when chosen. Light analytical basemap (CartoDB Positron no-labels) with AIS-style vessel triangles colored by risk severity and rotated by heading.
-- **Evidence is a first-class affordance** — every risk card, sanctions match, port event, and vessel-detail observation carries an `EvidenceLink` chip. The Evidence inspector has Copy ID, Copy Hash, **Verify Hash** (SubtleCrypto SHA-256 over the canonical JSON), View Raw Source, and Linked-subjects chips derived from the payload.
-- **Live OCEANS-X ingestion with auto-refresh** — manual triggers + background `usePoll` snapshot every 10 minutes. Map reads default to `scope=latest-snapshot`, backed by `vessel_positions_latest.snapshot_job_id`, so the live map shows the most recent upstream snapshot rather than every vessel ever accumulated.
-- **Categorical risk model with human-readable surfaces** — sanctioned, detained, watchlist, high-risk flag, identity conflict, adverse news. `/api/risk/feed` loads the Risk and Sanctions inspectors in one server-side query instead of discovering flags vessel-by-vessel.
-- **Command palette (⌘K)** — searches across vessels, entities, ports, evidence IDs, risk flags, sanctions matches, recent items. Full keyboard navigation, `role="listbox"` with `aria-activedescendant`, footer kbd hints.
-- **Times in Houston Central** — `formatDate` and `formatRelative` render every timestamp in `America/Chicago` regardless of the device's clock.
+## What SEAM Shows
+
+- **Live vessel map** with AIS-style vessel markers, heading/course rotation, risk coloring on first load, entity multi-select focus, and OCEANS-X geo overlays.
+- **Premium vessel profile panel** with identity, current position, movement state, particulars, risk flags, evidence, source confidence, port calls, and refresh actions.
+- **Entity intelligence** for companies, owners, operators, ship managers, and ISM managers, sorted by unique vessel count and deduped by IMO.
+- **Unified Risk & Sanctions feed** that groups vessel alerts into one card per vessel, including sanctions, detentions, watchlist signals, high-risk flags, identity conflicts, and adverse news.
+- **Evidence-first workflows** where source observations, hashes, evidence IDs, and raw payloads remain inspectable.
+- **Operations Center** for source health, ingestion jobs/logs, table counts, source refresh actions, bulk vessel particulars enrichment, and vessel browsing.
+- **RSS news workspace** organized by the configured RSS.app bundles, with source badges and original links.
+
+## Core Data Sources
+
+| Source | Used For |
+| --- | --- |
+| OCEANS-X | Vessel positions, particulars, movements, selected geo layers, source health |
+| OpenSanctions Maritime | Sanctions, detention, watchlist, source dataset labels, evidence payloads |
+| RSS.app JSON Feed 1.1 | Singapore social media intel, entity watchlist terms, maritime news |
+| PostgreSQL/PostGIS | Canonical vessels, latest positions, entities, relationships, evidence, risk flags, news, jobs, logs |
+
+See [docs/data-catalog.md](docs/data-catalog.md) for the compact list of all data points available for future stats pages.
 
 ## Quick Start
 
@@ -19,81 +33,88 @@ SEAM V2 is a portfolio-first **maritime intelligence platform** built around an 
 ./start.sh
 ```
 
-The shell starts three services:
+Services:
 
 - Frontend: http://localhost:5173
 - Backend health: http://localhost:8000/api/health
 - PostgreSQL/PostGIS: localhost:5432
 
-Stop services with:
+Stop services:
 
 ```sh
 ./stop.sh
 ```
 
-The backend container applies Alembic migrations before starting the API. For local backend checks, use Python 3.12 to match the container runtime:
+Frontend-only development:
 
 ```sh
-cd backend
-../.venv312/bin/alembic upgrade head
+cd frontend
+npm run dev
 ```
 
-Run implemented-stage smoke checks with:
+Production build check:
 
 ```sh
-scripts/test-stages.sh
+cd frontend
+npm run build
 ```
 
-Frontend dev: source is bind-mounted into the Docker container, so `vite` HMR picks up host edits without rebuilding. If you need a host dev server instead, stop the frontend container and run `cd frontend && npm run dev`.
-
-Documentation starts at [docs/README.md](docs/README.md). Engineering practices are documented in [docs/best-practices.md](docs/best-practices.md).
-
-## Guardrails
-
-V1 has no auth, no AI, no TimescaleDB, no numeric risk score, and no backend scheduler — auto-refresh is a frontend `usePoll` cadence. Write routes belong under `/api/dev/*` and remain development-only. OCEANS-X endpoint availability can still depend on the configured API key/subscription. Port activity ingestion is currently paused.
-
-## API Examples
+Backend checks should use Python 3.12 to match the container runtime:
 
 ```sh
-curl -X POST "http://localhost:8000/api/dev/ingestion/positions-snapshot?mode=live"
-curl "http://localhost:8000/api/vessels/search?q=EVER&limit=5"
-curl "http://localhost:8000/api/vessels/1"
-curl -X POST "http://localhost:8000/api/dev/ingestion/vessel-particulars/1?mode=live"
-curl -X POST "http://localhost:8000/api/dev/ingestion/vessel-particulars-map?delay_seconds=0.5"
-curl -X POST "http://localhost:8000/api/dev/ingestion/vessel-movements/1?mode=live"
-curl -X POST "http://localhost:8000/api/dev/ingestion/refresh-live"
-curl -X POST "http://localhost:8000/api/dev/ingestion/news"
-curl -X POST "http://localhost:8000/api/dev/ingestion/sanctions?confirm_live=true"
-curl -X POST "http://localhost:8000/api/dev/ingestion/sanctions-csv" -H "Content-Type: text/csv" --data-binary @opensanctions-maritime.csv
-curl -X POST "http://localhost:8000/api/dev/ingestion/sanctions-csv-url"
-curl "http://localhost:8000/api/ports/activity?kind=due-arrive"
-curl "http://localhost:8000/api/map/vessels?limit=5000&scope=latest-snapshot"
-curl "http://localhost:8000/api/risk/feed?limit=250"
-curl "http://localhost:8000/api/entities/search?q=EVERGREEN"
-curl "http://localhost:8000/api/evidence/1"
-curl "http://localhost:8000/api/meta/schema-graph"
+.venv312/bin/pytest backend/app/tests/test_project_contracts.py
 ```
 
-## Frontend Surfaces
+## Main Routes
 
-The SPA reuses one URL space. The map and command panel are persistent on every inspector route; full-canvas surfaces replace the map only when chosen.
+| Route | Purpose |
+| --- | --- |
+| `/map` | Main map workspace |
+| `/vessels` and `/vessels/:id` | Vessel search/list and vessel profile |
+| `/entities` and `/entities/:id` | Company/owner/operator/manager list and unified entity detail |
+| `/risk` | Unified Risk & Sanctions feed |
+| `/news` | RSS.app maritime/social/search intelligence |
+| `/ports` | Port activity inspector |
+| `/evidence/:id` | Raw evidence record and payload hash verification |
+| `/operations` | Operations Center and ingestion controls |
+| `/roadmap` | Layman's roadmap and product journey |
 
-- `/` and `/map` — Map workspace. Click a vessel triangle to open its detail inspector with a padded fly-to.
-- `/vessels` — Vessel list inspector with severity-ringed avatars, type chips, source badge, relative last-seen.
-- `/vessels/:id` — Vessel detail (Overview / Port calls / Position History / Risk). Overview has metric tiles, top risk cards, source-confidence matrix, recent-movement strip.
-- `/entities` and `/entities/:id` — Entity list + unified detail view with summary, related vessels, risk, and relationships.
-- `/ports` — Port activity inspector (Due to arrive / Due to depart / All ports) for the selected/current local date.
-- `/risk` — Server-loaded risk feed with semantic kind chips (Sanctioned · Detained · Watchlist · Adverse news · High-risk flag · Identity conflict) and the standard `RiskCard` layout.
-- `/news` — RSS.app-derived stories with source badges for social, government, search-feed, and maritime publication sources.
-- `/sanctions` — Read-only sanctions matches (CSV upload lives in Operations).
-- `/evidence/:id` — Evidence inspector with Copy ID, Copy Hash, Verify Hash, View Raw Source, Linked subjects, raw JSON viewer.
-- `/schema` — Architecture atlas with domain-color legend.
-- `/operations` — Ingestion console (canonical path; `/ops` and `/dev` are aliases). Three-column grid: source health + jobs + logs, DB state, ingestion controls, plus full-width vessel browser.
-- `/roadmap` — Stage timeline.
+`/sanctions` redirects into the unified Risk & Sanctions flow. Graph functionality is intentionally retired from the UI for now; backend graph code is retained but not presented as a primary user workflow.
 
-## Layout & motion
+## Demo Journey
 
-- Floating command panel (12 px insets, 296 ↔ 60 px) over the map. Auto-collapses when an inspector opens; inspector shifts to `left: 320 px` when the panel is manually expanded.
-- Inspector close buttons replace the current inspector URL with `/map`; closing a vessel, port, risk, or evidence pullout does not navigate back through previous pullouts.
-- ⌘K command palette with multi-collection search and keyboard hints.
-- Reduced-motion respected via `prefers-reduced-motion: reduce`.
+1. Open `/operations` and confirm source health, table counts, recent jobs, and logs.
+2. Run or confirm an OCEANS-X positions snapshot.
+3. Open `/map` and show vessels colored by risk immediately on load.
+4. Open `/risk` and review grouped Risk & Sanctions cards.
+5. Open a sanctioned vessel and inspect the source list and evidence.
+6. Open `/entities`, sort by unique vessels, select a company, and show its vessels focused on the map.
+7. Open a related vessel profile and review particulars, movements, risk, and source confidence.
+8. Open `/news` and show the three RSS.app bundles.
+9. Close with `/roadmap` to explain current scope and next product steps.
+
+## Development Guardrails
+
+- Desktop-first; narrow/mobile screens show a desktop-required gate.
+- No authentication, no AI-generated risk narratives, no numeric composite risk score.
+- All write/mutation routes live under `/api/dev/*` and are development-only.
+- The frontend never calls OCEANS-X directly.
+- Every generated relationship/risk/news/sanctions fact should trace back to a `source_observations` evidence row.
+- Port activity ingestion is paused until the source behavior is reliable enough for demos.
+
+## Documentation
+
+Start at [docs/README.md](docs/README.md). Key docs:
+
+- [Architecture](docs/architecture.md)
+- [UI Overview](docs/ui-overview.md)
+- [Data Catalog](docs/data-catalog.md)
+- [Map](docs/map.md)
+- [Risk Flags](docs/risk-flags.md)
+- [Operations Center](docs/dev-console.md)
+- [Demo Script](docs/demo-script.md)
+- [Known Limitations](docs/known-limitations.md)
+
+## License
+
+Portfolio/demo project. Add a formal license before commercial reuse or public distribution.

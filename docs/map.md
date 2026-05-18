@@ -1,28 +1,43 @@
 # Map
 
-`/map` renders live database-backed vessel positions and OCEANS-X geospatial overlays. The frontend reads only SEAM APIs: `/api/map/vessels`, `/api/geo/layers`, and `/api/geo/layers/{layer_name}`.
+`/map` is the core SEAM operating picture. The frontend reads SEAM APIs only: `/api/map/vessels`, `/api/geo/layers`, and `/api/geo/layers/{layer_name}`.
 
 ## Vessel Snapshot
 
-The default map request is:
+The normal map request is:
 
 ```text
 GET /api/map/vessels?limit=5000&scope=latest-snapshot
 ```
 
-`scope=latest-snapshot` filters `vessel_positions_latest` by the latest successful `oceansx.positions_snapshot` ingestion job via `snapshot_job_id`. This keeps the map and Live vessels stat aligned with the latest upstream OCEANS-X response instead of showing every vessel accumulated in the database. `scope=all` is available for diagnostics.
+`scope=latest-snapshot` filters latest vessel positions by the latest successful OCEANS-X positions snapshot. This keeps the visible map count aligned with the newest upstream response instead of showing every vessel accumulated in the database.
 
-The map response also includes each vessel's active risk flags and highest severity. Initial vessel colors are therefore available on first load from `/api/map/vessels`; users do not need to open the Risk inspector before high-risk vessels render in their risk colors.
+The response includes active risk flags and highest severity, so markers are colored by risk immediately on first load.
 
 ## Rendering Behavior
 
-- Vessel symbols are AIS-style triangles, rotated by heading, then course, then north.
-- Severity colors are `critical`, `high`, `medium`, `low`, and `none`.
-- Risky vessels sort above lower-risk vessels by default.
-- The selected vessel sorts above every other vessel.
-- When a vessel is selected, non-focused vessels fade while the selected vessel and its halo remain prominent.
-- Low zoom uses MapLibre clustering; cluster clicks expand to the cluster expansion zoom.
+- Vessel symbols are AIS-style triangles.
+- Rotation uses heading, then course, then north.
+- Severity colors are critical, high, medium, low, and none.
+- Risky vessels sort above lower-risk vessels.
+- Low zoom clusters vessels with MapLibre clustering.
+- Cluster clicks expand to the cluster expansion zoom.
+
+## Focus Behavior
+
+- Selecting a vessel keeps that vessel fully visible, adds a blue focus ring, and fades unrelated vessels.
+- Selecting an entity loads the entity's related vessels, highlights all of them, labels only those focused vessels, and fades unrelated vessels.
+- Closing the inspector clears selection and returns the map to normal opacity.
+- Inspector fly-to requests include left padding so selected vessels are centered in the free map area, not under side panels.
 
 ## Geo Layers
 
-Geo layers are populated from live OCEANS-X geo endpoints through `/api/dev/ingestion/geo-layers`. If the layer has not been refreshed yet, the map shows an empty layer state rather than local sample data.
+OCEANS-X geo layers can be toggled from map filters. The current visible product toggle is OCEANS-X ports. If a layer is not cached, the backend attempts a live fetch through the configured OCEANS-X client.
+
+If OCEANS-X does not return a usable layer for the configured key/subscription, the map fails quietly instead of breaking the demo.
+
+## Important Notes
+
+- The map should stay fresh while visible.
+- Duplicate vessel snapshot fetches should be avoided.
+- Operations/dev polling should not run globally on `/map` unless a visible component needs it.
