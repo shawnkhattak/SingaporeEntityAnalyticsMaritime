@@ -3,7 +3,6 @@ import type {
   DevVesselBrowseRow,
   Entity,
   EntityRelationship,
-  GraphRead,
   IngestionJob,
   RiskFeedItem,
   RiskFlag,
@@ -233,14 +232,6 @@ export function getNewsList(limit = 50, bundleName?: string) {
     params.set("bundle_name", bundleName);
   }
   return getJson<NewsArticleItem[]>(`/api/news?${params.toString()}`);
-}
-
-export function getVesselGraph(vesselId: number) {
-  return getJson<GraphRead>(`/api/graph/vessels/${vesselId}`);
-}
-
-export function getEntityGraph(entityId: number) {
-  return getJson<GraphRead>(`/api/graph/entities/${entityId}`);
 }
 
 export function getSchemaGraph() {

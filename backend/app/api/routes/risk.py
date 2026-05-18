@@ -17,9 +17,9 @@ async def get_risk_feed(
     include_resolved: bool = False,
     flag_types: Annotated[list[str] | None, Query()] = None,
 ) -> list[RiskFeedItem]:
-    """Aggregated risk feed used by RiskFeedInspector, SanctionsInspector,
-    and the command palette. Pass `flag_types` to filter (repeat the
-    parameter for OR semantics, e.g. `?flag_types=sanctions_match`)."""
+    """Aggregated risk feed used by RiskFeedInspector and the command palette.
+    Pass `flag_types` to filter (repeat the parameter for OR semantics, e.g.
+    `?flag_types=sanctions_match`)."""
     return await RiskService(session).feed(
         limit=limit, include_resolved=include_resolved, flag_types=flag_types
     )

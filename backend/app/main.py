@@ -4,7 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes.dev import router as dev_router
 from app.api.routes.entities import router as entities_router
 from app.api.routes.evidence import router as evidence_router
-from app.api.routes.graph import router as graph_router
 from app.api.routes.geo import router as geo_router
 from app.api.routes.health import router as health_router
 from app.api.routes.map import router as map_router
@@ -35,7 +34,6 @@ def create_app() -> FastAPI:
     app.include_router(vessels_router)
     app.include_router(entities_router)
     app.include_router(evidence_router)
-    app.include_router(graph_router)
     app.include_router(geo_router)
     app.include_router(reference_router)
     app.include_router(meta_router)

@@ -174,10 +174,6 @@ export type RiskFeedItem = {
   conflict_details: IdentityConflictDetail[] | null;
 };
 
-export type GraphNode = { id: string; type: string; label: string; summary: Record<string, unknown> };
-export type GraphEdge = { id: string; source: string; target: string; type: string; confidence: string | null; evidence_id: number | null; summary: string | null };
-export type GraphRead = { nodes: GraphNode[]; edges: GraphEdge[] };
-
 export type SchemaGraph = {
   nodes: { id: string; label: string; domain: string; columns: string[] }[];
   edges: { source: string; target: string; label: string }[];
