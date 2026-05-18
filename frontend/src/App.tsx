@@ -7,7 +7,7 @@ import { usePoll } from "./hooks/usePoll";
 
 // OCEANS-X positions snapshot cadence. Anything more frequent risks
 // hammering the upstream API and consuming the quota.
-const OCEANSX_INTERVAL_MS = 10 * 60 * 1000;
+const OCEANSX_INTERVAL_MS = 60 * 60 * 1000;
 const NEWS_RSS_INTERVAL_MS = 60 * 60 * 1000;
 
 export function App() {
@@ -30,7 +30,7 @@ export function App() {
     60_000,
   );
 
-  // Auto-snapshot OCEANS-X every 10 minutes. Skipped if a snapshot is
+  // Auto-snapshot OCEANS-X every hour. Skipped if a snapshot is
   // already running (manual or scheduled) and when the tab is hidden
   // (usePoll handles visibilitychange internally).
   usePoll(

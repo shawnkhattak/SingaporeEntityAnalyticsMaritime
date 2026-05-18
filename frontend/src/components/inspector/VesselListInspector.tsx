@@ -25,6 +25,10 @@ type Row = {
   call_sign: string | null;
   flag_country_code: string | null;
   vessel_type_code: string | null;
+  year_built: number | null;
+  deadweight: number | null;
+  gross_tonnage: number | null;
+  length_meters: number | null;
   position_timestamp: string | null;
   severity: ReturnType<typeof highestSeverity>;
 };
@@ -83,6 +87,10 @@ export function VesselListInspector() {
         call_sign: v.call_sign,
         flag_country_code: v.flag_country_code,
         vessel_type_code: v.vessel_type_code,
+        year_built: v.year_built ?? null,
+        deadweight: v.deadweight ?? null,
+        gross_tonnage: v.gross_tonnage ?? null,
+        length_meters: v.length_meters ?? null,
         position_timestamp: v.latest_position?.position_timestamp ?? null,
         severity: highestSeverity(state.riskByVessel[v.id] ?? []),
       }));
@@ -97,6 +105,10 @@ export function VesselListInspector() {
         call_sign: v.call_sign,
         flag_country_code: v.flag_country_code,
         vessel_type_code: v.vessel_type_code,
+        year_built: v.year_built ?? null,
+        deadweight: v.deadweight ?? null,
+        gross_tonnage: v.gross_tonnage ?? null,
+        length_meters: v.length_meters ?? null,
         position_timestamp: v.position_timestamp,
         severity: highestSeverity(state.riskByVessel[v.vessel_id] ?? []),
       }));
@@ -180,6 +192,16 @@ export function VesselListInspector() {
                 <div className="mono t-muted" style={{ fontSize: 11, marginTop: 2 }}>
                   {[row.imo && `IMO ${row.imo}`, row.mmsi && `MMSI ${row.mmsi}`, row.call_sign].filter(Boolean).join(" · ") || "—"}
                 </div>
+                {(() => {
+                  const bits: string[] = [];
+                  if (row.year_built != null) bits.push(`Built ${row.year_built}`);
+                  if (row.deadweight != null) bits.push(`${row.deadweight.toLocaleString()} DWT`);
+                  else if (row.gross_tonnage != null) bits.push(`${row.gross_tonnage.toLocaleString()} GT`);
+                  if (row.length_meters != null) bits.push(`${row.length_meters} m`);
+                  return bits.length > 0 ? (
+                    <div className="t-faded" style={{ fontSize: 10, marginTop: 2 }}>{bits.join(" · ")}</div>
+                  ) : null;
+                })()}
                 <div className="t-faded" style={{ fontSize: 10, marginTop: 2 }}>
                   OCEANS-X · last seen {formatRelative(row.position_timestamp)}
                 </div>

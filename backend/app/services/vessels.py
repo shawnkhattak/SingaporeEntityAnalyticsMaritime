@@ -148,16 +148,7 @@ class VesselService:
 
     @staticmethod
     def _summary(vessel: Vessel) -> VesselSummary:
-        return VesselSummary(
-            id=vessel.id,
-            imo=vessel.imo,
-            mmsi=vessel.mmsi,
-            name=vessel.name,
-            call_sign=vessel.call_sign,
-            flag_country_code=vessel.flag_country_code,
-            vessel_type_code=vessel.vessel_type_code,
-            source_updated_at=vessel.source_updated_at,
-        )
+        return VesselSummary.model_validate(vessel)
 
     @staticmethod
     def _position(position: VesselPositionLatest | None) -> VesselPositionRead | None:

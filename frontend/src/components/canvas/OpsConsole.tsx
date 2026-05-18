@@ -20,7 +20,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   browseDevVessels,
   getDevTableCounts,
@@ -36,6 +36,7 @@ import {
   runSanctionsCsvUrl,
   runSanctionsLive,
   runTestJob,
+  cancelMapParticulars,
   searchVessels,
   runMovements,
   runMapParticulars,
@@ -47,6 +48,7 @@ import { Button } from "../primitives/Button";
 import { classifyHealth, classifyJob, HealthPill, JobPill, RiskPill } from "../primitives/Pill";
 import { Modal } from "../primitives/Modal";
 import { Skeleton } from "../primitives/Skeleton";
+import { Tooltip } from "../primitives/Tooltip";
 import type {
   DevVesselBrowseRow,
   HealthStatus,
@@ -234,6 +236,7 @@ export function OpsConsole() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showPortDetails, setShowPortDetails] = useState(false);
   const [dismissedBulkParticularsJobId, setDismissedBulkParticularsJobId] = useState<number | null>(null);
+  const [watchedBulkParticularsJobId, setWatchedBulkParticularsJobId] = useState<number | null>(null);
 
   async function refreshDev() {
     try {
@@ -358,9 +361,19 @@ export function OpsConsole() {
     () => state.jobs.find((job) => job.job_type === "oceansx.vessel_particulars_bulk") ?? null,
     [state.jobs],
   );
-  const bulkParticularsActive = bulkParticularsJob?.status === "queued" || bulkParticularsJob?.status === "running";
+  const bulkParticularsActive =
+    bulkParticularsJob?.status === "queued" ||
+    bulkParticularsJob?.status === "running" ||
+    bulkParticularsJob?.status === "cancelling";
+  useEffect(() => {
+    if (bulkParticularsJob && bulkParticularsActive) {
+      setWatchedBulkParticularsJobId(bulkParticularsJob.id);
+    }
+  }, [bulkParticularsJob, bulkParticularsActive]);
   const visibleBulkParticularsJob =
-    bulkParticularsJob && (bulkParticularsActive || dismissedBulkParticularsJobId !== bulkParticularsJob.id)
+    bulkParticularsJob &&
+    (bulkParticularsActive || watchedBulkParticularsJobId === bulkParticularsJob.id) &&
+    dismissedBulkParticularsJobId !== bulkParticularsJob.id
       ? bulkParticularsJob
       : null;
 
@@ -413,7 +426,9 @@ export function OpsConsole() {
 
   const topIssue = failingSources[0] ?? null;
   const topIssueSummary = topIssue
-    ? `${sourceLabel(topIssue.source)} is failing.`
+    ? classifySourceHealth(topIssue) === "fail"
+      ? `${sourceLabel(topIssue.source)} is failing.`
+      : `${sourceLabel(topIssue.source)} needs refresh.`
     : failedJobsByType[0]
       ? `${jobTypeLabel(failedJobsByType[0].jobType)} failed ${failedJobsByType[0].count} time${failedJobsByType[0].count === 1 ? "" : "s"}.`
       : "All ingestion sources nominal.";
@@ -426,6 +441,7 @@ export function OpsConsole() {
     kind: "job-success" | "job-failure" | "job-running" | "log-error";
     title: string;
     detail?: string;
+    count?: number;
   };
 
   const timeline: TimelineEvent[] = useMemo(() => {
@@ -451,7 +467,20 @@ export function OpsConsole() {
       });
     }
     events.sort((a, b) => timeOf(b.at) - timeOf(a.at));
-    return events.slice(0, 12);
+    const compact = new Map<string, TimelineEvent>();
+    for (const ev of events) {
+      const key = `${ev.kind}:${ev.title}`;
+      const existing = compact.get(key);
+      if (existing) {
+        existing.count = (existing.count ?? 1) + 1;
+        if (timeOf(ev.at) > timeOf(existing.at)) existing.at = ev.at;
+      } else {
+        compact.set(key, { ...ev, count: 1 });
+      }
+    }
+    return Array.from(compact.values())
+      .sort((a, b) => timeOf(b.at) - timeOf(a.at))
+      .slice(0, 12);
   }, [state.jobs, logs]);
 
   /* ----- Handlers --------------------------------------------------- */
@@ -491,9 +520,9 @@ export function OpsConsole() {
   /* ----- Render ----------------------------------------------------- */
 
   return (
-    <div className="col" style={{ gap: 14, paddingBottom: 30 }}>
+    <div className="ops-console col">
       {/* ===== Header =============================================== */}
-      <header className="row" style={{ marginBottom: 4, alignItems: "flex-start" }}>
+      <header className="ops-page-header row">
         <div style={{ flex: 1 }}>
           <div className="t-caption">Data operations</div>
           <h1 className="t-display" style={{ margin: 0, fontSize: 22 }}>Operations Center</h1>
@@ -530,17 +559,16 @@ export function OpsConsole() {
       />
 
       {/* ===== Source health + Active issues ======================== */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 12 }}>
+      <div className="ops-two-col-grid">
         <Panel title="Source health" icon={<Activity size={14} />}>
           {state.health.length === 0 ? (
             <p className="t-faded">No source health rows yet.</p>
           ) : (
-            <div className="col" style={{ gap: 4 }}>
+            <div className="col ops-compact-list">
               {state.health.map((h: SourceHealth) => (
                 <div
                   key={h.id}
-                  className="row"
-                  style={{ padding: "8px 10px", borderTop: "1px solid var(--gray-100)", alignItems: "flex-start" }}
+                  className="row ops-health-row"
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 500, fontSize: 13 }}>{sourceLabel(h.source)}</div>
@@ -596,12 +624,12 @@ export function OpsConsole() {
       />
 
       {/* ===== Recent activity ====================================== */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr)", gap: 12, alignItems: "stretch" }}>
-        <Panel title="Operations timeline" icon={<Sparkles size={14} />}>
+      <div className="ops-recent-grid">
+        <Panel title="Operations timeline" icon={<Sparkles size={14} />} fill>
           {timeline.length === 0 ? (
             <p className="t-faded">No recent activity.</p>
           ) : (
-            <div className="col" style={{ gap: 6 }}>
+            <div className="col scroll ops-timeline-list">
               {timeline.map((ev) => (
                 <TimelineRow key={ev.id} ev={ev} />
               ))}
@@ -615,8 +643,8 @@ export function OpsConsole() {
           shimmer={Object.keys(state.runningJobs).length > 0}
           fill
         >
-          <div className="table-wrap scroll" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-            <table className="table">
+          <div className="table-wrap scroll ops-jobs-table-wrap">
+            <table className="table ops-jobs-table">
               <thead>
                 <tr>
                   <th>Job</th>
@@ -631,7 +659,7 @@ export function OpsConsole() {
                   return (
                     <tr key={job.id} className={isFail ? "stripe-crit" : undefined}>
                       <td>
-                        <div style={{ fontSize: 12, fontWeight: 500 }}>{jobTypeLabel(job.job_type)}</div>
+                        <div className="ops-table-primary" title={jobTypeLabel(job.job_type)}>{jobTypeLabel(job.job_type)}</div>
                         {showAdvanced && (
                           <div className="mono t-faded" style={{ fontSize: 10 }}>#{job.id} · {job.job_type}</div>
                         )}
@@ -649,7 +677,7 @@ export function OpsConsole() {
         </Panel>
 
         <Panel title="Recent logs" fill>
-          <div className="row" style={{ gap: 4, paddingBottom: 8 }}>
+          <div className="row ops-log-tabs">
             {(["all", "info", "warning", "error"] as const).map((lvl) => (
               <button
                 key={lvl}
@@ -663,19 +691,12 @@ export function OpsConsole() {
           </div>
 
           {groupedErrors.length > 1 && logLevel !== "info" && logLevel !== "warning" && (
-            <div className="col" style={{ gap: 4, marginBottom: 8 }}>
+            <div className="col ops-error-groups">
               <div className="t-caption" style={{ fontSize: 10 }}>Repeated errors</div>
               {groupedErrors.slice(0, 3).map((g) => (
                 <div
                   key={g.message}
-                  className="row"
-                  style={{
-                    padding: "6px 8px",
-                    fontSize: 11,
-                    background: "rgba(198,40,40,.06)",
-                    border: "1px solid rgba(198,40,40,.16)",
-                    borderRadius: "var(--r-card)",
-                  }}
+                  className="row ops-error-group-row"
                 >
                   <AlertTriangle size={12} color="var(--risk-critical)" />
                   <span style={{ flex: 1 }}>{g.message}</span>
@@ -685,22 +706,18 @@ export function OpsConsole() {
             </div>
           )}
 
-          <div
-            className="scroll"
-            style={{ flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: 4 }}
-          >
+          <div className="scroll ops-log-list">
             {visibleLogs.length === 0 ? (
               <p className="t-faded">No logs.</p>
             ) : (
               visibleLogs.map((log) => (
                 <div
                   key={log.id}
-                  className="row"
-                  style={{ padding: "6px 8px", fontSize: 11, borderBottom: "1px solid var(--gray-100)" }}
+                  className="row ops-log-row"
                 >
                   <span className={`pill ${logColor(log.level)}`}>{log.level}</span>
-                  <span className="mono" style={{ flex: 1 }}>{log.message}</span>
-                  <span className="t-faded">{formatDate(log.created_at)}</span>
+                  <span className="mono ops-log-message">{log.message}</span>
+                  <span className="t-faded ops-log-time">{formatDate(log.created_at)}</span>
                 </div>
               ))
             )}
@@ -710,8 +727,8 @@ export function OpsConsole() {
 
       {/* ===== Vessel browser ======================================= */}
       <Panel title="Vessel browser" icon={<Database size={14} />}>
-        <div className="row" style={{ gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-          <label className="input search" style={{ flex: "1 1 240px" }}>
+        <div className="ops-filter-row">
+          <label className="input search ops-filter-search">
             <Search />
             <input
               value={browseQuery}
@@ -779,7 +796,7 @@ export function OpsConsole() {
             <option value="name">Sort: Name</option>
             <option value="type">Sort: Type</option>
           </select>
-          <label className="row" style={{ gap: 4, fontSize: 12, cursor: "pointer" }}>
+          <label className="row ops-checkbox-filter">
             <input
               type="checkbox"
               checked={missingIdFilter}
@@ -792,7 +809,7 @@ export function OpsConsole() {
           </label>
           <Button size="sm" onClick={exportBrowseCsv}>Export CSV</Button>
         </div>
-        <div className="table-wrap scroll" style={{ maxHeight: 420, overflow: "auto" }}>
+        <div className="table-wrap scroll ops-vessel-table-wrap">
           <table className="table">
             <thead>
               <tr>
@@ -819,7 +836,7 @@ export function OpsConsole() {
               ) : (
                 visible.map((row) => (
                   <tr key={row.vessel_id}>
-                    <td><a href={`/vessels/${row.vessel_id}`}>{row.name}</a></td>
+                    <td><a className="ops-table-link" href={`/vessels/${row.vessel_id}`} title={row.name}>{row.name}</a></td>
                     <td className="mono" style={{ fontSize: 11 }}>
                       {row.imo ?? row.mmsi ?? row.call_sign ?? "—"}
                     </td>
@@ -841,7 +858,7 @@ export function OpsConsole() {
                         "—"
                       )}
                     </td>
-                    <td className="t-sm">{vesselTypeLabel(row.vessel_type_code)}</td>
+                    <td className="t-sm"><span className="ops-truncate-cell" title={vesselTypeLabel(row.vessel_type_code)}>{vesselTypeLabel(row.vessel_type_code)}</span></td>
                     <td>
                       {row.highest_risk_severity ? (
                         <RiskPill severity={row.highest_risk_severity as never} />
@@ -849,7 +866,11 @@ export function OpsConsole() {
                         <span className="t-faded">—</span>
                       )}
                     </td>
-                    <td className="t-sm">{row.risk_flag_types.join(", ") || "—"}</td>
+                    <td className="t-sm">
+                      <span className="ops-truncate-cell" title={row.risk_flag_types.join(", ") || "—"}>
+                        {row.risk_flag_types.join(", ") || "—"}
+                      </span>
+                    </td>
                     <td className="t-faded" style={{ fontSize: 11 }}>
                       {formatDate(row.latest_position?.position_timestamp ?? row.source_updated_at)}
                     </td>
@@ -864,7 +885,7 @@ export function OpsConsole() {
             </tbody>
           </table>
         </div>
-        <div className="row" style={{ marginTop: 10, justifyContent: "space-between" }}>
+        <div className="row ops-pagination">
           <Button size="sm" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
             Previous
           </Button>
@@ -902,6 +923,7 @@ export function OpsConsole() {
             Advanced / Developer
           </button>
         }
+        compact={!showAdvanced}
       >
         {showAdvanced ? (
           <div className="col" style={{ gap: 12 }}>
@@ -1020,39 +1042,30 @@ function SystemStatusStrip({
         "var(--risk-critical)";
 
   return (
-    <section
-      className="panel-solid"
-      style={{
-        padding: 16,
-        borderLeft: `4px solid ${accent}`,
-        display: "grid",
-        gridTemplateColumns: "minmax(280px, 1.6fr) repeat(3, minmax(145px, 1fr))",
-        gap: 14,
-        alignItems: "center",
-        overflow: "hidden",
-      }}
-    >
-      <div>
+    <section className="panel-solid ops-status-strip" style={{ borderLeftColor: accent }}>
+      <div className="ops-status-copy">
         <div className="row" style={{ gap: 8, marginBottom: 4 }}>
           <HealthPill status={tone} label={headline.replace("System status: ", "")} />
           <span style={{ fontWeight: 600, fontSize: 14 }}>{headline}</span>
         </div>
         <p className="t-sm" style={{ margin: 0, color: "var(--slate-500)" }}>{topIssueSummary}</p>
       </div>
-      <StatusMetric label="Healthy sources" value={`${healthyCount} / ${totalSources || "—"}`} />
-      <StatusMetric label="Recent failed jobs" value={String(failedJobs)} tone={failedJobs > 0 ? "fail" : undefined} />
-      <StatusMetric
-        label="Last successful update"
-        value={lastSuccess ? formatRelative(lastSuccess) : "—"}
-        sub={lastSuccess ? formatDate(lastSuccess) : "No successful run yet"}
-      />
+      <div className="ops-status-metrics">
+        <StatusMetric label="Healthy sources" value={`${healthyCount} / ${totalSources || "—"}`} />
+        <StatusMetric label="Recent failed jobs" value={String(failedJobs)} tone={failedJobs > 0 ? "fail" : undefined} />
+        <StatusMetric
+          label="Last successful update"
+          value={lastSuccess ? formatRelative(lastSuccess) : "—"}
+          sub={lastSuccess ? formatDate(lastSuccess) : "No successful run yet"}
+        />
+      </div>
     </section>
   );
 }
 
 function StatusMetric({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "fail" }) {
   return (
-    <div style={{ minWidth: 0 }}>
+    <div className="ops-status-metric">
       <div className="metric-label">{label}</div>
       <div
         className="metric-value"
@@ -1081,12 +1094,16 @@ function ActiveIssuesCard({
           <span style={{ fontSize: 13 }}>No active ingestion issues detected.</span>
         </div>
       ) : (
-        <div className="col" style={{ gap: 8 }}>
+        <div className="col ops-issue-list">
           {failingSources.map((h) => (
             <IssueRow
               key={`src-${h.id}`}
               tone={classifySourceHealth(h) === "fail" ? "crit" : "med"}
-              title={`${sourceLabel(h.source)} is ${classifySourceHealth(h) === "fail" ? "failing" : "stale"}`}
+              title={
+                classifySourceHealth(h) === "fail"
+                  ? `${sourceLabel(h.source)} is failing`
+                  : `${sourceLabel(h.source)} needs refresh`
+              }
               when={h.last_checked_at ?? h.last_success_at}
               area={sourceAreaHint(h.source)}
               suggestion={suggestedActionForSource(h.source)}
@@ -1191,9 +1208,9 @@ function ActionCenter(props: ActionCenterProps) {
 
   return (
     <Panel title="Action center" icon={<Play size={14} />}>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr)", gap: 14 }}>
+      <div className="ops-action-grid">
         {/* --- Refresh live --- */}
-        <div className="col" style={{ gap: 8 }}>
+        <div className="col ops-action-group">
           <div className="t-caption">Refresh live sources</div>
           <RunButton
             label="Vessel positions snapshot"
@@ -1217,19 +1234,26 @@ function ActionCenter(props: ActionCenterProps) {
               }).then(refreshDev)
             }
           />
-          <RunButton
-            label="Singapore vessel particulars"
-            icon={<Ship size={12} />}
+          <BulkParticularsRunButton
+            job={bulkParticularsJob}
             running={bulkParticularsActive || isRunning("map-particulars")}
-            onClick={() =>
+            cancelling={isRunning("map-particulars-cancel")}
+            onDismiss={onDismissBulkParticulars}
+            onRun={() =>
               runJob("map-particulars", () => runMapParticulars(0.1), {
                 successTitle: "Bulk particulars started",
                 errorTitle: "Bulk particulars failed",
-                successBody: (job) => `${Number(job.parameters.total ?? 0).toLocaleString()} Singapore-flagged map vessels queued.`,
+                successBody: (job) => `${Number(job.parameters.total ?? 0).toLocaleString()} map vessels queued at 10 vessels/sec.`,
+              }).then(refreshDev)
+            }
+            onCancel={() =>
+              runJob("map-particulars-cancel", cancelMapParticulars, {
+                successTitle: "Bulk particulars cancelling",
+                errorTitle: "Cancel failed",
+                successBody: () => "The job will stop after the current vessel finishes.",
               }).then(refreshDev)
             }
           />
-          {bulkParticularsJob && <BulkParticularsProgress job={bulkParticularsJob} onDismiss={onDismissBulkParticulars} />}
           <RunButton
             label="Geo layers"
             icon={<Globe size={12} />}
@@ -1266,12 +1290,11 @@ function ActionCenter(props: ActionCenterProps) {
         </div>
 
         {/* --- Sanctions --- */}
-        <div className="col" style={{ gap: 8 }}>
+        <div className="col ops-action-group">
           <div className="t-caption row" style={{ gap: 6 }}>
             <Scale size={11} /> Sanctions
           </div>
           <Button
-            variant="danger"
             size="sm"
             leadingIcon={<RefreshCw size={12} />}
             onClick={onOpenSanctionsConfirm}
@@ -1292,7 +1315,7 @@ function ActionCenter(props: ActionCenterProps) {
           <CsvDropZone onFile={onCsvFile} />
           <textarea
             className="textarea"
-            rows={3}
+            rows={2}
             value={csvText}
             onChange={(e) => setCsvText(e.target.value)}
             placeholder="Or paste CSV: entity,name,country,..."
@@ -1317,7 +1340,7 @@ function ActionCenter(props: ActionCenterProps) {
         </div>
 
         {/* --- Per-vessel + port activity --- */}
-        <div className="col" style={{ gap: 8 }}>
+        <div className="col ops-action-group">
           <div className="t-caption row" style={{ gap: 6 }}>
             <Ship size={11} /> Per-vessel actions
           </div>
@@ -1355,7 +1378,7 @@ function ActionCenter(props: ActionCenterProps) {
               ))}
             </div>
           )}
-          <div className="row" style={{ gap: 6 }}>
+          <div className="row ops-button-row">
             <Button
               size="sm"
               disabled={!selectedVessel}
@@ -1387,9 +1410,9 @@ function ActionCenter(props: ActionCenterProps) {
           <div className="t-caption row" style={{ gap: 6, marginTop: 8 }}>
             <MapIcon size={11} /> Port activity
           </div>
-          <div className="row" style={{ gap: 6 }}>
-            <Button size="sm" disabled>Arrivals paused</Button>
-            <Button size="sm" disabled>Departures paused</Button>
+          <div className="row ops-button-row">
+            <span className="ops-status-chip">Arrivals paused</span>
+            <span className="ops-status-chip">Departures paused</span>
           </div>
           <p className="t-faded" style={{ fontSize: 11, margin: 0, lineHeight: 1.5 }}>
             OCEANS-X port activity ingestion is paused for now. Vessel positions, particulars,
@@ -1435,7 +1458,7 @@ function DataOverview({
   const loaded = Object.keys(tableCounts).length > 0;
   return (
     <Panel title="Data overview" icon={<Database size={14} />}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
+      <div className="ops-data-grid">
         <DataGroup
           title="Core maritime data"
           keys={CORE_KEYS}
@@ -1455,11 +1478,12 @@ function DataOverview({
           keys={SYSTEM_KEYS}
           tableCounts={tableCounts}
           loaded={loaded}
+          freshness={lastSuccess}
         />
       </div>
 
       {Object.keys(referenceSummary).length > 0 && (
-        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--gray-100)" }}>
+        <div className="ops-reference-data">
           <div className="t-caption" style={{ paddingBottom: 2 }}>Reference data</div>
           <div style={{ fontSize: 10, color: "var(--gray-500)", lineHeight: 1.3, paddingBottom: 6 }}>
             Background lookup values used to label and enrich records.
@@ -1491,52 +1515,43 @@ function DataGroup({
   freshness?: string | null;
 }) {
   return (
-    <div className="col" style={{ gap: 6 }}>
+    <div className="col ops-data-group">
       <div className="t-caption">{title}</div>
-      <div className="col" style={{ gap: 4 }}>
-        {keys.map((key) => (
-          <a
-            key={key}
-            href={`/data/${encodeURIComponent(key)}`}
-            className="row"
-            style={{
-              padding: "8px 10px",
-              border: "1px solid var(--gray-100)",
-              borderRadius: "var(--r-card)",
-              background: "var(--white)",
-              alignItems: "flex-start",
-              textDecoration: "none",
-              color: "inherit",
-              cursor: "pointer",
-            }}
-          >
-            <div className="col" style={{ flex: 1, gap: 2, minWidth: 0 }}>
-              <span style={{ fontSize: 12 }}>{tableLabel(key)}</span>
-              {TABLE_TOOLTIPS[key] && (
-                <span style={{ fontSize: 10, color: "var(--gray-500)", lineHeight: 1.3 }}>
-                  {TABLE_TOOLTIPS[key]}
-                </span>
-              )}
-            </div>
-            <span
-              className="mono"
-              style={{ fontWeight: 700, fontSize: 13, color: "var(--navy-900)" }}
+      <div className="col ops-data-rows">
+        {keys.map((key) => {
+          const row = (
+            <a
+              key={key}
+              href={`/data/${encodeURIComponent(key)}`}
+              className="row data-overview-row"
+              aria-label={`${tableLabel(key)}. ${TABLE_TOOLTIPS[key] ?? ""}`.trim()}
             >
-              {loaded ? (tableCounts[key] ?? 0).toLocaleString() : <Skeleton width={32} height={14} rounded={3} />}
-            </span>
-          </a>
-        ))}
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {tableLabel(key)}
+              </span>
+              <span
+                className="mono"
+                style={{ fontWeight: 700, fontSize: 13, color: "var(--navy-900)" }}
+              >
+                {loaded ? (tableCounts[key] ?? 0).toLocaleString() : <Skeleton width={32} height={14} rounded={3} />}
+              </span>
+            </a>
+          );
+          return TABLE_TOOLTIPS[key] ? (
+            <Tooltip key={key} label={TABLE_TOOLTIPS[key]} delay={120}>
+              {row}
+            </Tooltip>
+          ) : row;
+        })}
       </div>
-      {freshness && (
-        <div className="t-faded" style={{ fontSize: 11 }}>
-          Last update {formatRelative(freshness)}
-        </div>
-      )}
+      <div className="t-faded ops-freshness-label">
+        {freshness ? `Last update ${formatRelative(freshness)}` : "Last update —"}
+      </div>
     </div>
   );
 }
 
-function TimelineRow({ ev }: { ev: { id: string; at: string; kind: string; title: string } }) {
+function TimelineRow({ ev }: { ev: { id: string; at: string; kind: string; title: string; count?: number } }) {
   const palette: Record<string, { color: string; bg: string; dotIcon?: React.ReactNode }> = {
     "job-success": { color: "var(--health-ok, #2E8F5B)", bg: "rgba(46,143,91,.10)" },
     "job-failure": { color: "var(--risk-critical)", bg: "rgba(198,40,40,.10)" },
@@ -1545,19 +1560,13 @@ function TimelineRow({ ev }: { ev: { id: string; at: string; kind: string; title
   };
   const tone = palette[ev.kind] ?? palette["job-running"];
   return (
-    <div className="row" style={{ gap: 8, alignItems: "flex-start" }}>
-      <div
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: 999,
-          background: tone.color,
-          marginTop: 6,
-          flex: "0 0 auto",
-        }}
-      />
+    <div className="row ops-timeline-row">
+      <div className="ops-timeline-dot" style={{ background: tone.color, boxShadow: `0 0 0 4px ${tone.bg}` }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, color: "var(--navy-900)" }}>{ev.title}</div>
+        <div className="row" style={{ gap: 6 }}>
+          <span className="ops-timeline-title">{ev.title}</span>
+          {ev.count && ev.count > 1 && <span className="pill none ops-repeat-pill">{ev.count}x</span>}
+        </div>
         <div className="t-faded" style={{ fontSize: 10 }}>
           {formatRelative(ev.at)} · {formatDate(ev.at)}
         </div>
@@ -1597,25 +1606,23 @@ function Panel({
   children,
   shimmer,
   fill,
+  compact,
 }: {
   title: React.ReactNode;
   icon?: React.ReactNode;
   shimmer?: boolean;
   fill?: boolean;
+  compact?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <section
-      className={`panel-solid ${shimmer ? "shimmer" : ""}`.trim()}
-      style={{
-        padding: 14,
-        ...(fill ? { display: "flex", flexDirection: "column", minHeight: 0, height: "100%" } : {}),
-      }}
+      className={`panel-solid ops-panel ${shimmer ? "shimmer" : ""} ${fill ? "ops-panel-fill" : ""} ${compact ? "ops-panel-compact" : ""}`.trim()}
     >
-      <div className="row" style={{ paddingBottom: 8 }}>
+      <div className="row ops-panel-header">
         {icon}
         {typeof title === "string" ? (
-          <strong style={{ flex: 1, fontSize: 13 }}>{title}</strong>
+          <strong className="ops-panel-title">{title}</strong>
         ) : (
           <div style={{ flex: 1 }}>{title}</div>
         )}
@@ -1625,78 +1632,113 @@ function Panel({
   );
 }
 
-function BulkParticularsProgress({ job, onDismiss }: { job: IngestionJob; onDismiss: () => void }) {
+function BulkParticularsRunButton({
+  job,
+  running,
+  cancelling,
+  onRun,
+  onCancel,
+  onDismiss,
+}: {
+  job: IngestionJob | null;
+  running: boolean;
+  cancelling: boolean;
+  onRun: () => void;
+  onCancel: () => void;
+  onDismiss: () => void;
+}) {
+  const status = job?.status?.toLowerCase();
+  const cancelRequested = Boolean(job?.parameters.cancel_requested);
+  const active = status === "queued" || status === "running" || status === "cancelling";
+  const isCancelling = cancelling || status === "cancelling" || cancelRequested;
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [active]);
+
+  if (!job) {
+    return (
+      <RunButton
+        label="All vessel particulars"
+        icon={<Ship size={12} />}
+        running={running}
+        onClick={onRun}
+      />
+    );
+  }
   const total = numberParam(job.parameters.total);
   const completed = numberParam(job.parameters.completed);
   const succeeded = numberParam(job.parameters.succeeded);
   const failed = numberParam(job.parameters.failed);
   const skipped = numberParam(job.parameters.skipped);
   const pct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
-  const active = job.status === "queued" || job.status === "running";
+  const done = !active;
+  const eta = active ? bulkParticularsEta(job, completed, total, nowMs) : null;
+  const detail = total > 0
+    ? `${completed.toLocaleString()} / ${total.toLocaleString()} · ${succeeded.toLocaleString()} saved · ${failed.toLocaleString()} failed · ${skipped.toLocaleString()} skipped`
+    : job.status;
+  const activeTitle = isCancelling ? "Cancellation requested. Waiting for the current vessel to finish." : `Click to cancel · ${detail}${eta ? ` · ETA ${eta}` : ""}`;
   return (
-    <div
-      style={{
-        padding: 10,
-        borderRadius: "var(--r-card)",
-        marginBottom: 4,
-        background: "var(--gray-50)",
-        border: "1px solid var(--gray-100)",
-      }}
+    <button
+      type="button"
+      className={`btn bulk-progress-button ${active ? "is-active shimmer" : "is-complete"} ${isCancelling ? "is-cancelling" : ""}`}
+      onClick={active ? onCancel : onDismiss}
+      disabled={false}
+      aria-label={active ? "Cancel all vessel particulars refresh" : "Dismiss completed all vessel particulars progress"}
+      title={done ? "Dismiss completed progress" : activeTitle}
+      aria-valuemin={0}
+      aria-valuemax={total}
+      aria-valuenow={completed}
+      role="progressbar"
+      style={{ "--bulk-progress": `${pct}%` } as CSSProperties}
     >
-      <div className="row" style={{ gap: 8, fontSize: 11 }}>
-        <span className="mono" style={{ flex: 1 }}>
-          Particulars {completed.toLocaleString()} / {total.toLocaleString()}
+      <span className="bulk-progress-fill" aria-hidden="true" />
+      <span className="bulk-progress-content">
+        <span className="row bulk-progress-label">
+          <Ship size={12} />
+          <span>All vessel particulars</span>
         </span>
-        <JobPill status={classifyJob(job.status)} label={job.status} />
-        {!active && (
-          <button
-            type="button"
-            className="btn ghost icon sm"
-            onClick={onDismiss}
-            aria-label="Dismiss completed bulk particulars progress"
-            title="Dismiss completed progress"
-          >
-            {failed > 0 ? <X size={12} /> : <CheckCircle2 size={12} />}
-          </button>
-        )}
-      </div>
-      <div
-        aria-label="Bulk particulars progress"
-        aria-valuemin={0}
-        aria-valuemax={total}
-        aria-valuenow={completed}
-        role="progressbar"
-        style={{
-          height: 8,
-          background: "var(--gray-100)",
-          borderRadius: 999,
-          overflow: "hidden",
-          marginTop: 8,
-        }}
-      >
-        <div
-          className={active ? "shimmer" : ""}
-          style={{
-            width: `${pct}%`,
-            height: "100%",
-            background: failed > 0 ? "var(--risk-medium)" : "var(--ocean-500)",
-            transition: "width var(--motion-base) var(--ease-out)",
-          }}
-        />
-      </div>
-      <div className="row t-faded" style={{ marginTop: 6, gap: 8, fontSize: 11 }}>
-        <span>{pct}%</span>
-        <span style={{ flex: 1 }}>
-          {succeeded.toLocaleString()} saved · {failed.toLocaleString()} failed · {skipped.toLocaleString()} skipped
+        <span className="bulk-progress-meta">
+          {pct}% · {isCancelling ? "Cancelling after current vessel" : detail}{eta && !isCancelling ? ` · ETA ${eta}` : ""}
         </span>
-      </div>
-    </div>
+        <span className="bulk-progress-status" aria-hidden="true">
+          {done ? (failed > 0 || status === "cancelled" ? <X size={12} /> : <CheckCircle2 size={12} />) : isCancelling ? <X size={12} /> : <RefreshCw size={12} />}
+        </span>
+      </span>
+    </button>
   );
 }
 
 function numberParam(value: unknown): number {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? n : 0;
+}
+
+function bulkParticularsEta(job: IngestionJob, completed: number, total: number, nowMs: number): string | null {
+  const remaining = Math.max(0, total - completed);
+  if (remaining === 0) return "finishing";
+  const started = parseBackendDate(job.started_at ?? job.created_at);
+  const elapsedSeconds = started ? Math.max(0, (nowMs - started.getTime()) / 1000) : 0;
+  const observedRate = completed > 0 && elapsedSeconds > 3 ? completed / elapsedSeconds : 0;
+  const targetRate = numberParam(job.parameters.target_rate_per_second) || (
+    numberParam(job.parameters.delay_seconds) > 0 ? 1 / numberParam(job.parameters.delay_seconds) : 0
+  );
+  const rate = observedRate > 0 ? observedRate : targetRate;
+  if (!rate || rate <= 0) return null;
+  return formatDuration(Math.ceil(remaining / rate));
+}
+
+function formatDuration(totalSeconds: number): string {
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 }
 
 function RunButton({
@@ -1714,8 +1756,7 @@ function RunButton({
     <button
       type="button"
       onClick={onClick}
-      className={`btn ${running ? "shimmer" : ""}`.trim()}
-      style={{ justifyContent: "space-between" }}
+      className={`btn ops-run-button ${running ? "shimmer" : ""}`.trim()}
       disabled={running}
     >
       <span className="row" style={{ gap: 6 }}>
@@ -1742,13 +1783,14 @@ function CsvDropZone({ onFile }: { onFile: (file: File) => void }) {
         const file = e.dataTransfer.files?.[0];
         if (file) onFile(file);
       }}
+      className="ops-csv-dropzone"
       style={{
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         gap: 4,
-        padding: 12,
+        padding: 8,
         background: hover ? "var(--ocean-50)" : "var(--gray-50)",
         border: `1.5px dashed ${hover ? "var(--ocean-500)" : "var(--gray-300)"}`,
         borderRadius: "var(--r-card)",
@@ -1758,7 +1800,7 @@ function CsvDropZone({ onFile }: { onFile: (file: File) => void }) {
       }}
     >
       <Upload size={16} color="var(--slate-500)" />
-      <span>Drop CSV here or click to upload</span>
+      <span>Drop or upload CSV</span>
       <input
         type="file"
         accept="text/csv,.csv"

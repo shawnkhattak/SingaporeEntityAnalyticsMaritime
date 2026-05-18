@@ -167,6 +167,13 @@ class DevConsoleService:
             "call_sign": vessel.call_sign,
             "flag_country_code": vessel.flag_country_code,
             "vessel_type_code": vessel.vessel_type_code,
+            "year_built": vessel.year_built,
+            "deadweight": vessel.deadweight,
+            "gross_tonnage": vessel.gross_tonnage,
+            "net_tonnage": vessel.net_tonnage,
+            "length_meters": float(vessel.length_meters) if vessel.length_meters is not None else None,
+            "breadth_meters": float(vessel.breadth_meters) if vessel.breadth_meters is not None else None,
+            "depth_meters": float(vessel.depth_meters) if vessel.depth_meters is not None else None,
             "source_updated_at": vessel.source_updated_at,
             "latest_position": None if latest is None else {
                 "latitude": float(latest.latitude),

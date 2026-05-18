@@ -37,7 +37,17 @@ export type VesselPosition = {
   evidence_id: number | null;
 };
 
-export type VesselMapFeature = VesselPosition & {
+export type VesselParticulars = {
+  year_built?: number | null;
+  deadweight?: number | null;
+  gross_tonnage?: number | null;
+  net_tonnage?: number | null;
+  length_meters?: number | null;
+  breadth_meters?: number | null;
+  depth_meters?: number | null;
+};
+
+export type VesselMapFeature = VesselPosition & VesselParticulars & {
   vessel_id: number;
   name: string;
   imo: string | null;
@@ -49,7 +59,7 @@ export type VesselMapFeature = VesselPosition & {
   risk_flags?: RiskFlag[];
 };
 
-export type DevVesselBrowseRow = {
+export type DevVesselBrowseRow = VesselParticulars & {
   vessel_id: number;
   name: string;
   imo: string | null;
@@ -64,7 +74,7 @@ export type DevVesselBrowseRow = {
   risk_flag_types: string[];
 };
 
-export type VesselSummary = {
+export type VesselSummary = VesselParticulars & {
   id: number;
   imo: string | null;
   mmsi: string | null;

@@ -111,6 +111,10 @@ export function runMapParticulars(delaySeconds = 0.1) {
   return postJson<IngestionJob>(`/api/dev/ingestion/vessel-particulars-map?delay_seconds=${delaySeconds}`);
 }
 
+export function cancelMapParticulars() {
+  return postJson<IngestionJob>("/api/dev/ingestion/vessel-particulars-map/cancel");
+}
+
 export function runMovements(vesselId: number) {
   return postJson<IngestionJob>(`/api/dev/ingestion/vessel-movements/${vesselId}?mode=live`);
 }

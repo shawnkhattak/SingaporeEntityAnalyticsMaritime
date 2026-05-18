@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -24,6 +24,13 @@ class Vessel(CreatedAtMixin, UpdatedAtMixin, Base):
     call_sign: Mapped[Optional[str]] = mapped_column(String(32))
     flag_country_code: Mapped[Optional[str]] = mapped_column(String(8))
     vessel_type_code: Mapped[Optional[str]] = mapped_column(String(64))
+    year_built: Mapped[Optional[int]] = mapped_column(Integer)
+    deadweight: Mapped[Optional[int]] = mapped_column(Integer)
+    gross_tonnage: Mapped[Optional[int]] = mapped_column(Integer)
+    net_tonnage: Mapped[Optional[int]] = mapped_column(Integer)
+    length_meters: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2))
+    breadth_meters: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2))
+    depth_meters: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2))
     source_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
 

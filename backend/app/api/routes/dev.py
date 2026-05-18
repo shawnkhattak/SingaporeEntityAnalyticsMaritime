@@ -92,6 +92,21 @@ async def run_map_vessel_particulars_ingestion(
 
 
 @router.post(
+    "/ingestion/vessel-particulars-map/cancel",
+    response_model=IngestionJobRead,
+    dependencies=[Depends(require_dev_mutations)],
+)
+async def cancel_map_vessel_particulars_ingestion(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> IngestionJobRead:
+    service = IngestionService(session)
+    try:
+        return await service.cancel_bulk_map_particulars()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post(
     "/ingestion/vessel-movements/{vessel_id}",
     response_model=IngestionJobRead,
     dependencies=[Depends(require_dev_mutations)],

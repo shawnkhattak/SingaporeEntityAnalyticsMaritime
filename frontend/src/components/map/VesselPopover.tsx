@@ -50,6 +50,16 @@ export function VesselPopover({ x, y, vessel, severity, flags, onClose }: Vessel
         )}
         {type !== "Unknown" && <span>{type}</span>}
       </div>
+      {(() => {
+        const bits: string[] = [];
+        if (vessel.year_built != null) bits.push(`Built ${vessel.year_built}`);
+        if (vessel.deadweight != null) bits.push(`${vessel.deadweight.toLocaleString()} DWT`);
+        else if (vessel.gross_tonnage != null) bits.push(`${vessel.gross_tonnage.toLocaleString()} GT`);
+        if (vessel.length_meters != null) bits.push(`${vessel.length_meters} m`);
+        return bits.length > 0 ? (
+          <div className="t-faded" style={{ fontSize: 11, marginTop: 2 }}>{bits.join(" · ")}</div>
+        ) : null;
+      })()}
       <div className="t-faded mono" style={{ fontSize: 11, marginTop: 4 }}>
         {vessel.latitude.toFixed(3)}, {vessel.longitude.toFixed(3)}
         {vessel.speed_knots != null ? ` · ${vessel.speed_knots.toFixed(1)} kn` : ""}

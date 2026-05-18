@@ -83,18 +83,7 @@ class EntityService:
             if key in seen:
                 continue
             seen.add(key)
-            vessels.append(
-                VesselSummary(
-                    id=row.id,
-                    imo=row.imo,
-                    mmsi=row.mmsi,
-                    name=row.name,
-                    call_sign=row.call_sign,
-                    flag_country_code=row.flag_country_code,
-                    vessel_type_code=row.vessel_type_code,
-                    source_updated_at=row.source_updated_at,
-                )
-            )
+            vessels.append(VesselSummary.model_validate(row))
         return vessels
 
     async def relationships(self, entity_id: int, limit: int = 50) -> list[EntityRelationshipRead] | None:
@@ -117,18 +106,7 @@ class EntityService:
                     confidence=relationship.confidence,
                     evidence_id=relationship.evidence_id,
                     evidence_summary=relationship.evidence_summary,
-                    vessel=VesselSummary(
-                        id=vessel.id,
-                        imo=vessel.imo,
-                        mmsi=vessel.mmsi,
-                        name=vessel.name,
-                        call_sign=vessel.call_sign,
-                        flag_country_code=vessel.flag_country_code,
-                        vessel_type_code=vessel.vessel_type_code,
-                        source_updated_at=vessel.source_updated_at,
-                    )
-                    if vessel is not None
-                    else None,
+                    vessel=VesselSummary.model_validate(vessel) if vessel is not None else None,
                 )
             )
         return relationships

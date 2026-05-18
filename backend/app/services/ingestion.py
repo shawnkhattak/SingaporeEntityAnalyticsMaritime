@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 # Querying UTC dates returns the wrong bucket for half the day.
 SINGAPORE_TZ = ZoneInfo("Asia/Singapore")
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.oceansx import (
@@ -140,6 +140,16 @@ def _decimal_value(value: Any) -> Decimal | None:
         return None
     try:
         return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _int_value(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        # Tolerate floats and numeric strings like "489" or "489.0".
+        return int(Decimal(str(value)))
     except (InvalidOperation, ValueError):
         return None
 
@@ -419,7 +429,7 @@ class IngestionService:
             stale_job.parameters = {
                 **(stale_job.parameters or {}),
                 "superseded": True,
-                "last_error": "Superseded by a newer Singapore-flagged vessel particulars bulk job.",
+                "last_error": "Superseded by a newer bulk vessel particulars job.",
             }
             self.session.add(
                 IngestionLog(
@@ -438,9 +448,9 @@ class IngestionService:
             parameters={
                 "mode": "live",
                 "source": OCEANSX_SOURCE,
-                "selection": "singapore_flagged_map_vessels",
-                "flag_country_code": "SG",
+                "selection": "all_map_vessels",
                 "delay_seconds": delay_seconds,
+                "target_rate_per_second": round(1 / delay_seconds, 2) if delay_seconds > 0 else None,
                 "total": len(vessel_ids),
                 "completed": 0,
                 "succeeded": 0,
@@ -456,6 +466,37 @@ class IngestionService:
         await self.session.refresh(job)
         return job
 
+    async def cancel_bulk_map_particulars(self) -> IngestionJob:
+        job = await self.session.scalar(
+            select(IngestionJob)
+            .where(
+                IngestionJob.job_type == OCEANSX_BULK_PARTICULARS_JOB_TYPE,
+                IngestionJob.status.in_(("queued", "running", "cancelling")),
+            )
+            .order_by(desc(IngestionJob.started_at), desc(IngestionJob.created_at))
+            .limit(1)
+        )
+        if job is None:
+            raise ValueError("No active bulk vessel particulars job to cancel.")
+        now = datetime.now(UTC)
+        job.status = "cancelling"
+        job.parameters = {
+            **(job.parameters or {}),
+            "cancel_requested": True,
+            "cancel_requested_at": now.isoformat(),
+        }
+        self.session.add(
+            IngestionLog(
+                job_id=job.id,
+                level="warning",
+                message="Bulk OCEANS-X vessel particulars ingestion cancellation requested.",
+                context={"job_id": job.id},
+            )
+        )
+        await self.session.commit()
+        await self.session.refresh(job)
+        return job
+
     async def run_bulk_map_particulars(
         self,
         *,
@@ -466,6 +507,27 @@ class IngestionService:
         job = await self.session.get(IngestionJob, job_id)
         if job is None:
             return
+        existing_parameters = job.parameters or {}
+        if job.status == "cancelling" or existing_parameters.get("cancel_requested"):
+            now = datetime.now(UTC)
+            job.status = "cancelled"
+            job.finished_at = now
+            job.parameters = {
+                **existing_parameters,
+                "cancel_requested": True,
+                "cancelled_at": now.isoformat(),
+                "current_vessel_id": None,
+            }
+            self.session.add(
+                IngestionLog(
+                    job_id=job.id,
+                    level="warning",
+                    message="Cancelled bulk OCEANS-X vessel particulars ingestion before it started.",
+                    context={"job_id": job.id},
+                )
+            )
+            await self.session.commit()
+            return
 
         health = await self._get_or_create_source_health(OCEANSX_SOURCE)
         health.last_checked_at = datetime.now(UTC)
@@ -473,9 +535,9 @@ class IngestionService:
         stats: dict[str, Any] = {
             "mode": "live",
             "source": OCEANSX_SOURCE,
-            "selection": "singapore_flagged_map_vessels",
-            "flag_country_code": "SG",
+            "selection": "all_map_vessels",
             "delay_seconds": delay_seconds,
+            "target_rate_per_second": round(1 / delay_seconds, 2) if delay_seconds > 0 else None,
             "total": len(vessel_ids),
             "completed": 0,
             "succeeded": 0,
@@ -495,14 +557,18 @@ class IngestionService:
                 context={
                     "total": len(vessel_ids),
                     "delay_seconds": delay_seconds,
-                    "selection": "singapore_flagged_map_vessels",
-                    "flag_country_code": "SG",
+                    "selection": "all_map_vessels",
                 },
             )
         )
         await self.session.commit()
 
         for index, vessel_id in enumerate(vessel_ids):
+            await self.session.refresh(job)
+            if job.status == "cancelling" or (job.parameters or {}).get("cancel_requested"):
+                stats["cancel_requested"] = True
+                stats["cancel_requested_at"] = (job.parameters or {}).get("cancel_requested_at")
+                break
             stats["current_vessel_id"] = vessel_id
             try:
                 vessel = await self.session.get(Vessel, vessel_id)
@@ -546,25 +612,33 @@ class IngestionService:
                 await self.session.commit()
 
             if index + 1 < len(vessel_ids) and delay_seconds > 0:
+                await self.session.refresh(job)
+                if job.status == "cancelling" or (job.parameters or {}).get("cancel_requested"):
+                    stats["cancel_requested"] = True
+                    stats["cancel_requested_at"] = (job.parameters or {}).get("cancel_requested_at")
+                    break
                 await asyncio.sleep(delay_seconds)
 
-        job.status = "succeeded" if stats["total"] == 0 or stats["failed"] < stats["total"] else "failed"
+        cancelled = bool(stats.get("cancel_requested"))
+        job.status = "cancelled" if cancelled else "succeeded" if stats["total"] == 0 or stats["failed"] < stats["total"] else "failed"
         job.finished_at = datetime.now(UTC)
         stats["current_vessel_id"] = None
+        if cancelled:
+            stats["cancelled_at"] = job.finished_at.isoformat()
         job.parameters = stats.copy()
         if job.status == "succeeded":
             health.status = "healthy"
             health.last_success_at = job.finished_at
             health.last_error = None
-        else:
+        elif job.status == "failed":
             health.status = "unhealthy"
             health.last_error = str(stats["last_error"] or "All particulars lookups failed")
         health.metadata_ = {"last_job_id": job.id, **stats}
         self.session.add(
             IngestionLog(
                 job_id=job.id,
-                level="info" if job.status == "succeeded" else "error",
-                message="Completed bulk OCEANS-X vessel particulars ingestion.",
+                level="warning" if cancelled else "info" if job.status == "succeeded" else "error",
+                message="Cancelled bulk OCEANS-X vessel particulars ingestion." if cancelled else "Completed bulk OCEANS-X vessel particulars ingestion.",
                 context=stats.copy(),
             )
         )
@@ -574,9 +648,7 @@ class IngestionService:
         statement = (
             select(Vessel.id)
             .join(VesselPositionLatest, VesselPositionLatest.vessel_id == Vessel.id)
-            .where(Vessel.imo.is_not(None))
-            .where(Vessel.imo.notin_(("0", "00", "000", "0000")))
-            .where(func.upper(Vessel.flag_country_code).in_(("SG", "SINGAPORE")))
+            .where(or_(Vessel.imo.is_(None), Vessel.imo.notin_(("0", "00", "000", "0000"))))
             .order_by(desc(VesselPositionLatest.position_timestamp))
             .limit(limit)
         )
@@ -963,6 +1035,29 @@ class IngestionService:
         vessel.name = _clean_text(_first_value(payload, particulars, "vesselName", "name", "vessel_name")) or vessel.name
         vessel.flag_country_code = _clean_text(merged.get("flag")) or vessel.flag_country_code
         vessel.vessel_type_code = _clean_text(merged.get("vesselType")) or vessel.vessel_type_code
+
+        year_built = _int_value(_first_value(payload, particulars, "yearBuilt", "year_built", "buildYear"))
+        if year_built is not None:
+            vessel.year_built = year_built
+        deadweight = _int_value(_first_value(payload, particulars, "deadweight", "deadWeight", "dwt"))
+        if deadweight is not None:
+            vessel.deadweight = deadweight
+        gross_tonnage = _int_value(_first_value(payload, particulars, "grossTonnage", "gross_tonnage", "gt"))
+        if gross_tonnage is not None:
+            vessel.gross_tonnage = gross_tonnage
+        net_tonnage = _int_value(_first_value(payload, particulars, "netTonnage", "net_tonnage", "nt"))
+        if net_tonnage is not None:
+            vessel.net_tonnage = net_tonnage
+        length_m = _decimal_value(_first_value(payload, particulars, "vesselLength", "lengthMeters", "length_m"))
+        if length_m is not None:
+            vessel.length_meters = length_m
+        breadth_m = _decimal_value(_first_value(payload, particulars, "vesselBreadth", "breadthMeters", "breadth_m"))
+        if breadth_m is not None:
+            vessel.breadth_meters = breadth_m
+        depth_m = _decimal_value(_first_value(payload, particulars, "vesselDepth", "depthMeters", "depth_m"))
+        if depth_m is not None:
+            vessel.depth_meters = depth_m
+
         vessel.source_updated_at = fetched_at
 
         for field_name, (relationship_type, entity_type) in PARTICULARS_ENTITY_FIELDS.items():

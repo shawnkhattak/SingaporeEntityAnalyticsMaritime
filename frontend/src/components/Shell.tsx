@@ -83,9 +83,27 @@ export function Shell() {
   const inspector = useInspectorState();
   const { open: openInspector, close: closeInspector } = inspector;
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [booting, setBooting] = useState(true);
+  const [focusTransition, setFocusTransition] = useState<"map-to-workspace" | "workspace-to-map" | null>(null);
+  const previousFocusMode = useRef<"map" | "workspace" | null>(null);
 
   const inspectorVisible = isInspectorRoute(route);
   const fullCanvas = isFullCanvas(route);
+  const focusMode = fullCanvas ? "workspace" : "map";
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setBooting(false), 760);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    const previous = previousFocusMode.current;
+    previousFocusMode.current = focusMode;
+    if (!previous || previous === focusMode) return;
+    setFocusTransition(previous === "map" ? "map-to-workspace" : "workspace-to-map");
+    const timeout = window.setTimeout(() => setFocusTransition(null), 520);
+    return () => window.clearTimeout(timeout);
+  }, [focusMode]);
 
   useEffect(() => {
     if (inspectorVisible) openInspector();
@@ -164,9 +182,19 @@ export function Shell() {
     }
   });
 
+  const shellClass = [
+    "shell",
+    state.backendOnline ? "" : "offline",
+    state.isPanelCollapsed ? "panel-collapsed" : "panel-expanded",
+    `mode-${focusMode}-focus`,
+    focusTransition ? `focus-transition ${focusTransition}` : "",
+  ].filter(Boolean).join(" ");
+
   return (
-    <div className={`shell ${state.backendOnline ? "" : "offline"} ${state.isPanelCollapsed ? "panel-collapsed" : "panel-expanded"}`}>
+    <div className={shellClass}>
       <DesktopGate />
+      {booting && <SeamLoadingOverlay />}
+      {focusTransition && <FocusTransitionOverlay direction={focusTransition} />}
       {!fullCanvas && (
         <ErrorBoundary
           fallback={
@@ -180,7 +208,7 @@ export function Shell() {
             </div>
           }
         >
-          <Suspense fallback={<div className="map-canvas" />}>
+          <Suspense fallback={<MapLoadingFallback />}>
             <MapCanvas />
           </Suspense>
         </ErrorBoundary>
@@ -189,16 +217,74 @@ export function Shell() {
       {fullCanvas ? (
         <FullCanvas routeKey={fullCanvasScrollKey(route)} key={`canvas-${route.name}`}>
           <ErrorBoundary>
-            <Suspense fallback={<div className="t-muted">Loading…</div>}>{renderFullCanvas(route)}</Suspense>
+            <Suspense fallback={<WorkspaceLoadingFallback />}>{renderFullCanvas(route)}</Suspense>
           </ErrorBoundary>
         </FullCanvas>
       ) : inspectorVisible ? (
         <ErrorBoundary key={inspectorKey(route)}>
-          <Suspense fallback={null}>{renderInspector(route)}</Suspense>
+          <Suspense fallback={<InspectorLoadingFallback />}>{renderInspector(route)}</Suspense>
         </ErrorBoundary>
       ) : null}
       <ToastViewport />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+    </div>
+  );
+}
+
+function SeamLoaderMark({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={`seam-loader-mark ${compact ? "compact" : ""}`} aria-hidden="true">
+      <span className="seam-loader-ring ring-one" />
+      <span className="seam-loader-ring ring-two" />
+      <span className="seam-loader-sweep" />
+      <span className="seam-loader-core">SEAM</span>
+    </div>
+  );
+}
+
+function SeamLoadingOverlay() {
+  return (
+    <div className="app-loading-overlay" role="status" aria-live="polite" aria-label="Loading SEAM">
+      <SeamLoaderMark />
+      <div className="app-loading-copy">
+        <strong>SEAM</strong>
+        <span>Bringing the maritime picture online</span>
+      </div>
+    </div>
+  );
+}
+
+function FocusTransitionOverlay({ direction }: { direction: "map-to-workspace" | "workspace-to-map" }) {
+  return (
+    <div className={`focus-transition-overlay ${direction}`} aria-hidden="true">
+      <div className="focus-transition-beam" />
+    </div>
+  );
+}
+
+function MapLoadingFallback() {
+  return (
+    <div className="map-canvas map-loading-surface">
+      <SeamLoaderMark />
+      <span className="t-sm">Loading live map</span>
+    </div>
+  );
+}
+
+function WorkspaceLoadingFallback() {
+  return (
+    <div className="workspace-loading-surface" role="status" aria-label="Loading workspace">
+      <SeamLoaderMark compact />
+      <span>Loading workspace</span>
+    </div>
+  );
+}
+
+function InspectorLoadingFallback() {
+  return (
+    <div className="inspector panel inspector-loading">
+      <SeamLoaderMark compact />
+      <span>Loading panel</span>
     </div>
   );
 }
