@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { getEntitiesList, getEntityVessels, runRefreshLive, searchEntities } from "../../api";
 import { useDebounce } from "../../hooks/useDebounce";
 import { closeInspectorRoute, navigateBack, navigateTo } from "../../hooks/useRoute";
-import { useJobRunner } from "../../state/AppState";
+import { useApp, useJobRunner } from "../../state/AppState";
 import { Avatar } from "../primitives/Avatar";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
@@ -24,6 +24,7 @@ export function EntityListInspector() {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [hasNextPage, setHasNextPage] = useState(false);
+  const { dispatch } = useApp();
   const runJob = useJobRunner();
 
   useEffect(() => {
@@ -43,6 +44,9 @@ export function EntityListInspector() {
       .then((r) => {
         if (!cancelled) {
           setResults(r.slice(0, ENTITY_PAGE_SIZE));
+          r.slice(0, ENTITY_PAGE_SIZE).forEach((entity) => {
+            dispatch({ type: "CACHE_ENTITY_LABEL", id: entity.id, label: entity.name });
+          });
           setHasNextPage(r.length > ENTITY_PAGE_SIZE);
           setDerivedVesselCounts({});
         }
@@ -59,7 +63,7 @@ export function EntityListInspector() {
     return () => {
       cancelled = true;
     };
-  }, [debounced, page]);
+  }, [debounced, page, dispatch]);
 
   useEffect(() => {
     const missingCountEntities = results.filter((entity) => typeof entity.unique_vessel_count !== "number");

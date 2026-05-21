@@ -5,7 +5,8 @@ These practices keep the rebuild aligned with the V1 charter and make each stage
 ## Scope Control
 
 - Keep V1 portfolio-first and evidence-driven.
-- Do not add auth, AI, TimescaleDB, a scheduler, or numeric risk scoring in V1.
+- Do not add auth, AI-generated risk flags, TimescaleDB, a scheduler, or numeric risk scoring in V1.
+- Keep optional AI features limited to evidence-bound news summarization unless the charter is intentionally changed.
 - Keep all write or mutation routes under `/api/dev/*`.
 - Do not add a frontend page before the backend data contract exists.
 - Prefer cutting feature breadth before weakening provenance, boot reliability, or schema clarity.
@@ -29,7 +30,7 @@ These practices keep the rebuild aligned with the V1 charter and make each stage
 
 ## Frontend
 
-- Treat `/dev` as the operational control surface for stage work.
+- Treat `/operations` as the operational control surface for stage work. `/dev` remains an alias.
 - Fetch only from the SEAM backend, never external maritime APIs.
 - Show empty, loading, and error states for every API-backed surface.
 - Keep the interface dense, scannable, and operational rather than marketing-like.

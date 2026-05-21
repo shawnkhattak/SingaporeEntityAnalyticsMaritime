@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { closeInspectorRoute, useRoute } from "../hooks/useRoute";
 import { useHotkey } from "../hooks/useHotkey";
 import { isFullCanvas, isInspectorRoute, type RouteState } from "../types";
@@ -8,6 +8,7 @@ import { ToastViewport } from "./primitives/ToastViewport";
 import { CommandPalette } from "./primitives/CommandPalette";
 import { CommandPanel } from "./command-panel/CommandPanel";
 import { Button } from "./primitives/Button";
+import { ChevronRight, Home } from "lucide-react";
 
 const VesselListInspector = lazy(() => import("./inspector/VesselListInspector").then((m) => ({ default: m.VesselListInspector })));
 const VesselDetailInspector = lazy(() => import("./inspector/VesselDetailInspector").then((m) => ({ default: m.VesselDetailInspector })));
@@ -74,6 +75,32 @@ function renderFullCanvas(route: RouteState) {
       return <NotFoundPage path={route.path} />;
     default:
       return null;
+  }
+}
+
+function truncateRouteLabel(value: string, max = 34) {
+  const clean = value.trim().replace(/\s+/g, " ");
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
+}
+
+function titleForRoute(route: RouteState, state: ReturnType<typeof useApp>["state"]) {
+  switch (route.name) {
+    case "vessels-list": return "Vessels";
+    case "vessel-detail": return truncateRouteLabel(state.vesselLabels[route.id] ?? `Vessel #${route.id}`, 42);
+    case "entities-list": return "Entities";
+    case "entity-detail": return truncateRouteLabel(state.entityLabels[route.id] ?? `Entity #${route.id}`, 42);
+    case "ports": return "Ports";
+    case "risk": return "Risk & Sanctions";
+    case "news": return "News";
+    case "evidence": return `Evidence #${route.id}`;
+    case "schema": return "Schema";
+    case "ops": return "Operations";
+    case "data-browser": return route.table;
+    case "roadmap": return "Roadmap";
+    case "not-found": return "Page not found";
+    case "map":
+    default: return "Map";
   }
 }
 
@@ -155,26 +182,9 @@ export function Shell() {
   // Browser tab title per route (bug #21).
   useEffect(() => {
     const base = "SEAM V2";
-    let label = "Map";
-    switch (route.name) {
-      case "vessels-list": label = "Vessels"; break;
-      case "vessel-detail": label = `Vessel #${route.id}`; break;
-      case "entities-list": label = "Entities"; break;
-      case "entity-detail": label = `Entity #${route.id}`; break;
-      case "ports": label = "Ports"; break;
-      case "risk": label = "Risk & Sanctions"; break;
-      case "news": label = "News"; break;
-      case "evidence": label = `Evidence #${route.id}`; break;
-      case "schema": label = "Schema"; break;
-      case "ops": label = "Operations"; break;
-      case "data-browser": label = route.table; break;
-      case "roadmap": label = "Roadmap"; break;
-      case "not-found": label = "Page not found"; break;
-      case "map":
-      default: label = "Map"; break;
-    }
+    const label = titleForRoute(route, state);
     document.title = `${label} · ${base}`;
-  }, [route]);
+  }, [route, state]);
 
   useHotkey("mod+k", (e) => {
     e.preventDefault();
@@ -206,6 +216,11 @@ export function Shell() {
     `mode-${focusMode}-focus`,
     focusTransition ? `focus-transition ${focusTransition}` : "",
   ].filter(Boolean).join(" ");
+  const breadcrumbLeft = useMemo(() => {
+    const panelRight = state.isPanelCollapsed ? 84 : 320;
+    if (!inspectorVisible) return panelRight;
+    return panelRight + state.inspectorWidth + 16;
+  }, [inspectorVisible, state.inspectorWidth, state.isPanelCollapsed]);
 
   return (
     <div className={shellClass}>
@@ -231,6 +246,7 @@ export function Shell() {
         </ErrorBoundary>
       )}
       <CommandPanel />
+      {!fullCanvas && <MapBreadcrumbs route={route} left={breadcrumbLeft} />}
       {fullCanvas ? (
         <FullCanvas routeKey={fullCanvasScrollKey(route)} key={`canvas-${route.name}`}>
           <ErrorBoundary>
@@ -247,6 +263,74 @@ export function Shell() {
       <ToastViewport />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
+  );
+}
+
+type BreadcrumbItem = {
+  label: string;
+  href?: string;
+};
+
+function mapBreadcrumbItems(route: RouteState, state: ReturnType<typeof useApp>["state"]): BreadcrumbItem[] {
+  const root: BreadcrumbItem = { label: "Map", href: "/map" };
+  const vesselLabel = (id: number) => truncateRouteLabel(state.vesselLabels[id] ?? `Vessel #${id}`);
+  const entityLabel = (id: number) => truncateRouteLabel(state.entityLabels[id] ?? `Entity #${id}`);
+  switch (route.name) {
+    case "map":
+      return [{ label: "Map" }];
+    case "vessels-list":
+      return [root, { label: "Vessels" }];
+    case "vessel-detail":
+      return [
+        root,
+        route.from === "risk" ? { label: "Risk & Sanctions", href: "/risk" } : { label: "Vessels", href: "/vessels" },
+        { label: vesselLabel(route.id) },
+      ];
+    case "entities-list":
+      return [root, { label: "Entities" }];
+    case "entity-detail":
+      return [
+        root,
+        route.from === "risk" ? { label: "Risk & Sanctions", href: "/risk" } : { label: "Entities", href: "/entities" },
+        { label: entityLabel(route.id) },
+      ];
+    case "ports":
+      return [root, { label: "Ports" }];
+    case "risk":
+      return [root, { label: "Risk & Sanctions" }];
+    case "news":
+      return [root, { label: "News" }];
+    case "evidence":
+      return [root, { label: `Evidence #${route.id}` }];
+    default:
+      return [root];
+  }
+}
+
+function MapBreadcrumbs({ route, left }: { route: RouteState; left: number }) {
+  const { state } = useApp();
+  const items = mapBreadcrumbItems(route, state);
+  return (
+    <nav
+      className="map-breadcrumbs"
+      aria-label="Workspace breadcrumb"
+      style={{ left, maxWidth: `calc(100vw - ${left + 32}px)` }}
+    >
+      {items.map((item, index) => {
+        const isLast = index === items.length - 1;
+        return (
+          <span key={`${item.label}-${index}`} className="map-breadcrumb-segment">
+            {index === 0 && <Home size={12} aria-hidden="true" />}
+            {item.href && !isLast ? (
+              <a href={item.href}>{item.label}</a>
+            ) : (
+              <span aria-current={isLast ? "page" : undefined}>{item.label}</span>
+            )}
+            {!isLast && <ChevronRight size={12} className="map-breadcrumb-chevron" aria-hidden="true" />}
+          </span>
+        );
+      })}
+    </nav>
   );
 }
 

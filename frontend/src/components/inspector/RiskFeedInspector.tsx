@@ -83,8 +83,10 @@ export function RiskFeedInspector() {
         for (const item of items) {
           if (item.vessel_id != null) {
             byVessel.set(item.vessel_id, [...(byVessel.get(item.vessel_id) ?? []), item.flag]);
+            dispatch({ type: "CACHE_VESSEL_LABEL", id: item.vessel_id, label: item.subject });
           } else if (item.entity_id != null) {
             byEntity.set(item.entity_id, [...(byEntity.get(item.entity_id) ?? []), item.flag]);
+            dispatch({ type: "CACHE_ENTITY_LABEL", id: item.entity_id, label: item.subject });
           }
         }
         for (const [id, flags] of byVessel) {
@@ -132,15 +134,18 @@ export function RiskFeedInspector() {
     return out;
   }, [groups]);
   const [kindFilter, setKindFilter] = useState<RiskKind | null>(null);
+  const mapVesselIds = useMemo(() => new Set(state.vessels.map((vessel) => vessel.vessel_id)), [state.vessels]);
 
   const filtered = useMemo(() => {
-    return groups.filter((group) => {
-      if (severityFilters.size > 0 && !severityFilters.has(group.severity)) return false;
-      if (kindFilter && !group.kinds.has(kindFilter)) return false;
-      if (statusFilter === "open" && group.status === "resolved") return false;
-      return true;
-    });
-  }, [groups, severityFilters, kindFilter, statusFilter]);
+    return groups
+      .filter((group) => {
+        if (severityFilters.size > 0 && !severityFilters.has(group.severity)) return false;
+        if (kindFilter && !group.kinds.has(kindFilter)) return false;
+        if (statusFilter === "open" && group.status === "resolved") return false;
+        return true;
+      })
+      .sort((a, b) => Number(isGroupOnMap(b, mapVesselIds)) - Number(isGroupOnMap(a, mapVesselIds)));
+  }, [groups, severityFilters, kindFilter, statusFilter, mapVesselIds]);
 
   const severityCounts = useMemo(() => {
     const out: Record<RiskSeverity, number> = { critical: 0, high: 0, medium: 0, low: 0, none: 0 };
@@ -239,7 +244,7 @@ export function RiskFeedInspector() {
               try { sessionStorage.setItem("seam:return-to-risk", "1"); } catch { /* ignore */ }
               if (group.vesselId != null) {
                 const v = state.vessels.find((x) => x.vessel_id === group.vesselId);
-                if (v) requestMapCenter({ lng: v.longitude, lat: v.latitude, zoom: 12 });
+                if (v) requestMapCenter({ lng: v.longitude, lat: v.latitude });
                 navigateTo(`/vessels/${group.vesselId}?from=risk`);
               } else if (group.entityId != null) {
                 navigateTo(`/entities/${group.entityId}?from=risk`);
@@ -358,6 +363,10 @@ function groupRiskRows(rows: FlatRiskRow[]): RiskGroup[] {
       } satisfies RiskGroup;
     })
     .sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+}
+
+function isGroupOnMap(group: RiskGroup, mapVesselIds: Set<number>) {
+  return group.vesselId != null && mapVesselIds.has(group.vesselId);
 }
 
 function groupAlertRows(group: RiskGroup): AlertRow[] {

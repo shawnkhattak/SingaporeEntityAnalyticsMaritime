@@ -1,6 +1,7 @@
 import { Anchor, ChevronDown, ChevronRight, Layers, MapPin, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getGeoLayer } from "../../api";
+import { requestMapCenter } from "../../hooks/useMapCenter";
 import { closeInspectorRoute } from "../../hooks/useRoute";
 import { useFilters, useJobRunner } from "../../state/AppState";
 import { Button } from "../primitives/Button";
@@ -66,7 +67,7 @@ function toPortPoints(collection: FeatureCollection | null): PortPoint[] {
       const lat = Number(coords[1]);
       if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
       const props = feature.properties ?? {};
-      const displayName = portName(props, index);
+      const displayName = portName(props, index).trim();
       if (displayName.length <= 1 || displayName === `Port service point ${index + 1}`) return null;
       return {
         id: field(props, "NOID") ?? field(props, "LNAM") ?? `${lon},${lat}`,
@@ -168,6 +169,13 @@ export function PortsInspector() {
     });
   }
 
+  function centerPort(point: PortPoint) {
+    requestMapCenter({
+      lng: point.coordinates[0],
+      lat: point.coordinates[1],
+    });
+  }
+
   return (
     <InspectorShell
       breadcrumb="Ports"
@@ -217,8 +225,14 @@ export function PortsInspector() {
               </button>
               {open && (
                 <div style={{ padding: "0 12px 10px" }}>
-                  {items.slice(0, 80).map((point) => (
-                    <div key={point.id} className="row" style={{ gap: 8, padding: "7px 0", borderTop: "1px solid var(--gray-100)", fontSize: 12 }}>
+                  {items.map((point) => (
+                    <button
+                      key={point.id}
+                      type="button"
+                      className="row port-list-item"
+                      onClick={() => centerPort(point)}
+                      title={`Center ${point.name} on map`}
+                    >
                       <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         <strong>{point.name}</strong>
                         {point.sourceDate && <span className="t-faded mono" style={{ marginLeft: 6, fontSize: 11 }}>{point.sourceDate}</span>}
@@ -226,13 +240,8 @@ export function PortsInspector() {
                       <span className="t-faded mono" style={{ fontSize: 11 }}>
                         {point.coordinates[1].toFixed(4)}, {point.coordinates[0].toFixed(4)}
                       </span>
-                    </div>
+                    </button>
                   ))}
-                  {items.length > 80 && (
-                    <div className="t-faded" style={{ paddingTop: 8, fontSize: 12 }}>
-                      Showing first 80 of {items.length} points in this category.
-                    </div>
-                  )}
                 </div>
               )}
             </div>

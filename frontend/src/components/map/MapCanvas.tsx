@@ -166,7 +166,7 @@ function focusFilterExpression(focusedIds: number[]): maplibregl.FilterSpecifica
   return focusMatchExpression(focusedIds) as maplibregl.FilterSpecification;
 }
 
-function vesselFocusOpacity(focusedIds: number[] | null, dimOpacity = 0.33): number | maplibregl.ExpressionSpecification {
+function vesselFocusOpacity(focusedIds: number[] | null, dimOpacity = 0.28): number | maplibregl.ExpressionSpecification {
   // Baseline (no selection) icons render slightly muted so a click feels
   // like the picked vessel lights up against the fleet. 15% softer than
   // the previous default of 0.95.
@@ -229,10 +229,45 @@ export function MapCanvas() {
   const riskRef = useRef(state.riskByVessel);
   const vesselsRef = useRef(state.vessels);
   const routeNameRef = useRef(route.name);
+  // Hold panel/inspector geometry in refs so map-center actions can
+  // compute fresh padding even from handlers registered once at map init.
+  const layoutRef = useRef({
+    panelCollapsed: state.isPanelCollapsed,
+    inspectorOpen: state.isInspectorOpen,
+    inspectorWidth: state.inspectorWidth,
+  });
   filtersRef.current = filters;
   riskRef.current = state.riskByVessel;
   vesselsRef.current = state.vessels;
   routeNameRef.current = route.name;
+  layoutRef.current = {
+    panelCollapsed: state.isPanelCollapsed,
+    inspectorOpen: state.isInspectorOpen,
+    inspectorWidth: state.inspectorWidth,
+  };
+
+  const getMapPadding = (assumeInspectorOpen = false) => {
+    const panelWidth = layoutRef.current.panelCollapsed ? 64 : 320;
+    const inspectorOpen = assumeInspectorOpen || layoutRef.current.inspectorOpen;
+    const inspectorWidth = inspectorOpen ? layoutRef.current.inspectorWidth : 0;
+    const left = 16 + panelWidth + 16 + (inspectorWidth ? inspectorWidth + 16 : 0);
+    return { left, right: 16, top: 16, bottom: 16 };
+  };
+
+  const centerMapAt = (
+    lng: number,
+    lat: number,
+    options: { zoom?: number; assumeInspectorOpen?: boolean; duration?: number } = {},
+  ) => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo({
+      center: [lng, lat],
+      zoom: options.zoom ?? map.getZoom(),
+      padding: getMapPadding(options.assumeInspectorOpen),
+      duration: options.duration ?? 500,
+    });
+  };
 
   // Initial map setup — once per SPA lifetime.
   useEffect(() => {
@@ -499,6 +534,7 @@ export function MapCanvas() {
         if (!Number.isFinite(id)) return;
         const severity = String(props.severity ?? "none");
         const coords = (f.geometry as GeoJSON.Point).coordinates;
+        centerMapAt(coords[0], coords[1], { assumeInspectorOpen: true, duration: 420 });
         // Read latest vessels via the ref (the closure was registered once
         // when the map mounted, before any vessels were loaded).
         const v = vesselsRef.current.find((x) => x.vessel_id === id) ?? null;
@@ -626,7 +662,7 @@ export function MapCanvas() {
           : null;
     const aiFocusedIds = state.aiFocusVesselIds.length > 0 ? state.aiFocusVesselIds : null;
     const displayFocusIds = focusedIds ?? aiFocusedIds ?? (route.name === "ports" ? [] : null);
-    const dimOpacity = route.name === "ports" ? 0.24 : 0.33;
+    const dimOpacity = route.name === "ports" ? 0.2 : 0.28;
     const selectedFilter = focusFilterExpression(focusedIds ?? []);
     const aiFilter = focusFilterExpression(aiFocusedIds ?? []);
     if (map.getLayer("vessels-selected-outer")) {
@@ -800,33 +836,16 @@ export function MapCanvas() {
     { paused: pollingPaused },
   );
 
-  // Hold panel/inspector geometry in refs so the map-center subscriber
-  // (registered once) can compute fresh padding on every fly-to.
-  const layoutRef = useRef({
-    panelCollapsed: state.isPanelCollapsed,
-    inspectorOpen: state.isInspectorOpen,
-    inspectorWidth: state.inspectorWidth,
-  });
-  layoutRef.current = {
-    panelCollapsed: state.isPanelCollapsed,
-    inspectorOpen: state.isInspectorOpen,
-    inspectorWidth: state.inspectorWidth,
-  };
-
   // External pan requests (from inspectors). Pad the visible area so the
   // target lands in the open space to the right of the side menus.
   useEffect(() => {
     return onMapCenter((ev) => {
       const map = mapRef.current;
       if (!map) return;
-      const panelWidth = layoutRef.current.panelCollapsed ? 64 : 320;
-      const inspectorWidth = layoutRef.current.inspectorOpen ? layoutRef.current.inspectorWidth : 0;
-      // 16px viewport gutter + panel + 16px gap + (optional inspector) + 16px gap
-      const left = 16 + panelWidth + 16 + (inspectorWidth ? inspectorWidth + 16 : 0);
-      const padding = ev.padding ?? { left, right: 16, top: 16, bottom: 16 };
+      const padding = ev.padding ?? getMapPadding();
       map.flyTo({
         center: [ev.lng, ev.lat],
-        zoom: ev.zoom ?? Math.max(map.getZoom(), 10),
+        zoom: ev.zoom ?? map.getZoom(),
         padding,
         duration: 500,
       });

@@ -15,7 +15,7 @@ The app is built around a live map of Singapore-area vessel activity. OCEANS-X s
 - **Evidence-first workflows** where source observations, hashes, evidence IDs, and raw payloads remain inspectable.
 - **Operations Center** for source health, ingestion jobs/logs, table counts, source refresh actions, bulk vessel particulars enrichment, and vessel browsing.
 - **RSS news workspace** organized by the configured RSS.app bundles, with source badges and original links.
-- **AI Maritime Brief** that can summarize stored RSS evidence into top developments, insights, key entities, and evidence chips when `FEATURE_AI=true`.
+- **AI Weekly Brief** that can summarize stored RSS evidence into Singapore-focused top developments and neutral evidence lenses when `FEATURE_AI=true`.
 
 ## Core Data Sources
 
@@ -78,7 +78,7 @@ Backend checks should use Python 3.12 to match the container runtime:
 | `/ports` | Port activity inspector |
 | `/evidence/:id` | Raw evidence record and payload hash verification |
 | `/operations` | Operations Center and ingestion controls |
-| `/roadmap` | Layman's roadmap and product journey |
+| `/roadmap` | Current product roadmap, hardening plan, and release checks |
 
 `/sanctions` redirects into the unified Risk & Sanctions flow. Graph functionality is intentionally retired from the UI for now; backend graph code is retained but not presented as a primary user workflow.
 
@@ -90,18 +90,19 @@ Backend checks should use Python 3.12 to match the container runtime:
 4. Open `/risk` and review grouped Risk & Sanctions cards.
 5. Open a sanctioned vessel and inspect the source list and evidence.
 6. Open `/entities`, sort by unique vessels, select a company, and show its vessels focused on the map.
-7. Open a related vessel profile and review particulars, movements, risk, and source confidence.
-8. Open `/news` and show the three RSS.app bundles.
-9. Close with `/roadmap` to explain current scope and next product steps.
+7. Open a related vessel profile and review particulars, movements, current port proximity, risk, and source confidence.
+8. Open `/ports` to show OCEANS-X ports over the map with vessels muted for context.
+9. Open `/news` and show the three RSS.app bundles plus the optional AI Weekly Brief when enabled.
+10. Close with `/roadmap` to explain current scope, hardening work, paused areas, and release checks.
 
 ## Development Guardrails
 
 - Desktop-first; narrow/mobile screens show a desktop-required gate.
-- No authentication, no AI-generated risk narratives, no numeric composite risk score.
+- No authentication, no AI-generated risk flags, no numeric composite risk score.
 - All write/mutation routes live under `/api/dev/*` and are development-only.
 - The frontend never calls OCEANS-X directly.
 - Every generated relationship/risk/news/sanctions fact should trace back to a `source_observations` evidence row.
-- Port activity ingestion is paused until the source behavior is reliable enough for demos.
+- Arrival/departure-style port activity ingestion is paused until the source behavior is reliable enough for demos. Port proximity is tracked from OCEANS-X port geometry plus latest vessel positions.
 
 ## Documentation
 
@@ -110,6 +111,7 @@ Start at [docs/README.md](docs/README.md). Key docs:
 - [Architecture](docs/architecture.md)
 - [UI Overview](docs/ui-overview.md)
 - [Data Catalog](docs/data-catalog.md)
+- [Product Roadmap](docs/roadmap.md)
 - [Map](docs/map.md)
 - [Risk Flags](docs/risk-flags.md)
 - [Operations Center](docs/dev-console.md)

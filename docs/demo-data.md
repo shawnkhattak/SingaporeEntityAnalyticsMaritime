@@ -15,11 +15,12 @@ Use it to refresh the main live sources that are safe for a demo run. It does no
 3. Import OpenSanctions maritime CSV or run the confirmed API action.
 4. Refresh RSS/news.
 5. Recompute risk flags.
-6. Open `/map`, `/risk`, `/entities`, `/vessels`, and `/news` once to confirm data appears.
+6. Open `/map`, `/ports`, `/risk`, `/entities`, `/vessels`, and `/news` once to confirm data appears.
 
 ## Notes
 
 - The map reads the latest successful positions snapshot through `/api/map/vessels?scope=latest-snapshot`.
 - The accumulated vessel table can be larger than the live map count.
 - Entity coverage improves after particulars enrichment because owners/operators/managers come from vessel particulars.
-- Port activity ingestion is paused; do not rely on it for a clean demo story.
+- Arrival/departure-style port activity ingestion is paused; do not rely on it for a clean demo story.
+- Current port proximity is populated from latest vessel positions and named OCEANS-X port/service points when positions snapshots run.

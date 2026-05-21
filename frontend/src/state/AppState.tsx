@@ -34,6 +34,8 @@ export type AppState = {
   tableCounts: Record<string, number> | null;
   backendOnline: boolean;
   aiFocusVesselIds: number[];
+  vesselLabels: Record<number, string>;
+  entityLabels: Record<number, string>;
 };
 
 type Action =
@@ -59,7 +61,9 @@ type Action =
   | { type: "MARK_AUTO_COLLAPSED" }
   | { type: "SET_BACKEND_ONLINE"; online: boolean }
   | { type: "SET_AI_FOCUS_VESSELS"; ids: number[] }
-  | { type: "CLEAR_AI_FOCUS_VESSELS" };
+  | { type: "CLEAR_AI_FOCUS_VESSELS" }
+  | { type: "CACHE_VESSEL_LABEL"; id: number; label: string }
+  | { type: "CACHE_ENTITY_LABEL"; id: number; label: string };
 
 function readBool(key: string, fallback: boolean): boolean {
   try {
@@ -103,6 +107,8 @@ const initialState: AppState = {
   tableCounts: null,
   backendOnline: true,
   aiFocusVesselIds: [],
+  vesselLabels: {},
+  entityLabels: {},
 };
 
 function reducer(state: AppState, action: Action): AppState {
@@ -172,6 +178,10 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         vessels: action.vessels,
         vesselsLoaded: true,
+        vesselLabels: {
+          ...state.vesselLabels,
+          ...Object.fromEntries(action.vessels.map((v) => [v.vessel_id, v.name])),
+        },
         riskByVessel: {
           ...state.riskByVessel,
           ...Object.fromEntries(
@@ -199,6 +209,12 @@ function reducer(state: AppState, action: Action): AppState {
     case "CLEAR_AI_FOCUS_VESSELS":
       if (state.aiFocusVesselIds.length === 0) return state;
       return { ...state, aiFocusVesselIds: [] };
+    case "CACHE_VESSEL_LABEL":
+      if (!action.label.trim() || state.vesselLabels[action.id] === action.label) return state;
+      return { ...state, vesselLabels: { ...state.vesselLabels, [action.id]: action.label } };
+    case "CACHE_ENTITY_LABEL":
+      if (!action.label.trim() || state.entityLabels[action.id] === action.label) return state;
+      return { ...state, entityLabels: { ...state.entityLabels, [action.id]: action.label } };
     default:
       return state;
   }

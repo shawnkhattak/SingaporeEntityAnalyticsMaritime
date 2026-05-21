@@ -17,7 +17,7 @@ SEAM V2 is a map-first desktop analyst workspace. The map stays visible for inve
 - `/entities` and `/entities/:id` handle company/owner/operator/manager workflows.
 - `/risk` is the unified Risk & Sanctions feed.
 - `/news` shows RSS.app intelligence.
-- `/ports` shows port activity where available.
+- `/ports` shows OCEANS-X port/service points on the map. Vessels remain visible as muted context, but vessel hit-testing is disabled so the port layer is easier to inspect.
 - `/evidence/:id` shows raw source evidence.
 - `/operations` handles ingestion and operational state.
 - `/roadmap` explains product direction.
@@ -31,7 +31,7 @@ Inspector back buttons use real in-app history when possible. If a user lands di
 - Selecting one vessel fades other vessels and emphasizes the selected marker.
 - Selecting an entity focuses all related vessels, fades the rest, and labels only the related vessels.
 - Map centering accounts for open side panels so the selected vessel lands in free map space.
-- OCEANS-X ports can be toggled when the live geo layer is available.
+- OCEANS-X ports can be toggled when the live geo layer is available. The Ports route automatically enables the port layer while keeping vessel traffic subdued in the background.
 - The bottom map status strip slides to stay centered in the visible map area when panels open.
 
 ## Vessel Profile
@@ -43,6 +43,7 @@ The vessel panel is designed as a maritime intelligence profile, not a database 
 - Particulars: year built, tonnage, length, breadth, depth.
 - Risk: top active flags, evidence IDs, source lists.
 - Movements/position history and port calls.
+- Current port proximity when the latest vessel position is within the configured port radius.
 - Source confidence and refresh actions.
 
 ## Entity Detail
@@ -75,6 +76,8 @@ The news panel uses compact cards with title, snippet, time, source badge/logo, 
 - Social.
 - Watchlist.
 - Maritime.
+
+When enabled, the AI Weekly Brief appears above the RSS list. It summarizes stored RSS evidence across the configured seven-day window, stays Singapore-focused, and does not create vessel links or risk flags.
 
 ## Motion And Accessibility
 

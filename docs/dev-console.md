@@ -24,6 +24,7 @@ The page is for demo readiness and internal operation, not end-user maritime ana
 - Refresh OpenSanctions through CSV/API flows.
 - Recompute risk flags.
 - Fetch particulars for every current map vessel with an IMO.
+- Rebuild current-port proximity from latest vessel positions and OCEANS-X port geometry as part of position snapshot processing.
 - Refresh a selected vessel's particulars or movements.
 - Inspect recent source observations.
 
@@ -62,4 +63,4 @@ Progress is stored on the ingestion job `parameters` as:
 
 ## Paused Areas
 
-Port activity ingestion is paused because the current source behavior is not reliable enough for the demo. OCEANS-X movement observations may still contain raw location codes for future port analytics.
+Arrival/departure-style port activity ingestion is paused because the current source behavior is not reliable enough for the demo. Current port proximity is still tracked from latest vessel positions and named OCEANS-X port/service points.

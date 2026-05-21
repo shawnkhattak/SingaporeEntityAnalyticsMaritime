@@ -36,7 +36,10 @@ This is the compact inventory of data points SEAM currently exposes or stores. I
 - Raw origin/destination location codes when present.
 - Port event count.
 - Port code and port name when mapped.
+- Current port name/code from latest-position proximity.
+- Current port distance in meters and detection timestamp.
 - Arrival/departure event type.
+- Port proximity event type.
 - Event timestamp.
 - Port-event evidence ID.
 
@@ -77,10 +80,9 @@ This is the compact inventory of data points SEAM currently exposes or stores. I
 - Feed URL.
 - Matched vessel/entity links when exact names match.
 - News evidence/source observation payload.
-- AI Weekly Brief status, generated timestamp, provider/model, cache/debug metadata.
-- AI top developments with article IDs, evidence IDs, linked vessel IDs, and linked entity IDs.
-- AI insight levels for Singapore relevance, oil/gas relevance, risk/opportunity, and confidence.
-- AI key entity chips derived from stored news links and deterministic keyword extraction.
+- Optional AI Weekly Brief status, generated timestamp, provider/model, estimated cost, cache/debug metadata.
+- Optional AI top developments with article IDs and evidence IDs.
+- Optional AI evidence-lens categories for Singapore, oil/gas, legal/regulatory, and confidence basis.
 
 ## Evidence And Provenance
 

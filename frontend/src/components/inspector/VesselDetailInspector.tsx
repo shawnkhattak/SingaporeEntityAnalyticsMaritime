@@ -62,13 +62,13 @@ export function VesselDetailInspector({ id }: { id: number }) {
         const loaded = { detail, observations, events, risk };
         setData(loaded);
         dispatch({ type: "CACHE_VESSEL_RISK", id, flags: risk });
+        dispatch({ type: "CACHE_VESSEL_LABEL", id, label: detail.vessel.name });
         select({ kind: "vessel", id });
         recordRecentVessel(id);
         if (detail.latest_position) {
           requestMapCenter({
             lng: detail.latest_position.longitude,
             lat: detail.latest_position.latitude,
-            zoom: 12,
           });
         }
       })

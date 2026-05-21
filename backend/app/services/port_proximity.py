@@ -138,7 +138,7 @@ class PortProximityService:
                 continue
             props = feature.get("properties") or {}
             name = _first_text(props, "OBJNAM", "NAME", "NOBJNM")
-            if not name or len(name) <= 1:
+            if not name or len(name.strip()) <= 1:
                 continue
             code = _first_text(props, "NOID", "LNAM") or name
             try:

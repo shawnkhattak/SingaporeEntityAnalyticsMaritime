@@ -1,6 +1,6 @@
 # News Sources
 
-V1 news comes from live RSS/Atom and JSON Feed 1.1 feeds configured by `NEWS_RSS_URLS`.
+News comes from live RSS/Atom and JSON Feed 1.1 feeds configured by `NEWS_RSS_URLS`.
 
 Default RSS.app bundles:
 
@@ -39,11 +39,11 @@ The app refreshes RSS/news on an hourly cadence when the frontend refresh loop i
 
 Bundle tabs can include articles beyond the latest 50 shown in All.
 
-The ingester stores source title, source badge, RSS.app bundle name, URL, publication time, summary/excerpt, raw payload, and entity/vessel links found by exact case-insensitive name matching. No AI summaries are generated in V1.
+The ingester stores source title, source badge, RSS.app bundle name, URL, publication time, summary/excerpt, raw payload, and conservative entity/vessel links found by stored-source matching. The normal article list does not depend on AI.
 
 ## AI Weekly Brief
 
-When `FEATURE_AI=true`, `/news` shows an AI Weekly Brief above the normal article list. It summarizes only stored RSS articles and linked evidence across the configured 7-day window; it does not browse the web or create risk flags.
+When `FEATURE_AI=true`, `/news` shows an AI Weekly Brief above the normal article list. It summarizes only stored RSS articles and linked evidence across the configured seven-day window; it does not browse the web, create vessel links, or create risk flags.
 
 Default local setup:
 
@@ -64,3 +64,10 @@ POST /api/dev/ai/news-overview/recompute?window_hours=168
 ```
 
 The public endpoint returns a disabled response when `FEATURE_AI=false` so the News page can keep working. Anthropic/OpenAI provider hooks are present but optional; missing packages or keys fall back to the deterministic mock provider with debug warnings.
+
+Current UI rules:
+
+- The brief is branded as a weekly brief, not a chat interface.
+- Top developments are horizontally scrollable when more than three are returned.
+- Article citations are kept in source tooltips instead of cluttering the body text.
+- The brief should stay Singapore-focused and neutral: it organizes sourced reporting, not analyst recommendations.

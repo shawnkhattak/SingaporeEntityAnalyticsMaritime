@@ -7,4 +7,4 @@ Stage 06 cleans the Stage 5 baseline into a shape that can carry the rest of V1:
 - New read endpoints follow a lightweight contract: Pydantic schema, service method, route, database-backed source, and smoke assertion.
 - Current OCEANS-X ingestion remains manual-first and live-only. It requires `OCEANSX_API_KEY`.
 
-The baseline intentionally keeps V1 guardrails intact: no auth, no AI, no TimescaleDB, no scheduler, no numeric risk score, and no frontend calls to OCEANS-X.
+The baseline intentionally keeps V1 guardrails intact: no auth, no AI-generated risk decisions, no TimescaleDB, no scheduler, no numeric risk score, and no frontend calls to OCEANS-X. Later optional AI news summarization remains separate from risk generation.

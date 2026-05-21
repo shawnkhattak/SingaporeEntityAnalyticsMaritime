@@ -28,7 +28,7 @@ type GroupedVessel = {
 export function EntityDetailInspector({ id }: { id: number }) {
   const [data, setData] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { dispatch } = useApp();
+  const { state, dispatch } = useApp();
   const { select } = useSelection();
   const route = useRoute();
 
@@ -38,6 +38,10 @@ export function EntityDetailInspector({ id }: { id: number }) {
       .then(([entity, vessels, relationships, risk]) => {
         setData({ entity, vessels, relationships, risk });
         dispatch({ type: "CACHE_ENTITY_RISK", id, flags: risk });
+        dispatch({ type: "CACHE_ENTITY_LABEL", id, label: entity.name });
+        vessels.forEach((vessel) => {
+          dispatch({ type: "CACHE_VESSEL_LABEL", id: vessel.id, label: vessel.name });
+        });
         select({ kind: "entity", id });
         recordRecent("entity", id, entity.name);
       })
@@ -77,7 +81,11 @@ export function EntityDetailInspector({ id }: { id: number }) {
   }
 
   const entity = data.entity;
-  const groupedVessels = groupRelatedVessels(data.vessels, data.relationships);
+  const mapVesselIds = useMemo(() => new Set(state.vessels.map((vessel) => vessel.vessel_id)), [state.vessels]);
+  const groupedVessels = useMemo(
+    () => groupRelatedVessels(data.vessels, data.relationships, mapVesselIds),
+    [data.vessels, data.relationships, mapVesselIds],
+  );
   const detailFallback = route.name === "entity-detail" && route.from === "risk" ? "/risk" : "/entities";
   const detailBackLabel = route.name === "entity-detail" && route.from === "risk" ? "Back to Risk & Sanctions" : "Back to entities";
 
@@ -246,7 +254,7 @@ function Metric({ label, value, icon }: { label: string; value: React.ReactNode;
   );
 }
 
-function groupRelatedVessels(vessels: VesselSummary[], relationships: EntityRelationship[]): GroupedVessel[] {
+function groupRelatedVessels(vessels: VesselSummary[], relationships: EntityRelationship[], mapVesselIds: Set<number>): GroupedVessel[] {
   const map = new Map<string, GroupedVessel>();
   for (const relationship of relationships) {
     if (!relationship.vessel) continue;
@@ -261,7 +269,12 @@ function groupRelatedVessels(vessels: VesselSummary[], relationships: EntityRela
     const key = vesselGroupKey(vessel);
     if (!map.has(key)) map.set(key, { vessel, roles: [], relationshipCount: 0 });
   }
-  return Array.from(map.values()).sort((a, b) => a.vessel.name.localeCompare(b.vessel.name));
+  return Array.from(map.values()).sort((a, b) => {
+    const aOnMap = mapVesselIds.has(a.vessel.id);
+    const bOnMap = mapVesselIds.has(b.vessel.id);
+    if (aOnMap !== bOnMap) return Number(bOnMap) - Number(aOnMap);
+    return a.vessel.name.localeCompare(b.vessel.name);
+  });
 }
 
 function vesselGroupKey(vessel: VesselSummary): string {

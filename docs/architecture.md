@@ -40,6 +40,7 @@ SEAM has no production scheduler. Refresh is explicit or frontend-controlled:
 - `OCEANSX_API_KEY`, `OCEANSX_BASE_URL`.
 - `OPENSANCTIONS_*` API/CSV settings.
 - `NEWS_RSS_URLS`, defaulting to the three RSS.app JSON Feed 1.1 bundles in [sources/news.md](sources/news.md).
+- `FEATURE_AI`, `AI_PROVIDER`, `AI_MODEL`, and AI news cache/window settings for the optional backend-generated AI Weekly Brief.
 - `MAX_REQUESTS_PER_RUN` and source-specific request limits.
 
 Frontend configuration:
@@ -49,4 +50,5 @@ Frontend configuration:
 ## Retired/Paused Areas
 
 - Graph UI is not part of the current product surface.
-- Port activity ingestion is paused for now; raw OCEANS-X movements may still contain location codes useful for future port analytics.
+- Arrival/departure-style port activity ingestion is paused for now; raw OCEANS-X movements may still contain location codes useful for future port analytics.
+- Current port proximity remains active and is derived from latest vessel positions plus named OCEANS-X port/service points.

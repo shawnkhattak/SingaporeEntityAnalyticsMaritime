@@ -17,7 +17,7 @@ Talking point: SEAM is honest about source freshness and ingestion state before 
 1. Open `/map`.
 2. Show AIS-style vessel markers colored by current risk severity.
 3. Click a vessel and point out the padded map centering, selected marker focus, and faded surrounding vessels.
-4. Toggle OCEANS-X ports if the live geo endpoint is available.
+4. Open `/ports` or toggle OCEANS-X ports if the live geo endpoint is available.
 
 Talking point: the map is the operating picture, not a static dashboard widget.
 
@@ -34,7 +34,7 @@ Talking point: sanctions are treated as one risk signal inside a broader evidenc
 ## 4. Vessel Profile
 
 1. Open a vessel detail panel.
-2. Walk through identity, current movement, top risk, particulars, source confidence, and position history.
+2. Walk through identity, current movement, current port proximity, top risk, particulars, source confidence, and position history.
 3. Use refresh actions for particulars/movements/risk when appropriate.
 4. Open an evidence link and verify that the raw payload is still available.
 
@@ -51,16 +51,19 @@ Talking point: analysts can move from map contact to source evidence without los
 
 Talking point: SEAM separates unique vessels from relationship records so ownership/management coverage is not inflated.
 
-## 6. News
+## 6. Ports And News
 
-1. Open `/news`.
-2. Show the All tab and the three short bundle tabs.
-3. Point out source badges and original article links.
+1. Open `/ports`.
+2. Show named OCEANS-X port/service points on the map and muted background vessel traffic.
+3. Open `/news`.
+4. Show the All tab and the three short bundle tabs.
+5. If enabled, show the AI Weekly Brief as a source-bound summary of stored Singapore-relevant news.
+6. Point out source badges and original article links.
 
-Talking point: RSS.app feeds provide lightweight external intelligence without AI summarization.
+Talking point: ports provide map context, while RSS.app feeds and the optional weekly brief provide external reporting without changing deterministic risk flags.
 
 ## 7. Roadmap
 
 1. Open `/roadmap`.
-2. Explain the current product posture: desktop-first, evidence-first, deterministic risk.
-3. Close with known guardrails: no auth, no AI, no numeric risk score, no commercial hardening yet.
+2. Explain the current product posture: desktop-first, evidence-first, deterministic risk, optional evidence-bound AI news brief.
+3. Close with known guardrails: no auth, no AI-generated risk flags, no numeric risk score, no commercial hardening yet.

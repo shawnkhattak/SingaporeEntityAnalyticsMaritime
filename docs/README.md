@@ -8,6 +8,8 @@ This directory documents the current SEAM V2 implementation and demo journey. Th
 - [Demo Script](demo-script.md) — recommended desktop demo path.
 - [Demo Data](demo-data.md) — how to populate a useful demo dataset.
 - [Data Catalog](data-catalog.md) — compact inventory of data points available for stats/analytics pages.
+- [Product Roadmap](roadmap.md) — current product posture, hardening work, paused areas, and release checks.
+- [`/roadmap`](../frontend/src/components/pages/RoadmapPage.tsx) — current product roadmap shown inside the app.
 - [Known Limitations](known-limitations.md) — current caveats and source reliability notes.
 
 ## System
@@ -30,7 +32,7 @@ This directory documents the current SEAM V2 implementation and demo journey. Th
 - [News Sources](sources/news.md) — RSS.app bundle structure and source badges.
 - [Sanctions Source](sources/sanctions.md) — OpenSanctions API/CSV ingestion and dataset labels.
 - [Stage 08 Particulars](implementation/stage-08-particulars.md) — OCEANS-X particulars enrichment.
-- [Stage 10 Port Activity](implementation/stage-10-port-activity.md) — OCEANS-X movements and paused port-activity notes.
+- [Stage 10 Port Activity](implementation/stage-10-port-activity.md) — OCEANS-X movements, paused arrival/departure ingestion, and current port-proximity direction.
 
 ## Design Records
 
