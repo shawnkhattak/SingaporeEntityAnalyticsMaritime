@@ -53,6 +53,12 @@ export function EntityDetailInspector({ id }: { id: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  const mapVesselIds = useMemo(() => new Set(state.vessels.map((vessel) => vessel.vessel_id)), [state.vessels]);
+  const groupedVessels = useMemo(
+    () => data ? groupRelatedVessels(data.vessels, data.relationships, mapVesselIds) : [],
+    [data, mapVesselIds],
+  );
+
   if (error) {
     return (
       <InspectorShell
@@ -81,11 +87,6 @@ export function EntityDetailInspector({ id }: { id: number }) {
   }
 
   const entity = data.entity;
-  const mapVesselIds = useMemo(() => new Set(state.vessels.map((vessel) => vessel.vessel_id)), [state.vessels]);
-  const groupedVessels = useMemo(
-    () => groupRelatedVessels(data.vessels, data.relationships, mapVesselIds),
-    [data.vessels, data.relationships, mapVesselIds],
-  );
   const detailFallback = route.name === "entity-detail" && route.from === "risk" ? "/risk" : "/entities";
   const detailBackLabel = route.name === "entity-detail" && route.from === "risk" ? "Back to Risk & Sanctions" : "Back to entities";
 
