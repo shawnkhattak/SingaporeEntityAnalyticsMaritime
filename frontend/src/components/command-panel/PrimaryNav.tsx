@@ -1,4 +1,4 @@
-import { Building2, Database, Map as MapIcon, Newspaper, Route as RouteIcon, ShieldAlert, Ship } from "lucide-react";
+import { Anchor, Building2, Database, Map as MapIcon, Newspaper, Route as RouteIcon, ShieldAlert, Ship } from "lucide-react";
 import { Tooltip } from "../primitives/Tooltip";
 import { usePanelState } from "../../state/AppState";
 import type { RouteState } from "../../types";
@@ -10,6 +10,7 @@ const MAIN_NAV: NavItem[] = [
   { label: "Map", href: "/map", icon: MapIcon, matches: (r) => r.name === "map" },
   { label: "Vessels", href: "/vessels", icon: Ship, matches: (r) => r.name === "vessels-list" || (r.name === "vessel-detail" && r.from !== "risk") },
   { label: "Entities", href: "/entities", icon: Building2, matches: (r) => r.name === "entities-list" || (r.name === "entity-detail" && r.from !== "risk") },
+  { label: "Ports", href: "/ports", icon: Anchor, matches: (r) => r.name === "ports" },
   { label: "Risk & Sanctions", href: "/risk", icon: ShieldAlert, matches: (r) => r.name === "risk" || (r.name === "vessel-detail" && r.from === "risk") || (r.name === "entity-detail" && r.from === "risk") },
   { label: "News", href: "/news", icon: Newspaper, matches: (r) => r.name === "news" },
 ];

@@ -31,6 +31,10 @@ class Vessel(CreatedAtMixin, UpdatedAtMixin, Base):
     length_meters: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2))
     breadth_meters: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2))
     depth_meters: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2))
+    current_port_code: Mapped[Optional[str]] = mapped_column(String(128))
+    current_port_name: Mapped[Optional[str]] = mapped_column(String(255))
+    current_port_distance_m: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 1))
+    current_port_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     source_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
 
@@ -59,6 +63,7 @@ class PortEvent(CreatedAtMixin, Base):
     port_name: Mapped[Optional[str]] = mapped_column(String(255))
     event_type: Mapped[str] = mapped_column(String(64))
     event_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    distance_meters: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 1))
     evidence_id: Mapped[Optional[int]] = mapped_column(ForeignKey("source_observations.id", ondelete="SET NULL"))
 
 

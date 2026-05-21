@@ -22,7 +22,7 @@ export type AppState = {
    *  tab gets the first-time behavior. */
   autoCollapsedThisSession: boolean;
   isInspectorOpen: boolean;
-  inspectorWidth: 480 | 720;
+  inspectorWidth: 480 | 720 | 860;
   toasts: Toast[];
   runningJobs: Record<string, true>;
   vessels: VesselMapFeature[];
@@ -33,6 +33,7 @@ export type AppState = {
   riskByEntity: Record<number, RiskFlag[]>;
   tableCounts: Record<string, number> | null;
   backendOnline: boolean;
+  aiFocusVesselIds: number[];
 };
 
 type Action =
@@ -44,7 +45,7 @@ type Action =
   | { type: "SET_PANEL_COLLAPSED"; collapsed: boolean; manual?: boolean }
   | { type: "OPEN_INSPECTOR" }
   | { type: "CLOSE_INSPECTOR" }
-  | { type: "RESIZE_INSPECTOR"; width: 480 | 720 }
+  | { type: "RESIZE_INSPECTOR"; width: 480 | 720 | 860 }
   | { type: "PUSH_TOAST"; toast: Toast }
   | { type: "DISMISS_TOAST"; id: string }
   | { type: "JOB_STARTED"; slug: string }
@@ -56,7 +57,9 @@ type Action =
   | { type: "CACHE_VESSEL_RISK"; id: number; flags: RiskFlag[] }
   | { type: "CACHE_ENTITY_RISK"; id: number; flags: RiskFlag[] }
   | { type: "MARK_AUTO_COLLAPSED" }
-  | { type: "SET_BACKEND_ONLINE"; online: boolean };
+  | { type: "SET_BACKEND_ONLINE"; online: boolean }
+  | { type: "SET_AI_FOCUS_VESSELS"; ids: number[] }
+  | { type: "CLEAR_AI_FOCUS_VESSELS" };
 
 function readBool(key: string, fallback: boolean): boolean {
   try {
@@ -88,7 +91,7 @@ const initialState: AppState = {
     try { return sessionStorage.getItem("seam:auto-collapsed") === "1"; } catch { return false; }
   })(),
   isInspectorOpen: false,
-  inspectorWidth: (readNum("seam:inspector-width", 480) === 720 ? 720 : 480) as 480 | 720,
+  inspectorWidth: ([480, 720, 860].includes(readNum("seam:inspector-width", 480)) ? readNum("seam:inspector-width", 480) : 480) as 480 | 720 | 860,
   toasts: [],
   runningJobs: {},
   vessels: [],
@@ -99,6 +102,7 @@ const initialState: AppState = {
   riskByEntity: {},
   tableCounts: null,
   backendOnline: true,
+  aiFocusVesselIds: [],
 };
 
 function reducer(state: AppState, action: Action): AppState {
@@ -190,6 +194,11 @@ function reducer(state: AppState, action: Action): AppState {
     case "SET_BACKEND_ONLINE":
       if (state.backendOnline === action.online) return state;
       return { ...state, backendOnline: action.online };
+    case "SET_AI_FOCUS_VESSELS":
+      return { ...state, aiFocusVesselIds: Array.from(new Set(action.ids.filter((id) => Number.isFinite(id)))) };
+    case "CLEAR_AI_FOCUS_VESSELS":
+      if (state.aiFocusVesselIds.length === 0) return state;
+      return { ...state, aiFocusVesselIds: [] };
     default:
       return state;
   }
@@ -318,7 +327,7 @@ export function useInspectorState() {
     width: state.inspectorWidth,
     open: useCallback(() => dispatch({ type: "OPEN_INSPECTOR" }), [dispatch]),
     close: useCallback(() => dispatch({ type: "CLOSE_INSPECTOR" }), [dispatch]),
-    resize: useCallback((w: 480 | 720) => dispatch({ type: "RESIZE_INSPECTOR", width: w }), [dispatch]),
+    resize: useCallback((w: 480 | 720 | 860) => dispatch({ type: "RESIZE_INSPECTOR", width: w }), [dispatch]),
   };
 }
 

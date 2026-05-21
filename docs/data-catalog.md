@@ -77,6 +77,10 @@ This is the compact inventory of data points SEAM currently exposes or stores. I
 - Feed URL.
 - Matched vessel/entity links when exact names match.
 - News evidence/source observation payload.
+- AI Weekly Brief status, generated timestamp, provider/model, cache/debug metadata.
+- AI top developments with article IDs, evidence IDs, linked vessel IDs, and linked entity IDs.
+- AI insight levels for Singapore relevance, oil/gas relevance, risk/opportunity, and confidence.
+- AI key entity chips derived from stored news links and deterministic keyword extraction.
 
 ## Evidence And Provenance
 

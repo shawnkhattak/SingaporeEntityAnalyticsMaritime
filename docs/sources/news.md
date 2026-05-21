@@ -40,3 +40,27 @@ The app refreshes RSS/news on an hourly cadence when the frontend refresh loop i
 Bundle tabs can include articles beyond the latest 50 shown in All.
 
 The ingester stores source title, source badge, RSS.app bundle name, URL, publication time, summary/excerpt, raw payload, and entity/vessel links found by exact case-insensitive name matching. No AI summaries are generated in V1.
+
+## AI Weekly Brief
+
+When `FEATURE_AI=true`, `/news` shows an AI Weekly Brief above the normal article list. It summarizes only stored RSS articles and linked evidence across the configured 7-day window; it does not browse the web or create risk flags.
+
+Default local setup:
+
+```env
+FEATURE_AI=true
+AI_PROVIDER=mock
+AI_MODEL=mock-news-overview-v1
+AI_NEWS_WINDOW_HOURS=168
+AI_NEWS_MAX_ARTICLES=40
+AI_NEWS_CACHE_MINUTES=60
+```
+
+Endpoints:
+
+```text
+GET /api/ai/news-overview?window_hours=168
+POST /api/dev/ai/news-overview/recompute?window_hours=168
+```
+
+The public endpoint returns a disabled response when `FEATURE_AI=false` so the News page can keep working. Anthropic/OpenAI provider hooks are present but optional; missing packages or keys fall back to the deterministic mock provider with debug warnings.

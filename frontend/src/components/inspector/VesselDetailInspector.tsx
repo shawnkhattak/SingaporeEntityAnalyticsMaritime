@@ -8,6 +8,7 @@ import {
   Database,
   FileText,
   Gauge,
+  Link2,
   MapPin,
   MoreHorizontal,
   RefreshCw,
@@ -17,11 +18,11 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { getVessel, getVesselEvents, getVesselObservations, getVesselRiskFlags, runMovements, runParticulars, runRiskRecompute } from "../../api";
 import { formatDate, formatRelative, parseBackendDate } from "../../format";
-import { closeInspectorRoute, navigateBack, useRoute } from "../../hooks/useRoute";
+import { closeInspectorRoute, navigateBack, navigateTo, useRoute } from "../../hooks/useRoute";
 import { requestMapCenter } from "../../hooks/useMapCenter";
 import { countryName, displaySeverity, flagEmoji, riskLabel, vesselTypeLabel } from "../../labels";
 import { recordRecentVessel, useApp, useJobRunner, useSelection, useToasts } from "../../state/AppState";
-import type { RiskFlag, VesselDetail, VesselEvent, VesselObservation, VesselPosition, VesselSummary } from "../../types";
+import type { RiskFlag, VesselDetail, VesselEvent, VesselLinkedEntity, VesselObservation, VesselPosition, VesselSummary } from "../../types";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { ErrorState } from "../primitives/ErrorState";
@@ -215,6 +216,8 @@ export function VesselDetailInspector({ id }: { id: number }) {
         {tab === 0 && (
           <div className="vessel-tab-surface">
             <MovementSummaryCard latest={latest} />
+            <CurrentPortCard currentPort={data.detail.current_port} />
+            <LinkedEntitiesCard entities={data.detail.linked_entities ?? []} />
 
             {data.risk.length === 0 ? (
               <EmptyState compact icon={<CheckCircle2 size={18} />} title="No risk flags" body="This vessel currently has no active or historical risk signals." />
@@ -245,6 +248,53 @@ export function VesselDetailInspector({ id }: { id: number }) {
         )}
       </div>
     </InspectorShell>
+  );
+}
+
+function LinkedEntitiesCard({ entities }: { entities: VesselLinkedEntity[] }) {
+  if (entities.length === 0) {
+    return (
+      <SectionCard title="Linked entities" icon={<Link2 size={15} />}>
+        <div className="vessel-linked-empty">No companies, owners, operators, or managers are linked to this vessel yet.</div>
+      </SectionCard>
+    );
+  }
+
+  const grouped = new Map<number, { entity: VesselLinkedEntity; roles: Set<string>; evidenceIds: Set<number> }>();
+  for (const entity of entities) {
+    const existing = grouped.get(entity.id) ?? { entity, roles: new Set<string>(), evidenceIds: new Set<number>() };
+    existing.roles.add(formatRelationshipRole(entity.relationship_type));
+    if (entity.evidence_id != null) existing.evidenceIds.add(entity.evidence_id);
+    grouped.set(entity.id, existing);
+  }
+
+  return (
+    <SectionCard title="Linked entities" icon={<Link2 size={15} />}>
+      <div className="vessel-linked-entities">
+        {Array.from(grouped.values()).map(({ entity, roles, evidenceIds }) => (
+          <div key={entity.id} className="vessel-linked-entity-card">
+            <button type="button" className="vessel-linked-entity-main" onClick={() => navigateTo(`/entities/${entity.id}`)}>
+              <span>
+                <strong>{entity.name}</strong>
+                <small>{formatEntityType(entity.entity_type)}{entity.country_code ? ` · ${entity.country_code.toUpperCase()}` : ""}</small>
+              </span>
+            </button>
+            <div className="vessel-linked-role-row">
+              {Array.from(roles).map((role) => (
+                <span key={role} className="vessel-linked-role">{role}</span>
+              ))}
+            </div>
+            {evidenceIds.size > 0 && (
+              <div className="vessel-linked-evidence-row">
+                {Array.from(evidenceIds).slice(0, 2).map((evidenceId) => (
+                  <EvidenceLink key={evidenceId} id={evidenceId} variant="chip" />
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </SectionCard>
   );
 }
 
@@ -399,6 +449,32 @@ function MovementSummaryCard({ latest }: { latest: VesselPosition | null }) {
   );
 }
 
+function CurrentPortCard({ currentPort }: { currentPort: VesselDetail["current_port"] }) {
+  if (!currentPort) {
+    return (
+      <SectionCard title="Port status" icon={<Anchor size={15} />}>
+        <div className="vessel-linked-empty">Not currently detected within port range.</div>
+      </SectionCard>
+    );
+  }
+  return (
+    <SectionCard title="Port status" icon={<Anchor size={15} />}>
+      <div className="vessel-port-status">
+        <div>
+          <div className="vessel-port-status-label">Currently at</div>
+          <strong>{currentPort.name}</strong>
+          {currentPort.code && <span className="mono t-faded" style={{ marginLeft: 6, fontSize: 11 }}>{currentPort.code}</span>}
+        </div>
+        <div className="vessel-port-status-meta">
+          {currentPort.distance_meters != null && <span>{Math.round(currentPort.distance_meters)} m from port point</span>}
+          <span>Range {currentPort.radius_meters} m</span>
+          {currentPort.detected_at && <span>{formatRelative(currentPort.detected_at)}</span>}
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
 function PositionHistory({ observations }: { observations: VesselObservation[] }) {
   if (observations.length === 0) {
     return <EmptyState icon={<MapPin size={18} />} title="No position history" body="No recorded vessel source observations are available yet." />;
@@ -469,15 +545,15 @@ function PortCalls({ events, onRefreshMovements }: { events: VesselEvent[]; onRe
     <SectionCard title="Port calls" icon={<Anchor size={15} />}>
       <div className="port-call-table">
         <div className="port-call-head">
-          <span>Port</span><span>Country</span><span>Arrival</span><span>Departure</span><span>Duration</span><span>Confidence</span>
+          <span>Port</span><span>Code</span><span>Event</span><span>Time</span><span>Distance</span><span>Source</span>
         </div>
         {events.map((event) => (
           <div key={event.id} className="port-call-row">
             <span>{event.port_name ?? event.port_code ?? "Unknown port"}</span>
             <span>{event.port_code ?? "Unknown"}</span>
-            <span>{event.event_type.toLowerCase().includes("arriv") ? formatDate(event.event_time ?? event.created_at) : "Unknown"}</span>
-            <span>{event.event_type.toLowerCase().includes("depart") ? formatDate(event.event_time ?? event.created_at) : "Unknown"}</span>
-            <span>Unknown</span>
+            <span>{event.event_type === "port_proximity" ? "Detected near port" : event.event_type.replace(/[_-]/g, " ")}</span>
+            <span>{formatDate(event.event_time ?? event.created_at)}</span>
+            <span>{event.distance_meters != null ? `${Math.round(event.distance_meters)} m` : "Unknown"}</span>
             <span>{event.evidence_id ? <EvidenceLink id={event.evidence_id} variant="chip" /> : <span className="t-faded">Source event</span>}</span>
           </div>
         ))}
@@ -604,6 +680,18 @@ function riskSummary(flags: RiskFlag[]): string {
 
 function formatIdentifier(label: string, value: string | null | undefined): string {
   return `${label} ${value || "Unknown"}`;
+}
+
+function formatRelationshipRole(value: string): string {
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function formatEntityType(value: string): string {
+  return formatRelationshipRole(value || "Entity");
 }
 
 function formatFlag(code: string | null | undefined): string {

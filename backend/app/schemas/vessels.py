@@ -40,11 +40,33 @@ class VesselSearchResult(VesselSummary):
     match_fields: list[str] = Field(default_factory=list)
 
 
+class VesselLinkedEntityRead(BaseModel):
+    id: int
+    entity_type: str
+    name: str
+    country_code: str | None
+    external_id: str | None
+    relationship_type: str
+    confidence: str
+    evidence_id: int | None
+    evidence_summary: str | None = None
+
+
+class VesselCurrentPortRead(BaseModel):
+    code: str | None
+    name: str
+    distance_meters: float | None
+    detected_at: datetime | None
+    radius_meters: int = 850
+
+
 class VesselDetail(BaseModel):
     vessel: VesselSummary
     latest_position: VesselPositionRead | None
     evidence_ids: list[int] = Field(default_factory=list)
     source_timestamps: dict[str, datetime | None] = Field(default_factory=dict)
+    linked_entities: list[VesselLinkedEntityRead] = Field(default_factory=list)
+    current_port: VesselCurrentPortRead | None = None
 
 
 class VesselObservationRead(BaseModel):
@@ -68,5 +90,6 @@ class VesselEventRead(BaseModel):
     port_name: str | None
     event_type: str
     event_time: datetime | None
+    distance_meters: float | None = None
     evidence_id: int | None
     created_at: datetime

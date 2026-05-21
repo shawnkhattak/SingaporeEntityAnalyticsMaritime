@@ -76,7 +76,7 @@ def test_oceansx_client_requires_api_key_for_all_live_endpoints():
         client.fetch_vessel_movements("1234567"),
         client.fetch_due_to_arrive("20260516", 24),
         client.fetch_due_to_depart("20260516", 24),
-        client.fetch_geo_layer("/api/v1/geo/ports/p", "ports_p"),
+        client.fetch_geo_layer("/api/v1/gssdataset/mpa/portsandservicesp-zip", "ports_p"),
     ]
 
     for call in calls:
@@ -96,10 +96,11 @@ def test_oceansx_client_uses_expected_endpoint_paths():
         (client.fetch_vessel_movements("1234567"), "/api/v1/vessel/movements/imonumber/1234567", "movements"),
         (client.fetch_due_to_arrive("20260516", 24), "/api/v1/vessel/duetoarrive/date/20260516/hours/24", "due-to-arrive"),
         (client.fetch_due_to_depart("20260516", 24), "/api/v1/vessel/duetodepart/date/20260516/hours/24", "due-to-depart"),
-        (client.fetch_geo_layer("/api/v1/geo/ports/p", "ports_p"), "/api/v1/geo/ports/p", "ports_p"),
+        (client.fetch_geo_layer("/api/v1/gssdataset/mpa/portsandservicesp-zip", "ports_p"), "/api/v1/gssdataset/mpa/portsandservicesp-zip", "ports_p"),
     ]
     for call, path, label in expected:
-        with patch.object(client, "_fetch_json_sync", return_value=[]) as fetch_json:
+        method = "_fetch_geo_layer_sync" if label == "ports_p" else "_fetch_json_sync"
+        with patch.object(client, method, return_value=[]) as fetch_json:
             assert run(call) == []
             fetch_json.assert_called_once_with(path, label)
 
@@ -277,7 +278,7 @@ def test_geo_layer_contract_is_backend_owned_and_known():
     by_name = {layer["name"]: layer["endpoint"] for layer in layers}
 
     assert by_name == ALLOWED_GEO_LAYERS
-    assert by_name["ports_p"] == "/api/v1/geo/ports/p"
+    assert by_name["ports_p"] == "/api/v1/gssdataset/mpa/portsandservicesp-zip"
     assert "unknown" not in by_name
 
 

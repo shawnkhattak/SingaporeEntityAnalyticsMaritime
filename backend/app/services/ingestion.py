@@ -23,6 +23,7 @@ from app.core.config import Settings
 from app.models.evidence import SourceObservation
 from app.models.ingestion import IngestionJob, IngestionLog, SourceHealth
 from app.models.maritime import Entity, PortEvent, Relationship, Vessel, VesselPositionLatest
+from app.services.port_proximity import PortProximityService
 
 
 INTERNAL_TEST_SOURCE = "internal-test"
@@ -304,6 +305,8 @@ class IngestionService:
                 max_rows=settings.max_requests_per_run,
                 snapshot_job_id=job.id,
             )
+            proximity_stats = await PortProximityService(self.session).sync_latest_positions(settings)
+            stats = {**stats, "port_proximity": proximity_stats}
         except (OceansXError, ValueError, OSError) as exc:
             job.status = "failed"
             job.finished_at = datetime.now(UTC)

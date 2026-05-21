@@ -10,6 +10,13 @@ class Settings(BaseSettings):
     environment: str = "development"
     feature_mutations: bool = True
     feature_ai: bool = False
+    ai_provider: str = "mock"
+    ai_model: str = "mock-news-overview-v1"
+    ai_news_window_hours: int = 168
+    ai_news_max_articles: int = 40
+    ai_news_cache_minutes: int = 60
+    anthropic_api_key: str | None = None
+    openai_api_key: str | None = None
     database_url: str = "postgresql+asyncpg://seam:seam@localhost:5432/seam"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     # OCEANS-X positions snapshot regularly returns 1000+ vessels. The old

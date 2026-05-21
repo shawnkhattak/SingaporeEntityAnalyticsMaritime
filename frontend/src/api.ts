@@ -15,6 +15,80 @@ import type {
   VesselSummary,
 } from "./types";
 
+// Singapore Analyst Brief — see backend/app/services/ai/schemas.py.
+export type AiRiskLevel = "critical" | "medium" | "low" | "none";
+export type AiWatchKind = "action" | "investigate" | "monitor";
+
+export type BriefCitation = {
+  id: number;
+  title: string;
+  source: string;
+  url: string;
+};
+
+export type BriefWatchItem = {
+  kind: AiWatchKind;
+  title: string;
+  subject: string | null;
+  summary: string;
+  severity: AiRiskLevel;
+  article_ids: number[];
+  evidence_ids: number[];
+  citations: BriefCitation[];
+};
+
+export type BriefTheme = {
+  title: string;
+  article_count: number;
+  one_line: string;
+  article_ids: number[];
+};
+
+export type BriefPlatformSignals = {
+  new_risk_flags: number;
+  new_port_events: number;
+  new_evidence_records: number;
+  since: string | null;
+};
+
+export type AiNewsOverviewPayload = {
+  headline: string;
+  bottom_line: string;
+  watch_items: BriefWatchItem[];
+  themes: BriefTheme[];
+  platform_signals: BriefPlatformSignals;
+  coverage_gaps: string[];
+};
+
+export type AiNewsDebugInfo = {
+  input_hash: string | null;
+  cache_hit: boolean;
+  candidate_article_count: number;
+  selected_article_count: number;
+  selected_article_ids: number[];
+  reason: string;
+  warnings: string[];
+  schema_valid: boolean;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  estimated_cost_usd: number | null;
+};
+
+export type AiNewsOverviewResponse = {
+  id: number | null;
+  status: "ready" | "disabled" | "error";
+  disabled_reason: string | null;
+  scope: string;
+  window_hours: number;
+  generated_at: string | null;
+  article_count: number;
+  source_count: number;
+  model_provider: string;
+  model_name: string;
+  overview: AiNewsOverviewPayload;
+  debug: AiNewsDebugInfo;
+};
+
 export type EvidenceDetail = {
   id: number;
   source: string;
@@ -232,6 +306,18 @@ export function getNewsList(limit = 50, bundleName?: string) {
     params.set("bundle_name", bundleName);
   }
   return getJson<NewsArticleItem[]>(`/api/news?${params.toString()}`);
+}
+
+export function getAiNewsOverview(windowHours = 168, bundleName?: string) {
+  const params = new URLSearchParams({ window_hours: String(windowHours) });
+  if (bundleName) params.set("bundle_name", bundleName);
+  return getJson<AiNewsOverviewResponse>(`/api/ai/news-overview?${params.toString()}`);
+}
+
+export function recomputeAiNewsOverview(windowHours = 168, bundleName?: string) {
+  const params = new URLSearchParams({ window_hours: String(windowHours) });
+  if (bundleName) params.set("bundle_name", bundleName);
+  return postJson<AiNewsOverviewResponse>(`/api/dev/ai/news-overview/recompute?${params.toString()}`);
 }
 
 export function getSchemaGraph() {

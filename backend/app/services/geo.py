@@ -10,11 +10,26 @@ from app.models.evidence import SourceObservation
 from app.services.ingestion import OCEANSX_SOURCE, stable_payload_hash
 
 ALLOWED_GEO_LAYERS = {
-    "ports_p": "/api/v1/geo/ports/p",
-    "dangers_p": "/api/v1/geo/dangers/p",
-    "aton_p": "/api/v1/geo/aton/p",
-    "coastline_l": "/api/v1/geo/coastline/l",
-    "offshore_a": "/api/v1/geo/offshore/a",
+    "ports_p": "/api/v1/gssdataset/mpa/portsandservicesp-zip",
+    "ports_l": "/api/v1/gssdataset/mpa/portsandservicesl-zip",
+    "ports_a": "/api/v1/gssdataset/mpa/portsandservicesa-zip",
+    "dangers_p": "/api/v1/gssdataset/mpa/dangersp-zip",
+    "dangers_l": "/api/v1/gssdataset/mpa/dangersl-zip",
+    "dangers_a": "/api/v1/gssdataset/mpa/dangersa-zip",
+    "aton_p": "/api/v1/gssdataset/mpa/aidstonavigationp-zip",
+    "coastline_l": "/api/v1/gssdataset/mpa/coastlinel-zip",
+    "coastline_a": "/api/v1/gssdataset/mpa/coastlinea-zip",
+    "offshore_l": "/api/v1/gssdataset/mpa/offshoreinstallationsl-zip",
+    "offshore_a": "/api/v1/gssdataset/mpa/offshoreinstallationsa-zip",
+    "depths_l": "/api/v1/gssdataset/mpa/depthsl-zip",
+    "depths_a": "/api/v1/gssdataset/mpa/depthsa-zip",
+    "cultural_p": "/api/v1/gssdataset/mpa/culturalfeaturesp-zip",
+    "cultural_l": "/api/v1/gssdataset/mpa/culturalfeaturesl-zip",
+    "cultural_a": "/api/v1/gssdataset/mpa/culturalfeaturesa-zip",
+    "natural_p": "/api/v1/gssdataset/mpa/naturalfeaturesp-zip",
+    "natural_l": "/api/v1/gssdataset/mpa/naturalfeaturesl-zip",
+    "natural_a": "/api/v1/gssdataset/mpa/naturalfeaturesa-zip",
+    "military_a": "/api/v1/gssdataset/mpa/militaryfeaturesa-zip",
 }
 
 
@@ -39,7 +54,7 @@ class GeoService:
             .limit(1)
         )
         if observation is not None:
-            return observation.raw_payload
+            return _clean_layer_payload(layer_name, observation.raw_payload)
         if settings is not None:
             await self.ingest_live(settings, [layer_name])
             observation = await self.session.scalar(
@@ -53,7 +68,7 @@ class GeoService:
                 .limit(1)
             )
             if observation is not None:
-                return observation.raw_payload
+                return _clean_layer_payload(layer_name, observation.raw_payload)
         return None
 
     async def ingest_live(self, settings: Settings, layer_names: list[str] | None = None) -> dict[str, Any]:
@@ -109,3 +124,24 @@ class GeoService:
             stats["observations_inserted"] += 1
         await self.session.commit()
         return stats
+
+
+def _clean_layer_payload(layer_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if layer_name != "ports_p" or payload.get("type") != "FeatureCollection":
+        return payload
+    return {
+        **payload,
+        "features": [
+            feature
+            for feature in payload.get("features", [])
+            if _has_useful_port_name(feature.get("properties") or {})
+        ],
+    }
+
+
+def _has_useful_port_name(props: dict[str, Any]) -> bool:
+    for key in ("OBJNAM", "NAME", "NOBJNM"):
+        value = props.get(key)
+        if value is not None and len(str(value).strip()) > 1:
+            return True
+    return False

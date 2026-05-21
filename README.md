@@ -15,6 +15,7 @@ The app is built around a live map of Singapore-area vessel activity. OCEANS-X s
 - **Evidence-first workflows** where source observations, hashes, evidence IDs, and raw payloads remain inspectable.
 - **Operations Center** for source health, ingestion jobs/logs, table counts, source refresh actions, bulk vessel particulars enrichment, and vessel browsing.
 - **RSS news workspace** organized by the configured RSS.app bundles, with source badges and original links.
+- **AI Maritime Brief** that can summarize stored RSS evidence into top developments, insights, key entities, and evidence chips when `FEATURE_AI=true`.
 
 ## Core Data Sources
 

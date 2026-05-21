@@ -4,10 +4,12 @@ from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.evidence import SourceObservation
-from app.models.maritime import PortEvent, Relationship, Vessel, VesselPositionLatest
+from app.models.maritime import Entity, PortEvent, Relationship, Vessel, VesselPositionLatest
 from app.schemas.vessels import (
     VesselDetail,
+    VesselCurrentPortRead,
     VesselEventRead,
+    VesselLinkedEntityRead,
     VesselObservationRead,
     VesselPositionRead,
     VesselSearchResult,
@@ -82,6 +84,8 @@ class VesselService:
             latest_position=self._position(latest),
             evidence_ids=evidence_ids,
             source_timestamps=source_timestamps,
+            linked_entities=await self._linked_entities(vessel.id),
+            current_port=self._current_port(vessel),
         )
 
     async def observations(self, vessel_id: int, limit: int = 25) -> list[VesselObservationRead] | None:
@@ -146,9 +150,52 @@ class VesselService:
         ids.update(evidence_id for evidence_id in relationship_ids if evidence_id is not None)
         return sorted(ids)
 
+    async def _linked_entities(self, vessel_id: int) -> list[VesselLinkedEntityRead]:
+        rows = await self.session.execute(
+            select(Relationship, Entity)
+            .join(Entity, or_(Entity.id == Relationship.from_entity_id, Entity.id == Relationship.to_entity_id))
+            .where(
+                Relationship.vessel_id == vessel_id,
+                or_(Relationship.from_entity_id.is_not(None), Relationship.to_entity_id.is_not(None)),
+            )
+            .order_by(Entity.name, Relationship.relationship_type, Relationship.id)
+        )
+        linked: list[VesselLinkedEntityRead] = []
+        seen: set[tuple[int, str, int | None]] = set()
+        for relationship, entity in rows:
+            key = (entity.id, relationship.relationship_type, relationship.evidence_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            linked.append(
+                VesselLinkedEntityRead(
+                    id=entity.id,
+                    entity_type=entity.entity_type,
+                    name=entity.name,
+                    country_code=entity.country_code,
+                    external_id=entity.external_id,
+                    relationship_type=relationship.relationship_type,
+                    confidence=relationship.confidence,
+                    evidence_id=relationship.evidence_id,
+                    evidence_summary=relationship.evidence_summary,
+                )
+            )
+        return linked
+
     @staticmethod
     def _summary(vessel: Vessel) -> VesselSummary:
         return VesselSummary.model_validate(vessel)
+
+    @staticmethod
+    def _current_port(vessel: Vessel) -> VesselCurrentPortRead | None:
+        if not vessel.current_port_name:
+            return None
+        return VesselCurrentPortRead(
+            code=vessel.current_port_code,
+            name=vessel.current_port_name,
+            distance_meters=float(vessel.current_port_distance_m) if vessel.current_port_distance_m is not None else None,
+            detected_at=vessel.current_port_updated_at,
+        )
 
     @staticmethod
     def _position(position: VesselPositionLatest | None) -> VesselPositionRead | None:

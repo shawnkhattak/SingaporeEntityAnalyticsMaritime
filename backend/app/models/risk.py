@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -64,3 +64,27 @@ class NewsLink(CreatedAtMixin, Base):
     confidence: Mapped[str] = mapped_column(String(32))
     matched_text: Mapped[str] = mapped_column(String(255))
     evidence_id: Mapped[Optional[int]] = mapped_column(ForeignKey("source_observations.id", ondelete="SET NULL"))
+
+
+class AiNewsOverview(CreatedAtMixin, Base):
+    __tablename__ = "ai_news_overviews"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    scope: Mapped[str] = mapped_column(String(80), index=True)
+    bundle_name: Mapped[Optional[str]] = mapped_column(String(255), index=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    article_count: Mapped[int] = mapped_column(Integer)
+    source_count: Mapped[int] = mapped_column(Integer)
+    evidence_ids: Mapped[list[int]] = mapped_column(JSONB, default=list)
+    article_ids: Mapped[list[int]] = mapped_column(JSONB, default=list)
+    linked_vessel_ids: Mapped[list[int]] = mapped_column(JSONB, default=list)
+    linked_entity_ids: Mapped[list[int]] = mapped_column(JSONB, default=list)
+    input_hash: Mapped[str] = mapped_column(String(64), index=True)
+    model_provider: Mapped[str] = mapped_column(String(80))
+    model_name: Mapped[str] = mapped_column(String(120))
+    prompt_version: Mapped[str] = mapped_column(String(80))
+    overview_json: Mapped[dict] = mapped_column(JSONB)
+    debug_json: Mapped[Optional[dict]] = mapped_column(JSONB)
+    raw_response: Mapped[Optional[dict]] = mapped_column(JSONB)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

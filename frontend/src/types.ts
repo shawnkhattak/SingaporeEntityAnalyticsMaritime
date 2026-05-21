@@ -95,6 +95,28 @@ export type VesselDetail = {
   latest_position: VesselPosition | null;
   evidence_ids: number[];
   source_timestamps: Record<string, string | null>;
+  linked_entities: VesselLinkedEntity[];
+  current_port: VesselCurrentPort | null;
+};
+
+export type VesselCurrentPort = {
+  code: string | null;
+  name: string;
+  distance_meters: number | null;
+  detected_at: string | null;
+  radius_meters: number;
+};
+
+export type VesselLinkedEntity = {
+  id: number;
+  entity_type: string;
+  name: string;
+  country_code: string | null;
+  external_id: string | null;
+  relationship_type: string;
+  confidence: string;
+  evidence_id: number | null;
+  evidence_summary: string | null;
 };
 
 export type VesselObservation = {
@@ -116,6 +138,7 @@ export type VesselEvent = {
   port_name: string | null;
   event_type: string;
   event_time: string | null;
+  distance_meters?: number | null;
   evidence_id: number | null;
   created_at: string;
 };

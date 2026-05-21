@@ -1,14 +1,15 @@
 import { ExternalLink, Globe2, Newspaper, RefreshCw, Rss } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { getNewsList, runNewsLive, type NewsArticleItem } from "../../api";
+import { getAiNewsOverview, getNewsList, recomputeAiNewsOverview, runNewsLive, type AiNewsOverviewResponse, type NewsArticleItem } from "../../api";
 import { closeInspectorRoute } from "../../hooks/useRoute";
-import { useJobRunner } from "../../state/AppState";
+import { useApp, useInspectorState, useJobRunner } from "../../state/AppState";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { Skeleton } from "../primitives/Skeleton";
 import { Tabs } from "../primitives/Tabs";
 import { formatDate } from "../../format";
+import { AiNewsOverviewCard } from "./AiNewsOverviewCard";
 import { InspectorShell } from "./InspectorShell";
 
 type SourceMeta = {
@@ -23,6 +24,8 @@ const NEWS_TABS = [
   { label: "Watchlist", bundle: "SEAM Entity Watchlist" },
   { label: "Intel", bundle: "SEAM Singapore Maritime Intel" },
 ] as const;
+
+const AI_NEWS_WINDOW_HOURS = 168;
 
 function SourceLogo({ src, alt, fallback }: { src: string; alt: string; fallback: ReactNode }) {
   const [failed, setFailed] = useState(false);
@@ -81,7 +84,13 @@ export function NewsInspector() {
   const [allNews, setAllNews] = useState<NewsArticleItem[] | null>(null);
   const [bundleNews, setBundleNews] = useState<Record<string, NewsArticleItem[]>>({});
   const [error, setError] = useState<string | null>(null);
+  const [aiOverview, setAiOverview] = useState<AiNewsOverviewResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiRegenerating, setAiRegenerating] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const { dispatch } = useApp();
+  const inspector = useInspectorState();
   const runJob = useJobRunner();
   const activeBundle = NEWS_TABS[activeTab]?.bundle ?? null;
   const visibleNews = activeBundle ? bundleNews[activeBundle] ?? [] : allNews ?? [];
@@ -111,8 +120,39 @@ export function NewsInspector() {
       });
   }
 
+  function loadAiOverview() {
+    setAiLoading(true);
+    setAiError(null);
+    getAiNewsOverview(AI_NEWS_WINDOW_HOURS)
+      .then(setAiOverview)
+      .catch((e) => {
+        setAiOverview(null);
+        setAiError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setAiLoading(false));
+  }
+
+  function regenerateAiOverview() {
+    setAiRegenerating(true);
+    setAiError(null);
+    recomputeAiNewsOverview(AI_NEWS_WINDOW_HOURS)
+      .then(setAiOverview)
+      .catch((e) => setAiError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setAiRegenerating(false));
+  }
+
   useEffect(() => {
     load();
+    loadAiOverview();
+    return () => dispatch({ type: "CLEAR_AI_FOCUS_VESSELS" });
+  }, []);
+
+  useEffect(() => {
+    const previousWidth = inspector.width;
+    inspector.resize(860);
+    return () => inspector.resize(previousWidth);
+    // Deliberately run once on News mount so this panel gets a richer first-glance layout.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -121,16 +161,35 @@ export function NewsInspector() {
       title={`News · ${visibleNews.length}`}
       onClose={closeInspectorRoute}
       footer={
-        <Button
-          size="sm"
-          variant="primary"
-          leadingIcon={<RefreshCw size={12} />}
-          onClick={() => runJob("news", runNewsLive, { successTitle: "News refreshed", errorTitle: "News failed" }).then(load)}
-        >
-          Refresh RSS
-        </Button>
+        <div className="news-footer-actions">
+          <Button
+            size="sm"
+            variant="default"
+            className="ai-refresh-button"
+            leadingIcon={<RefreshCw size={12} className={aiRegenerating ? "spin" : ""} />}
+            onClick={regenerateAiOverview}
+            disabled={aiRegenerating}
+          >
+            {aiRegenerating ? "Refreshing AI" : "Refresh Weekly Brief"}
+          </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            leadingIcon={<RefreshCw size={12} />}
+            onClick={() => runJob("news", runNewsLive, { successTitle: "News refreshed", errorTitle: "News failed" }).then(load)}
+          >
+            Refresh RSS
+          </Button>
+        </div>
       }
     >
+      <AiNewsOverviewCard
+        overview={aiOverview}
+        loading={aiLoading}
+        error={aiError}
+        onRetry={loadAiOverview}
+        regenerating={aiRegenerating}
+      />
       {!hasLoaded && !error && <Skeleton height={64} />}
       {hasLoaded && !hasAnyNews && !error && (
         <EmptyState

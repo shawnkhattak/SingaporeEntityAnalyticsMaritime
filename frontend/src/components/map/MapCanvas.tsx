@@ -5,7 +5,7 @@ import { onMapCenter } from "../../hooks/useMapCenter";
 import { usePoll } from "../../hooks/usePoll";
 import { useApp, useFilters, useSelection } from "../../state/AppState";
 import type { RiskFlag, VesselMapFeature } from "../../types";
-import { navigateTo } from "../../hooks/useRoute";
+import { navigateTo, useRoute } from "../../hooks/useRoute";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { Radar, Ship } from "lucide-react";
@@ -77,7 +77,9 @@ const OCEANSX_PORTS_LABEL_LAYER_ID = "geo-ports_p-label";
 const OCEANSX_PORT_LABEL: maplibregl.ExpressionSpecification = [
   "coalesce",
   ["get", "name"],
+  ["get", "OBJNAM"],
   ["get", "NAME"],
+  ["get", "NOBJNM"],
   ["get", "portName"],
   ["get", "PORT_NAME"],
   ["get", "port_name"],
@@ -153,6 +155,8 @@ const RISK_SORT_KEY: maplibregl.ExpressionSpecification = [
   0,
 ];
 
+const AI_PURPLE = "#7C3AED";
+
 function focusMatchExpression(focusedIds: number[]): maplibregl.ExpressionSpecification {
   return ["in", ["get", "vessel_id"], ["literal", focusedIds]];
 }
@@ -162,26 +166,31 @@ function focusFilterExpression(focusedIds: number[]): maplibregl.FilterSpecifica
   return focusMatchExpression(focusedIds) as maplibregl.FilterSpecification;
 }
 
-function vesselFocusOpacity(focusedIds: number[] | null): number | maplibregl.ExpressionSpecification {
-  if (!focusedIds) return 0.95;
-  if (focusedIds.length === 0) return 0.95;
-  return ["case", focusMatchExpression(focusedIds), 1, 0.11];
+function vesselFocusOpacity(focusedIds: number[] | null, dimOpacity = 0.33): number | maplibregl.ExpressionSpecification {
+  // Baseline (no selection) icons render slightly muted so a click feels
+  // like the picked vessel lights up against the fleet. 15% softer than
+  // the previous default of 0.95.
+  if (!focusedIds) return 0.81;
+  if (focusedIds.length === 0) return dimOpacity;
+  return ["case", focusMatchExpression(focusedIds), 1, dimOpacity];
 }
 
 function riskHaloFocusOpacity(focusedIds: number[] | null): number | maplibregl.ExpressionSpecification {
+  // Halo opacities also drop 15% in the unfocused state so the
+  // background risk wash quiets down.
   const normalOpacity: maplibregl.ExpressionSpecification = [
     "match",
     ["get", "severity"],
     "low",
-    0.035,
-    0.18,
+    0.030,
+    0.153,
   ];
   const dimmedOpacity: maplibregl.ExpressionSpecification = [
     "match",
     ["get", "severity"],
     "low",
     0.008,
-    0.025,
+    0.012,
   ];
   const selectedOpacity: maplibregl.ExpressionSpecification = [
     "match",
@@ -191,7 +200,7 @@ function riskHaloFocusOpacity(focusedIds: number[] | null): number | maplibregl.
     0.34,
   ];
   if (!focusedIds) return normalOpacity;
-  if (focusedIds.length === 0) return normalOpacity;
+  if (focusedIds.length === 0) return dimmedOpacity;
   return ["case", focusMatchExpression(focusedIds), selectedOpacity, dimmedOpacity];
 }
 
@@ -203,6 +212,7 @@ function vesselSortKey(focusedIds: number[] | null): maplibregl.ExpressionSpecif
 type PopoverState = { x: number; y: number; vessel: VesselMapFeature; severity: string } | null;
 
 export function MapCanvas() {
+  const route = useRoute();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [ready, setReady] = useState(false);
@@ -218,9 +228,11 @@ export function MapCanvas() {
   const filtersRef = useRef(filters);
   const riskRef = useRef(state.riskByVessel);
   const vesselsRef = useRef(state.vessels);
+  const routeNameRef = useRef(route.name);
   filtersRef.current = filters;
   riskRef.current = state.riskByVessel;
   vesselsRef.current = state.vessels;
+  routeNameRef.current = route.name;
 
   // Initial map setup — once per SPA lifetime.
   useEffect(() => {
@@ -401,6 +413,55 @@ export function MapCanvas() {
       });
 
       map.addLayer({
+        id: "vessels-ai-focus-outer",
+        type: "circle",
+        source: "vessels",
+        filter: ["==", ["get", "vessel_id"], -1],
+        paint: {
+          "circle-radius": 25,
+          "circle-color": "rgba(124,58,237,0.13)",
+          "circle-stroke-color": AI_PURPLE,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-opacity": 0.72,
+        },
+      });
+
+      map.addLayer({
+        id: "vessels-ai-focus",
+        type: "circle",
+        source: "vessels",
+        filter: ["==", ["get", "vessel_id"], -1],
+        paint: {
+          "circle-radius": 16,
+          "circle-color": "rgba(124,58,237,0.28)",
+          "circle-stroke-color": "#A78BFA",
+          "circle-stroke-width": 2,
+        },
+      });
+
+      map.addLayer({
+        id: "vessels-ai-focus-label",
+        type: "symbol",
+        source: "vessels",
+        filter: ["==", ["get", "vessel_id"], -1],
+        layout: {
+          "text-field": ["get", "name"],
+          "text-size": 11,
+          "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
+          "text-offset": [0, 1.55],
+          "text-anchor": "top",
+          "text-allow-overlap": false,
+          "text-ignore-placement": false,
+        },
+        paint: {
+          "text-color": "#4C1D95",
+          "text-halo-color": "rgba(255,255,255,0.96)",
+          "text-halo-width": 1.8,
+          "text-opacity": 0.98,
+        },
+      });
+
+      map.addLayer({
         id: "vessels-cluster",
         type: "circle",
         source: "vessels",
@@ -430,6 +491,7 @@ export function MapCanvas() {
       });
 
       map.on("click", "vessels-point", (e) => {
+        if (routeNameRef.current === "ports") return;
         const f = e.features?.[0];
         if (!f) return;
         const props = f.properties as Record<string, unknown>;
@@ -453,6 +515,7 @@ export function MapCanvas() {
       });
 
       map.on("click", "vessels-cluster", (e) => {
+        if (routeNameRef.current === "ports") return;
         const cluster = e.features?.[0];
         if (!cluster) return;
         const src = map.getSource("vessels") as unknown as maplibregl.GeoJSONSource;
@@ -464,6 +527,10 @@ export function MapCanvas() {
       });
 
       map.on("click", (e) => {
+        if (routeNameRef.current === "ports") {
+          setPopover(null);
+          return;
+        }
         const hits = map.queryRenderedFeatures(e.point, { layers: ["vessels-point", "vessels-cluster"] });
         if (hits.length === 0) {
           setPopover(null);
@@ -472,12 +539,14 @@ export function MapCanvas() {
       });
 
       map.on("mouseenter", "vessels-point", () => {
+        if (routeNameRef.current === "ports") return;
         map.getCanvas().style.cursor = "pointer";
       });
       map.on("mouseleave", "vessels-point", () => {
         map.getCanvas().style.cursor = "";
       });
       map.on("mouseenter", "vessels-cluster", () => {
+        if (routeNameRef.current === "ports") return;
         map.getCanvas().style.cursor = "pointer";
       });
       map.on("mouseleave", "vessels-cluster", () => {
@@ -548,13 +617,18 @@ export function MapCanvas() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    const focusedIds =
-      state.selected?.kind === "vessel"
+    const focusedIds = route.name === "ports"
+      ? null
+      : state.selected?.kind === "vessel"
         ? [state.selected.id]
         : state.selected?.kind === "entity"
           ? entityFocusVesselIds
           : null;
+    const aiFocusedIds = state.aiFocusVesselIds.length > 0 ? state.aiFocusVesselIds : null;
+    const displayFocusIds = focusedIds ?? aiFocusedIds ?? (route.name === "ports" ? [] : null);
+    const dimOpacity = route.name === "ports" ? 0.24 : 0.33;
     const selectedFilter = focusFilterExpression(focusedIds ?? []);
+    const aiFilter = focusFilterExpression(aiFocusedIds ?? []);
     if (map.getLayer("vessels-selected-outer")) {
       map.setFilter("vessels-selected-outer", selectedFilter);
     }
@@ -568,15 +642,24 @@ export function MapCanvas() {
           : (["==", ["get", "vessel_id"], -1] as maplibregl.FilterSpecification);
       map.setFilter("vessels-entity-focus-label", labelFilter);
     }
+    if (map.getLayer("vessels-ai-focus-outer")) {
+      map.setFilter("vessels-ai-focus-outer", aiFocusedIds ? aiFilter : (["==", ["get", "vessel_id"], -1] as maplibregl.FilterSpecification));
+    }
+    if (map.getLayer("vessels-ai-focus")) {
+      map.setFilter("vessels-ai-focus", aiFocusedIds ? aiFilter : (["==", ["get", "vessel_id"], -1] as maplibregl.FilterSpecification));
+    }
+    if (map.getLayer("vessels-ai-focus-label")) {
+      map.setFilter("vessels-ai-focus-label", aiFocusedIds ? aiFilter : (["==", ["get", "vessel_id"], -1] as maplibregl.FilterSpecification));
+    }
     if (map.getLayer("vessels-point")) {
-      map.setLayoutProperty("vessels-point", "symbol-sort-key", vesselSortKey(focusedIds));
-      map.setPaintProperty("vessels-point", "icon-opacity", vesselFocusOpacity(focusedIds));
+      map.setLayoutProperty("vessels-point", "symbol-sort-key", vesselSortKey(displayFocusIds));
+      map.setPaintProperty("vessels-point", "icon-opacity", vesselFocusOpacity(displayFocusIds, dimOpacity));
     }
     if (map.getLayer("vessels-halo")) {
-      map.setPaintProperty("vessels-halo", "circle-opacity", riskHaloFocusOpacity(focusedIds));
+      map.setPaintProperty("vessels-halo", "circle-opacity", riskHaloFocusOpacity(displayFocusIds));
     }
-    if (!focusedIds) setPopover(null);
-  }, [state.selected, entityFocusVesselIds, ready]);
+    if (!displayFocusIds) setPopover(null);
+  }, [state.selected, state.aiFocusVesselIds, entityFocusVesselIds, route.name, ready]);
 
   // Geo overlays driven by filters.enabledGeoLayers.
   useEffect(() => {
