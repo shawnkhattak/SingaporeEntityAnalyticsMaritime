@@ -18,40 +18,68 @@ class BriefCitation(BaseModel):
     url: str
 
 
-class BriefWatchItem(BaseModel):
-    """A single item on the analyst's morning checklist.
-
-    `kind` is the action verb the brief recommends:
-      - "action"      → take operational action this shift
-      - "investigate" → open the evidence chain and confirm
-      - "monitor"     → keep on the radar; no action required yet
-    """
-
-    model_config = ConfigDict(extra="ignore")
-
-    kind: Literal["action", "investigate", "monitor"] = "monitor"
-    title: str
-    subject: str | None = None
-    summary: str
-    severity: RiskLevel = "low"
+class BriefSupportMixin(BaseModel):
+    support_ids: list[str] = Field(default_factory=list)
     article_ids: list[int] = Field(default_factory=list)
     evidence_ids: list[int] = Field(default_factory=list)
     citations: list[BriefCitation] = Field(default_factory=list)
 
 
-class BriefTheme(BaseModel):
-    """A thematic bucket of Singapore coverage."""
+class BriefMetricCard(BriefSupportMixin):
+    model_config = ConfigDict(extra="ignore")
+
+    label: str
+    value: str
+    delta: str | None = None
+    tone: Literal["neutral", "up", "down", "warning"] = "neutral"
+
+
+class BriefRiskChange(BriefSupportMixin):
+    model_config = ConfigDict(extra="ignore")
+
+    vessel_id: int | None = None
+    vessel_name: str
+    change: str
+    severity: RiskLevel = "low"
+    summary: str
+
+
+class BriefEntityLinkageChange(BriefSupportMixin):
+    model_config = ConfigDict(extra="ignore")
+
+    entity_id: int | None = None
+    entity_name: str
+    change: str
+    relationship_type: str | None = None
+    summary: str
+
+
+class BriefOperationalItem(BriefSupportMixin):
+    model_config = ConfigDict(extra="ignore")
+
+    title: str
+    summary: str
+    signal_type: Literal["ais_gap", "flag_change", "ownership_change", "voyage_port_irregularity", "port_activity", "platform_delta", "method_gap"] = "platform_delta"
+    severity: RiskLevel = "none"
+
+
+class BriefNewsRow(BriefSupportMixin):
+    """A source row summarized from stored articles."""
 
     model_config = ConfigDict(extra="ignore")
 
     title: str
-    article_count: int = 0
-    one_line: str = ""
-    article_ids: list[int] = Field(default_factory=list)
+    source: str | None = None
+    summary: str = ""
+    source_quality: str | None = None
 
 
 class BriefPlatformSignals(BaseModel):
-    """SEAM-internal deltas since the previous brief."""
+    """SEAM-internal deltas since the previous brief.
+
+    Kept for compatibility with older clients; the weekly brief presents
+    the same information through metric cards and operational context.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
@@ -62,23 +90,18 @@ class BriefPlatformSignals(BaseModel):
 
 
 class AiNewsOverviewPayload(BaseModel):
-    """Schema for the Singapore Analyst Brief.
-
-    Designed to read like a maritime intelligence morning brief, not a
-    press release. The top of the brief is a single-sentence headline
-    plus a one-paragraph bottom line that answers *should I act today*.
-    The watch list is the analyst's prioritized action queue. Themes
-    give a scannable map of what the source set is covering. Platform
-    signals fuse SEAM's own ingested risk flags and port events so the
-    brief is more than a news roll-up.
-    """
+    """Schema for SEAM's evidence-first AI Weekly Brief."""
 
     model_config = ConfigDict(extra="ignore")
 
     headline: str
-    bottom_line: str
-    watch_items: list[BriefWatchItem] = Field(default_factory=list)
-    themes: list[BriefTheme] = Field(default_factory=list)
+    executive_summary: str
+    metric_cards: list[BriefMetricCard] = Field(default_factory=list)
+    vessel_risk_changes: list[BriefRiskChange] = Field(default_factory=list)
+    entity_linkage_changes: list[BriefEntityLinkageChange] = Field(default_factory=list)
+    operational_context: list[BriefOperationalItem] = Field(default_factory=list)
+    news_rows: list[BriefNewsRow] = Field(default_factory=list)
+    method_note: str = ""
     platform_signals: BriefPlatformSignals = Field(default_factory=BriefPlatformSignals)
     coverage_gaps: list[str] = Field(default_factory=list)
 
@@ -149,3 +172,9 @@ class AiNewsFactPacket(BaseModel):
     linked_entity_ids: list[int] = Field(default_factory=list)
     articles: list[ScoredNewsArticle] = Field(default_factory=list)
     risk_context: dict[str, int] = Field(default_factory=dict)
+    global_metrics: dict[str, Any] = Field(default_factory=dict)
+    previous_window: dict[str, Any] = Field(default_factory=dict)
+    vessel_risk_changes: list[dict[str, Any]] = Field(default_factory=list)
+    entity_linkage_changes: list[dict[str, Any]] = Field(default_factory=list)
+    operational_context: list[dict[str, Any]] = Field(default_factory=list)
+    method_gaps: list[str] = Field(default_factory=list)

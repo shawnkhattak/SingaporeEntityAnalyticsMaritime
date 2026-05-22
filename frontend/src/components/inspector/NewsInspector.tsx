@@ -188,6 +188,7 @@ export function NewsInspector() {
         loading={aiLoading}
         error={aiError}
         onRetry={loadAiOverview}
+        onRegenerate={regenerateAiOverview}
         regenerating={aiRegenerating}
       />
       {!hasLoaded && !error && <Skeleton height={64} />}

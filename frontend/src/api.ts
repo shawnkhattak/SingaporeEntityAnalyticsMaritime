@@ -15,9 +15,8 @@ import type {
   VesselSummary,
 } from "./types";
 
-// Singapore Analyst Brief — see backend/app/services/ai/schemas.py.
+// AI Weekly Brief — see backend/app/services/ai/schemas.py.
 export type AiRiskLevel = "critical" | "medium" | "low" | "none";
-export type AiWatchKind = "action" | "investigate" | "monitor";
 
 export type BriefCitation = {
   id: number;
@@ -26,22 +25,48 @@ export type BriefCitation = {
   url: string;
 };
 
-export type BriefWatchItem = {
-  kind: AiWatchKind;
-  title: string;
-  subject: string | null;
-  summary: string;
-  severity: AiRiskLevel;
+export type BriefSupportedItem = {
+  support_ids: string[];
   article_ids: number[];
   evidence_ids: number[];
   citations: BriefCitation[];
 };
 
-export type BriefTheme = {
+export type BriefMetricCard = BriefSupportedItem & {
+  label: string;
+  value: string;
+  delta: string | null;
+  tone: "neutral" | "up" | "down" | "warning";
+};
+
+export type BriefRiskChange = BriefSupportedItem & {
+  vessel_id: number | null;
+  vessel_name: string;
+  change: string;
+  severity: AiRiskLevel;
+  summary: string;
+};
+
+export type BriefEntityLinkageChange = BriefSupportedItem & {
+  entity_id: number | null;
+  entity_name: string;
+  change: string;
+  relationship_type: string | null;
+  summary: string;
+};
+
+export type BriefOperationalItem = BriefSupportedItem & {
   title: string;
-  article_count: number;
-  one_line: string;
-  article_ids: number[];
+  summary: string;
+  signal_type: "ais_gap" | "flag_change" | "ownership_change" | "voyage_port_irregularity" | "port_activity" | "platform_delta" | "method_gap";
+  severity: AiRiskLevel;
+};
+
+export type BriefNewsRow = BriefSupportedItem & {
+  title: string;
+  source: string | null;
+  summary: string;
+  source_quality: string | null;
 };
 
 export type BriefPlatformSignals = {
@@ -53,9 +78,13 @@ export type BriefPlatformSignals = {
 
 export type AiNewsOverviewPayload = {
   headline: string;
-  bottom_line: string;
-  watch_items: BriefWatchItem[];
-  themes: BriefTheme[];
+  executive_summary: string;
+  metric_cards: BriefMetricCard[];
+  vessel_risk_changes: BriefRiskChange[];
+  entity_linkage_changes: BriefEntityLinkageChange[];
+  operational_context: BriefOperationalItem[];
+  news_rows: BriefNewsRow[];
+  method_note: string;
   platform_signals: BriefPlatformSignals;
   coverage_gaps: string[];
 };
@@ -311,13 +340,13 @@ export function getNewsList(limit = 50, bundleName?: string) {
 export function getAiNewsOverview(windowHours = 168, bundleName?: string) {
   const params = new URLSearchParams({ window_hours: String(windowHours) });
   if (bundleName) params.set("bundle_name", bundleName);
-  return getJson<AiNewsOverviewResponse>(`/api/ai/news-overview?${params.toString()}`);
+  return getJson<AiNewsOverviewResponse>(`/api/ai/weekly-brief?${params.toString()}`);
 }
 
 export function recomputeAiNewsOverview(windowHours = 168, bundleName?: string) {
   const params = new URLSearchParams({ window_hours: String(windowHours) });
   if (bundleName) params.set("bundle_name", bundleName);
-  return postJson<AiNewsOverviewResponse>(`/api/dev/ai/news-overview/recompute?${params.toString()}`);
+  return postJson<AiNewsOverviewResponse>(`/api/dev/ai/weekly-brief/recompute?${params.toString()}`);
 }
 
 export function getSchemaGraph() {

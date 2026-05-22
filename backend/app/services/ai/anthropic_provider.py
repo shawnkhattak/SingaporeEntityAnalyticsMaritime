@@ -31,11 +31,12 @@ class AnthropicNewsProvider:
             "model": self.model_name,
             "max_tokens": 2500,
             "system": (
-                "You are the SEAM Singapore Analyst Brief — a morning intelligence note written for a maritime analyst whose desk covers the Singapore Strait, the Port of Singapore (MPA, PSA, Jurong, Tuas, Sembawang, Keppel, Pasir Panjang), Singapore-flagged shipping, and Singapore-registered owners, operators, managers and charterers. "
-                "The brief lives at the top of the analyst's day. Within ten seconds they need to know: is anything actionable, what changed, and what to monitor. Write like a desk officer drafting that note — short, plain, decision-supporting. "
-                "Scope is Singapore-only. Drop any source item that does not directly involve a Singapore actor, asset, geography, or registry. Do not stretch coverage to manufacture Singapore relevance. "
-                "Stay evidence-grounded. Every claim must trace to an article in the fact packet via article_ids. You may interpret severity, escalation, and analyst implications — that is the job — but mark inference language ('sources indicate', 'analyst read', 'on current reporting'). Never fabricate facts, counterparties, or numbers. "
-                "Voice: tight maritime intelligence (sanctions match, port-state detention, bunker disruption, MPA enforcement, OFAC designation). No headline hype, no hedging filler. "
+                "You write the SEAM AI Weekly Brief from a deterministic fact pack. "
+                "SEAM services already computed counts, rankings, risk changes, relationship changes, operational signals, method gaps, support IDs, article IDs, and evidence IDs. "
+                "Your job is only to phrase that data into concise human-readable JSON. "
+                "Do not add outside knowledge, predictions, recommendations, legal conclusions, compliance conclusions, or unsupported risk judgments. "
+                "Do not use action-oriented language such as 'take action', 'recommended', 'likely', 'must', 'should', or 'critical impact'. "
+                "Every substantive item must keep support_ids and any article_ids/evidence_ids from the fact pack. "
                 "Output ONLY through the provided tool."
             ),
             "tools": [self._overview_tool()],
@@ -44,27 +45,8 @@ class AnthropicNewsProvider:
                 {
                     "role": "user",
                     "content": (
-                        "Produce the Singapore Analyst Brief from the fact packet below.\n\n"
-                        "Sections (return through the tool):\n"
-                        "1) headline — ONE sentence (≤ 22 words). The single most consequential Singapore maritime development of the window. Name the actor (port, terminal, regulator, operator, or vessel) and what changed.\n"
-                        "2) bottom_line — One short analyst paragraph (≤ 60 words) answering: do I need to act today, what shifted, what to monitor next. Direct, second-person voice optional ('Expect tighter screening at PSA terminals through the week.').\n"
-                        "3) watch_items — 3 to 6 prioritised items sorted by severity, then by recency. For each:\n"
-                        "   • kind — 'action' (operational change recommended this shift), 'investigate' (open the evidence chain), or 'monitor' (watchlist only).\n"
-                        "   • title — ≤ 14 words. Name the Singapore actor/asset and the change.\n"
-                        "   • subject — the specific Singapore actor (e.g., 'MPA', 'PSA Tuas', 'Jurong Aromatics', vessel name). Leave null if not single-subject.\n"
-                        "   • summary — ≤ 40 words. State what sources say, the analyst implication, and what to watch for next. Lead with the change, not the source name.\n"
-                        "   • severity — critical / medium / low / none. SEAM has merged the old 'high' tier into 'critical'; use those four values only.\n"
-                        "   • article_ids and evidence_ids must come from the fact packet. The runtime attaches citation URLs from these IDs — do NOT invent them.\n"
-                        "4) themes — 3 to 5 thematic buckets of what the Singapore source set is covering. Each carries title (e.g., 'Port & Strait operations', 'Bunker market', 'Screening & enforcement', 'Owners & registry', 'Energy infrastructure'), an article_count from the packet, a one-line one-sentence description that names the dominant Singapore angle, and the article_ids that fall in the bucket.\n"
-                        "5) coverage_gaps — ≤ 3 short lines on what the analyst should know is missing this window (e.g., 'No MPA bulletin published in this window', 'Bunker sales coverage limited to a single trade publication').\n\n"
-                        "Do NOT populate platform_signals — the runtime fills that section from SEAM database state and overwrites whatever you return.\n\n"
-                        "Style rules:\n"
-                        "• Name actors. 'PSA Tuas' beats 'a Singapore port'. 'Singapore-flagged VLCC X' beats 'a tanker'.\n"
-                        "• Lead with the verb when possible ('MPA detained …', 'PSA paused …', 'OFAC designated …').\n"
-                        "• Use direct maritime intelligence vocabulary. Avoid passive 'it was reported that' phrasing.\n"
-                        "• If two sources contradict, surface that — 'Trade press reports detention; MPA statement does not confirm'.\n"
-                        "• If the source set is thin, say so in coverage_gaps rather than padding.\n\n"
-                        "Comparison hint: previous_brief (when present in the packet) lists the last brief's headline and article IDs. Use it to identify what is new vs repeated — but reflect this in the watch_items wording ('previously reported …', 'follow-on to …'), not in a separate field.\n\n"
+                        "Produce the SEAM AI Weekly Brief from the fact packet below. Return headline, executive_summary, metric_cards, vessel_risk_changes, entity_linkage_changes, operational_context, news_rows, method_note, and coverage_gaps. "
+                        "Keep every section concise. Preserve supplied support_ids, article_ids, and evidence_ids. Omit items that lack support. Do not populate platform_signals.\n\n"
                         f"FACT_PACKET:\n{json.dumps(fact_packet, ensure_ascii=True, default=str)}"
                     ),
                 }
@@ -125,67 +107,81 @@ class AnthropicNewsProvider:
 
     def _overview_tool(self) -> dict[str, Any]:
         severity_levels = ["critical", "medium", "low", "none"]
-        watch_kinds = ["action", "investigate", "monitor"]
         return {
             "name": "create_singapore_brief",
-            "description": "Create an evidence-backed Singapore Analyst Brief from stored news.",
+            "description": "Create an evidence-backed SEAM AI Weekly Brief from stored fact-pack data.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "headline": {"type": "string"},
-                    "bottom_line": {"type": "string"},
-                    "watch_items": {
+                    "executive_summary": {"type": "string"},
+                    "metric_cards": {
                         "type": "array",
-                        "maxItems": 6,
                         "items": {
                             "type": "object",
                             "properties": {
-                                "kind": {"type": "string", "enum": watch_kinds},
-                                "title": {"type": "string"},
-                                "subject": {"type": ["string", "null"]},
-                                "summary": {"type": "string"},
-                                "severity": {"type": "string", "enum": severity_levels},
+                                "label": {"type": "string"},
+                                "value": {"type": "string"},
+                                "delta": {"type": ["string", "null"]},
+                                "tone": {"type": "string", "enum": ["neutral", "up", "down", "warning"]},
+                                "support_ids": {"type": "array", "items": {"type": "string"}},
                                 "article_ids": {"type": "array", "items": {"type": "integer"}},
                                 "evidence_ids": {"type": "array", "items": {"type": "integer"}},
                             },
-                            "required": [
-                                "kind",
-                                "title",
-                                "subject",
-                                "summary",
-                                "severity",
-                                "article_ids",
-                                "evidence_ids",
-                            ],
+                            "required": ["label", "value", "support_ids", "article_ids", "evidence_ids"],
                             "additionalProperties": False,
                         },
                     },
-                    "themes": {
+                    "vessel_risk_changes": {"type": "array", "items": self._supported_item_schema({"vessel_id": {"type": ["integer", "null"]}, "vessel_name": {"type": "string"}, "change": {"type": "string"}, "severity": {"type": "string", "enum": severity_levels}, "summary": {"type": "string"}}, ["vessel_name", "change", "severity", "summary"])},
+                    "entity_linkage_changes": {"type": "array", "items": self._supported_item_schema({"entity_id": {"type": ["integer", "null"]}, "entity_name": {"type": "string"}, "change": {"type": "string"}, "relationship_type": {"type": ["string", "null"]}, "summary": {"type": "string"}}, ["entity_name", "change", "summary"])},
+                    "operational_context": {"type": "array", "items": self._supported_item_schema({"title": {"type": "string"}, "summary": {"type": "string"}, "signal_type": {"type": "string"}, "severity": {"type": "string", "enum": severity_levels}}, ["title", "summary", "signal_type", "severity"])},
+                    "news_rows": {
                         "type": "array",
-                        "maxItems": 6,
                         "items": {
                             "type": "object",
                             "properties": {
                                 "title": {"type": "string"},
-                                "article_count": {"type": "integer", "minimum": 0},
-                                "one_line": {"type": "string"},
+                                "source": {"type": ["string", "null"]},
+                                "summary": {"type": "string"},
+                                "source_quality": {"type": ["string", "null"]},
+                                "support_ids": {"type": "array", "items": {"type": "string"}},
                                 "article_ids": {"type": "array", "items": {"type": "integer"}},
+                                "evidence_ids": {"type": "array", "items": {"type": "integer"}},
                             },
-                            "required": ["title", "article_count", "one_line", "article_ids"],
+                            "required": ["title", "summary", "support_ids", "article_ids", "evidence_ids"],
                             "additionalProperties": False,
                         },
                     },
-                    "coverage_gaps": {"type": "array", "items": {"type": "string"}, "maxItems": 4},
+                    "method_note": {"type": "string"},
+                    "coverage_gaps": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
                 },
                 "required": [
                     "headline",
-                    "bottom_line",
-                    "watch_items",
-                    "themes",
+                    "executive_summary",
+                    "metric_cards",
+                    "vessel_risk_changes",
+                    "entity_linkage_changes",
+                    "operational_context",
+                    "news_rows",
+                    "method_note",
                     "coverage_gaps",
                 ],
                 "additionalProperties": False,
             },
+        }
+
+    def _supported_item_schema(self, properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
+        merged = {
+            **properties,
+            "support_ids": {"type": "array", "items": {"type": "string"}},
+            "article_ids": {"type": "array", "items": {"type": "integer"}},
+            "evidence_ids": {"type": "array", "items": {"type": "integer"}},
+        }
+        return {
+            "type": "object",
+            "properties": merged,
+            "required": [*required, "support_ids", "article_ids", "evidence_ids"],
+            "additionalProperties": False,
         }
 
     def _extract_tool_input(self, payload: dict[str, Any]) -> dict[str, Any] | None:

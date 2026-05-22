@@ -2,10 +2,13 @@ from app.services.ai.schemas import (
     AiNewsDebugInfo,
     AiNewsOverviewPayload,
     AiNewsOverviewRead,
+    BriefEntityLinkageChange,
+    BriefMetricCard,
+    BriefNewsRow,
+    BriefOperationalItem,
     BriefCitation,
     BriefPlatformSignals,
-    BriefTheme,
-    BriefWatchItem,
+    BriefRiskChange,
 )
 
 __all__ = [
@@ -13,7 +16,10 @@ __all__ = [
     "AiNewsOverviewPayload",
     "AiNewsOverviewRead",
     "BriefCitation",
+    "BriefEntityLinkageChange",
+    "BriefMetricCard",
+    "BriefNewsRow",
+    "BriefOperationalItem",
     "BriefPlatformSignals",
-    "BriefTheme",
-    "BriefWatchItem",
+    "BriefRiskChange",
 ]

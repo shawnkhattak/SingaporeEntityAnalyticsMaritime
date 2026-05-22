@@ -4277,6 +4277,168 @@ button.ai-citation-chip:hover {
   gap: 10px;
 }
 
+.ai-weekly-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.ai-weekly-metric {
+  position: relative;
+  min-width: 0;
+  min-height: 64px;
+  padding: 8px 28px 8px 9px;
+  border: 1px solid rgba(124,58,237,.16);
+  border-radius: 8px;
+  background: rgba(255,255,255,.88);
+}
+.ai-weekly-metric::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+  background: var(--ai-purple-500);
+}
+.ai-weekly-metric.tone-warning::before { background: var(--risk-medium); }
+.ai-weekly-metric.tone-up::before { background: var(--health-ok); }
+.ai-weekly-metric.tone-down::before { background: var(--slate-400); }
+.ai-weekly-metric span,
+.ai-weekly-metric small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-weekly-metric span {
+  color: var(--slate-500);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.ai-weekly-metric strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--navy-900);
+  font-size: 14px;
+  line-height: 1.2;
+}
+.ai-weekly-metric small {
+  margin-top: 2px;
+  color: var(--slate-500);
+  font-size: 10.5px;
+}
+
+.ai-weekly-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.ai-weekly-section {
+  min-width: 0;
+}
+.ai-weekly-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ai-weekly-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px;
+  gap: 8px;
+  align-items: start;
+  min-height: 58px;
+  padding: 7px 7px 7px 11px;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  background: var(--white);
+}
+.ai-weekly-row::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+.ai-weekly-row.severity-critical::before { background: var(--risk-critical); }
+.ai-weekly-row.severity-medium::before { background: var(--risk-medium); }
+.ai-weekly-row.severity-low::before { background: var(--risk-low); }
+.ai-weekly-row.severity-none::before { background: var(--slate-300, #cbd5e1); }
+.ai-weekly-row strong,
+.ai-weekly-row span,
+.ai-weekly-row p {
+  display: block;
+  min-width: 0;
+}
+.ai-weekly-row strong {
+  color: var(--navy-900);
+  font-size: 12px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.ai-weekly-row span {
+  margin-top: 1px;
+  color: var(--ai-purple-700);
+  font-size: 10.5px;
+  line-height: 1.2;
+  text-transform: capitalize;
+}
+.ai-weekly-row p {
+  margin: 3px 0 0;
+  color: var(--slate-600);
+  font-size: 11px;
+  line-height: 1.34;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ai-citation-button {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(124,58,237,.18);
+  background: rgba(245,243,255,.82);
+  color: var(--ai-purple-700);
+  text-decoration: none;
+  cursor: pointer;
+}
+.ai-citation-button:hover {
+  background: var(--ai-purple-100);
+}
+.ai-platform-inline {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+.ai-platform-inline li button {
+  background: rgba(255,255,255,.7);
+  border-color: rgba(124,58,237,.12);
+}
+.ai-method-row {
+  margin: 9px 0 0;
+  padding-top: 7px;
+  border-top: 1px dashed rgba(124,58,237,.18);
+}
+.ai-method-row p {
+  margin: 0 0 4px;
+  color: var(--slate-500);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
 /* Gaps — one inline italic line, truncated with a tooltip for the full text */
 .ai-brief-gaps-line {
   margin: 8px 0 4px;
@@ -4295,6 +4457,9 @@ button.ai-citation-chip:hover {
 
 @media (max-width: 1180px) {
   .ai-brief-twocol { grid-template-columns: 1fr; }
+  .ai-weekly-grid { grid-template-columns: 1fr; }
+  .ai-weekly-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ai-platform-inline { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 1180px) {

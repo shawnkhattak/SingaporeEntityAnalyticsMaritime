@@ -1,21 +1,27 @@
 import {
   AlertCircle,
-  AlertTriangle,
   Anchor,
   Bot,
   ChevronDown,
-  ChevronRight,
   Database,
   ExternalLink,
-  Eye,
   FileText,
+  Network,
   RefreshCw,
-  Search,
   ShieldAlert,
   Sparkles,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { useState } from "react";
-import type { AiNewsOverviewResponse, BriefWatchItem, AiWatchKind } from "../../api";
+import type {
+  AiNewsOverviewResponse,
+  BriefEntityLinkageChange,
+  BriefMetricCard,
+  BriefNewsRow,
+  BriefOperationalItem,
+  BriefRiskChange,
+  BriefSupportedItem,
+} from "../../api";
 import { formatRelative } from "../../format";
 import { navigateTo } from "../../hooks/useRoute";
 import { Button } from "../primitives/Button";
@@ -31,19 +37,13 @@ type Props = {
   regenerating: boolean;
 };
 
-const KIND_META: Record<AiWatchKind, { label: string; icon: typeof AlertTriangle }> = {
-  action: { label: "Action", icon: AlertTriangle },
-  investigate: { label: "Investigate", icon: Search },
-  monitor: { label: "Monitor", icon: Eye },
-};
-
 export function AiNewsOverviewCard({ overview, loading, error, onRetry, onRegenerate, regenerating }: Props) {
   const [debugOpen, setDebugOpen] = useState(false);
 
   if (loading) {
     return (
       <section className="ai-news-overview is-compact">
-        <BriefHeader subtitle="Building Singapore analyst brief…" />
+        <BriefHeader subtitle="Loading AI Weekly Brief..." />
         <Skeleton height={56} />
         <Skeleton height={120} />
       </section>
@@ -56,7 +56,7 @@ export function AiNewsOverviewCard({ overview, loading, error, onRetry, onRegene
         <EmptyState
           compact
           icon={<AlertCircle size={18} />}
-          title="Singapore Brief unavailable"
+          title="AI Weekly Brief unavailable"
           body={error}
           action={<Button size="sm" onClick={onRetry}>Retry</Button>}
         />
@@ -89,56 +89,68 @@ export function AiNewsOverviewCard({ overview, loading, error, onRetry, onRegene
 
       <div className="ai-brief-headline-card">
         <h4>{o.headline}</h4>
-        {o.bottom_line && (
-          <p className="ai-brief-bottom-line">
-            <strong>Bottom line.</strong> {o.bottom_line}
-          </p>
-        )}
+        {o.executive_summary && <p className="ai-brief-bottom-line">{o.executive_summary}</p>}
       </div>
 
-      <div className="ai-brief-twocol">
-        <div>
-          <div className="ai-brief-section-head">
-            <Sparkles size={11} />
-            <span>Watch list</span>
-            <span className="ai-brief-section-count">{o.watch_items.length}</span>
-          </div>
-          {o.watch_items.length === 0 ? (
-            <div className="ai-brief-empty-line">No Singapore watch items in window.</div>
+      {o.metric_cards.length > 0 && (
+        <div className="ai-weekly-metrics">
+          {o.metric_cards.map((metric) => (
+            <MetricCard key={metric.label} metric={metric} />
+          ))}
+        </div>
+      )}
+
+      <div className="ai-weekly-grid">
+        <BriefSection title="Vessel Risk Changes" count={o.vessel_risk_changes.length} icon={<ShieldAlert size={11} />}>
+          {o.vessel_risk_changes.length === 0 ? (
+            <div className="ai-brief-empty-line">No supported vessel risk changes.</div>
           ) : (
-            <ul className="ai-brief-watch-list">
-              {o.watch_items.map((item, index) => (
-                <WatchRow key={`${item.title}-${index}`} item={item} />
-              ))}
+            <ul className="ai-weekly-list">
+              {o.vessel_risk_changes.map((item, index) => <RiskChangeRow key={`${item.vessel_name}-${index}`} item={item} />)}
             </ul>
           )}
-        </div>
+        </BriefSection>
 
-        <aside className="ai-brief-side">
-          {o.themes.length > 0 && (
-            <div>
-              <div className="ai-brief-section-head">
-                <span>Signals</span>
-              </div>
-              <ul className="ai-brief-themes-inline">
-                {o.themes.map((theme) => (
-                  <li key={theme.title}>
-                    <span className="ai-theme-title">{theme.title}</span>
-                    <span className="ai-theme-count">{theme.article_count}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+        <BriefSection title="Entity Linkages" count={o.entity_linkage_changes.length} icon={<Network size={11} />}>
+          {o.entity_linkage_changes.length === 0 ? (
+            <div className="ai-brief-empty-line">No supported entity linkage changes.</div>
+          ) : (
+            <ul className="ai-weekly-list">
+              {o.entity_linkage_changes.map((item, index) => <EntityChangeRow key={`${item.entity_name}-${index}`} item={item} />)}
+            </ul>
           )}
+        </BriefSection>
 
-          <PlatformSignalsRow signals={o.platform_signals} />
-        </aside>
+        <BriefSection title="Operational Context" count={o.operational_context.length} icon={<Anchor size={11} />}>
+          {o.operational_context.length === 0 ? (
+            <div className="ai-brief-empty-line">No computed operational signals.</div>
+          ) : (
+            <ul className="ai-weekly-list">
+              {o.operational_context.map((item, index) => <OperationalRow key={`${item.title}-${index}`} item={item} />)}
+            </ul>
+          )}
+        </BriefSection>
+
+        <BriefSection title="News Sources" count={o.news_rows.length} icon={<FileText size={11} />}>
+          {o.news_rows.length === 0 ? (
+            <div className="ai-brief-empty-line">No scoped source rows.</div>
+          ) : (
+            <ul className="ai-weekly-list">
+              {o.news_rows.map((item, index) => <NewsRow key={`${item.title}-${index}`} item={item} />)}
+            </ul>
+          )}
+        </BriefSection>
       </div>
 
-      {o.coverage_gaps.length > 0 && (
-        <p className="ai-brief-gaps-line" title={o.coverage_gaps.join(" · ")}>
-          <span className="ai-brief-kicker">Gaps</span> {o.coverage_gaps.join(" · ")}
-        </p>
+      <PlatformSignalsRow signals={o.platform_signals} />
+
+      {(o.method_note || o.coverage_gaps.length > 0) && (
+        <div className="ai-method-row">
+          {o.method_note && <p><span className="ai-brief-kicker">Method</span>{o.method_note}</p>}
+          {o.coverage_gaps.length > 0 && (
+            <p title={o.coverage_gaps.join(" · ")}><span className="ai-brief-kicker">Gaps</span>{o.coverage_gaps.join(" · ")}</p>
+          )}
+        </div>
       )}
 
       <button type="button" className="ai-debug-toggle" onClick={() => setDebugOpen((open) => !open)}>
@@ -152,9 +164,7 @@ export function AiNewsOverviewCard({ overview, loading, error, onRetry, onRegene
           <span>cache: {overview.debug.cache_hit ? "hit" : "miss"}</span>
           <span>input: {overview.debug.input_hash?.slice(0, 10) ?? "none"}</span>
           <span>articles: {overview.debug.selected_article_count}/{overview.debug.candidate_article_count}</span>
-          {overview.debug.estimated_cost_usd != null && (
-            <span>cost: {formatCost(overview.debug.estimated_cost_usd)}</span>
-          )}
+          {overview.debug.estimated_cost_usd != null && <span>cost: {formatCost(overview.debug.estimated_cost_usd)}</span>}
           {overview.debug.warnings.map((warning) => <span key={warning} className="warn">{warning}</span>)}
         </div>
       )}
@@ -189,10 +199,8 @@ function BriefHeader({
         </span>
         <div style={{ minWidth: 0 }}>
           <div className="row" style={{ gap: 6, alignItems: "center" }}>
-            <h3>Singapore Brief</h3>
-            {windowHours != null && (
-              <span className="ai-brief-window-text">· {formatWindow(windowHours)}</span>
-            )}
+            <h3>AI Weekly Brief</h3>
+            {windowHours != null && <span className="ai-brief-window-text">· {formatWindow(windowHours)}</span>}
           </div>
           <p>
             {subtitle ?? (
@@ -207,38 +215,108 @@ function BriefHeader({
       </div>
       {onRegenerate && (
         <Button size="sm" onClick={onRegenerate} disabled={regenerating} leadingIcon={<RefreshCw size={11} className={regenerating ? "spin" : ""} />}>
-          {regenerating ? "Regenerating" : "Regenerate"}
+          {regenerating ? "Refreshing" : "Refresh"}
         </Button>
       )}
     </div>
   );
 }
 
-function WatchRow({ item }: { item: BriefWatchItem }) {
-  const meta = KIND_META[item.kind] ?? KIND_META.monitor;
-  const Icon = meta.icon;
-  const lead = item.subject ? `${item.subject} — ${item.title}` : item.title;
+function BriefSection({ title, count, icon, children }: { title: string; count: number; icon: ReactNode; children: ReactNode }) {
+  return (
+    <div className="ai-weekly-section">
+      <div className="ai-brief-section-head">
+        {icon}
+        <span>{title}</span>
+        <span className="ai-brief-section-count">{count}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function MetricCard({ metric }: { metric: BriefMetricCard }) {
+  return (
+    <div className={`ai-weekly-metric tone-${metric.tone}`}>
+      <span>{metric.label}</span>
+      <strong>{metric.value}</strong>
+      {metric.delta && <small>{metric.delta}</small>}
+      <CitationButton item={metric} />
+    </div>
+  );
+}
+
+function RiskChangeRow({ item }: { item: BriefRiskChange }) {
+  return (
+    <li className={`ai-weekly-row severity-${item.severity}`}>
+      <div>
+        <strong>{item.vessel_name}</strong>
+        <span>{item.change}</span>
+        <p>{item.summary}</p>
+      </div>
+      <CitationButton item={item} />
+    </li>
+  );
+}
+
+function EntityChangeRow({ item }: { item: BriefEntityLinkageChange }) {
+  return (
+    <li className="ai-weekly-row severity-none">
+      <div>
+        <strong>{item.entity_name}</strong>
+        <span>{item.change}</span>
+        <p>{item.summary}</p>
+      </div>
+      <CitationButton item={item} />
+    </li>
+  );
+}
+
+function OperationalRow({ item }: { item: BriefOperationalItem }) {
+  return (
+    <li className={`ai-weekly-row severity-${item.severity}`}>
+      <div>
+        <strong>{item.title}</strong>
+        <span>{signalLabel(item.signal_type)}</span>
+        <p>{item.summary}</p>
+      </div>
+      <CitationButton item={item} />
+    </li>
+  );
+}
+
+function NewsRow({ item }: { item: BriefNewsRow }) {
   const firstCitation = item.citations[0];
   return (
-    <li className={`ai-watch-row severity-${item.severity} kind-${item.kind}`}>
-      <span className={`ai-watch-kind kind-${item.kind}`} title={`${meta.label} · ${item.summary}`}>
-        <Icon size={10} />
-        {meta.label}
-      </span>
-      <span className="ai-watch-lead" title={item.summary}>{lead}</span>
-      {firstCitation && (
-        <a
-          href={firstCitation.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ai-watch-source"
-          title={firstCitation.title}
-        >
-          {firstCitation.source}
-          <ExternalLink size={10} />
+    <li className="ai-weekly-row severity-none">
+      <div>
+        <strong>{item.title}</strong>
+        <span>{item.source_quality || item.source || "Source"}</span>
+        <p>{item.summary}</p>
+      </div>
+      {firstCitation ? (
+        <a className="ai-citation-button" href={firstCitation.url} target="_blank" rel="noopener noreferrer" title={`${firstCitation.source}: ${firstCitation.title}`}>
+          <ExternalLink size={11} />
         </a>
+      ) : (
+        <CitationButton item={item} />
       )}
     </li>
+  );
+}
+
+function CitationButton({ item }: { item: BriefSupportedItem }) {
+  const supportCount = item.support_ids.length + item.article_ids.length + item.evidence_ids.length;
+  if (supportCount === 0) return null;
+  const label = [
+    item.support_ids.length ? `${item.support_ids.length} support` : null,
+    item.article_ids.length ? `${item.article_ids.length} article` : null,
+    item.evidence_ids.length ? `${item.evidence_ids.length} evidence` : null,
+  ].filter(Boolean).join(" · ");
+  return (
+    <button type="button" className="ai-citation-button" title={label}>
+      <Database size={11} />
+    </button>
   );
 }
 
@@ -246,38 +324,34 @@ function PlatformSignalsRow({ signals }: { signals: AiNewsOverviewResponse["over
   const total = signals.new_risk_flags + signals.new_port_events + signals.new_evidence_records;
   if (total === 0) return null;
   return (
-    <div>
-      <div className="ai-brief-section-head">
-        <span>Platform</span>
-      </div>
-      <ul className="ai-platform-row">
-        <li>
-          <button type="button" onClick={() => navigateTo("/risk")} title="Open risk feed">
-            <ShieldAlert size={11} />
-            <strong>{signals.new_risk_flags}</strong>
-            <span>risk</span>
-            <ChevronRight size={10} />
-          </button>
-        </li>
-        <li>
-          <button type="button" onClick={() => navigateTo("/vessels")} title="Open vessels">
-            <Anchor size={11} />
-            <strong>{signals.new_port_events}</strong>
-            <span>ports</span>
-            <ChevronRight size={10} />
-          </button>
-        </li>
-        <li>
-          <button type="button" onClick={() => navigateTo("/data/source_observations")} title="Open evidence">
-            <FileText size={11} />
-            <strong>{signals.new_evidence_records}</strong>
-            <span>evidence</span>
-            <ChevronRight size={10} />
-          </button>
-        </li>
-      </ul>
-    </div>
+    <ul className="ai-platform-row ai-platform-inline">
+      <li>
+        <button type="button" onClick={() => navigateTo("/risk")} title="Open risk feed">
+          <ShieldAlert size={11} />
+          <strong>{signals.new_risk_flags}</strong>
+          <span>risk flags since last brief</span>
+        </button>
+      </li>
+      <li>
+        <button type="button" onClick={() => navigateTo("/vessels")} title="Open vessels">
+          <Anchor size={11} />
+          <strong>{signals.new_port_events}</strong>
+          <span>port events since last brief</span>
+        </button>
+      </li>
+      <li>
+        <button type="button" onClick={() => navigateTo("/data/source_observations")} title="Open evidence">
+          <FileText size={11} />
+          <strong>{signals.new_evidence_records}</strong>
+          <span>evidence records since last brief</span>
+        </button>
+      </li>
+    </ul>
   );
+}
+
+function signalLabel(signal: BriefOperationalItem["signal_type"]) {
+  return signal.replaceAll("_", " ");
 }
 
 function formatWindow(hours: number) {
