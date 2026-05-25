@@ -59,7 +59,7 @@ export function RiskCard({ flag, subject, evidencePayload, conflictDetails, vess
   const sanctionSources = label.kind === "sanctioned" ? getHumanReadableSanctionSources(evidencePayload) : [];
   const visibleSanctionSources = sourcesExpanded ? sanctionSources : sanctionSources.slice(0, 4);
   const hiddenSanctionSourceCount = Math.max(0, sanctionSources.length - visibleSanctionSources.length);
-  const identityConflicts = label.kind === "identity_conflict" ? conflictDetails ?? [] : [];
+  const identityConflicts = label.kind === "identity_conflict" ? mergeIdentityConflicts(conflictDetails, flag.summary) : [];
   const visibleIdentityConflicts = conflictsExpanded ? identityConflicts : identityConflicts.slice(0, 3);
   const hiddenIdentityConflictCount = Math.max(0, identityConflicts.length - visibleIdentityConflicts.length);
   const sourceDescription = label.body;
@@ -108,6 +108,7 @@ export function RiskCard({ flag, subject, evidencePayload, conflictDetails, vess
         />
       ) : label.kind === "identity_conflict" ? (
         <IdentityConflictSummary
+          summary={flag.summary}
           conflicts={identityConflicts}
           visibleConflicts={visibleIdentityConflicts}
           hiddenCount={hiddenIdentityConflictCount}
@@ -217,12 +218,14 @@ function HighRiskFlagSummary({ summary }: { summary: string }) {
 }
 
 function IdentityConflictSummary({
+  summary,
   conflicts,
   visibleConflicts,
   hiddenCount,
   expanded,
   onToggle,
 }: {
+  summary: string;
   conflicts: IdentityConflictDetail[];
   visibleConflicts: IdentityConflictDetail[];
   hiddenCount: number;
@@ -233,6 +236,11 @@ function IdentityConflictSummary({
     return (
       <div className="identity-conflict-summary">
         <div className="t-sm">Identity conflict detected.</div>
+        {summary && (
+          <div className="identity-conflict-item" style={{ marginTop: 4 }}>
+            {summary}
+          </div>
+        )}
         <div className="identity-conflict-reason">
           <strong>Reason:</strong> Same IMO appears with conflicting identifiers across sources.
         </div>
@@ -354,8 +362,29 @@ function BoldSourceList({ sources }: { sources: string[] }) {
 
 function formatConflictValues(values: string[]): string {
   const clean = values.filter(Boolean);
+  if (clean.length === 1) return clean[0];
   if (clean.length <= 2) return clean.join(" vs ");
   return `${clean[0]} vs ${clean[1]} + ${clean.length - 2} more values`;
+}
+
+function mergeIdentityConflicts(conflictDetails: IdentityConflictDetail[] | null | undefined, summary: string): IdentityConflictDetail[] {
+  if (conflictDetails?.length) return conflictDetails;
+  const parsed = parseIdentityConflictSummary(summary);
+  return parsed;
+}
+
+function parseIdentityConflictSummary(summary: string): IdentityConflictDetail[] {
+  const match = summary.match(/Conflicting identity fields(?: detected)?:\s*(.+?)\.?$/i);
+  if (!match) return [];
+  return match[1]
+    .split(",")
+    .map((label) => label.trim().replace(/\.$/, ""))
+    .filter(Boolean)
+    .map((label) => ({
+      field: label.toLowerCase().replace(/\s+/g, "_"),
+      label,
+      values: [`Conflicting ${label.toLowerCase()} values`],
+    }));
 }
 
 function identityFieldReason(field: string): string {

@@ -268,16 +268,17 @@ function normalizeRiskItems(items: Array<RiskFeedItem | RiskFlag>, subject: stri
   return items.map((item) => {
     if ("flag" in item) {
       return item.flag.flag_type === "conflicting_identity" && (!item.conflict_details || item.conflict_details.length === 0)
-        ? { ...item, conflict_details: observationConflicts }
+        ? { ...item, conflict_details: observationConflicts.length ? observationConflicts : summaryConflicts(item.flag.summary) }
         : item;
     }
+    const fallbackConflicts = observationConflicts.length ? observationConflicts : summaryConflicts(item.summary);
     return {
       flag: item,
       subject,
       vessel_id: vesselId,
       entity_id: null,
       evidence_payload: null,
-      conflict_details: item.flag_type === "conflicting_identity" ? observationConflicts : null,
+      conflict_details: item.flag_type === "conflicting_identity" ? fallbackConflicts : null,
     };
   });
 }
@@ -357,6 +358,20 @@ function cleanIdentity(value: unknown, numeric = false): string | null {
     return digits || null;
   }
   return text.replace(/\s+/g, " ");
+}
+
+function summaryConflicts(summary: string): IdentityConflictDetail[] {
+  const match = summary.match(/Conflicting identity fields(?: detected)?:\s*(.+?)\.?$/i);
+  if (!match) return [];
+  return match[1]
+    .split(",")
+    .map((label) => label.trim().replace(/\.$/, ""))
+    .filter(Boolean)
+    .map((label) => ({
+      field: label.toLowerCase().replace(/\s+/g, "_"),
+      label,
+      values: [`Conflicting ${label.toLowerCase()} values`],
+    }));
 }
 
 function LinkedEntitiesCard({ entities }: { entities: VesselLinkedEntity[] }) {

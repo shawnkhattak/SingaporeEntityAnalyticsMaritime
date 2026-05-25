@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
@@ -211,22 +211,17 @@ async def recompute_risk(
 @router.post("/active-issues/clear", dependencies=[Depends(require_dev_mutations)])
 async def clear_active_issues(session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, int]:
     now = datetime.now(UTC)
-    failed_jobs = list(await session.scalars(select(IngestionJob).where(IngestionJob.status.in_(("failed", "failure", "error")))))
-    unhealthy_sources = list(await session.scalars(select(SourceHealth)))
-    for job in failed_jobs:
-        job.status = "acknowledged"
-        if job.finished_at is None:
-            job.finished_at = now
-    for health in unhealthy_sources:
-        health.status = "healthy"
-        health.last_checked_at = now
-        health.last_success_at = now
-        health.last_error = None
-        metadata = dict(health.metadata_ or {})
-        metadata["cleared_at"] = now.isoformat()
-        health.metadata_ = metadata
+    failed_jobs = await session.execute(
+        update(IngestionJob)
+        .where(IngestionJob.status.in_(("failed", "failure", "error")))
+        .values(status="acknowledged", finished_at=now)
+    )
+    unhealthy_sources = await session.execute(
+        update(SourceHealth)
+        .values(status="healthy", last_checked_at=now, last_success_at=now, last_error=None)
+    )
     await session.commit()
-    return {"jobs_acknowledged": len(failed_jobs), "sources_cleared": len(unhealthy_sources)}
+    return {"jobs_acknowledged": failed_jobs.rowcount or 0, "sources_cleared": unhealthy_sources.rowcount or 0}
 
 
 @router.post("/ingestion/refresh-live", dependencies=[Depends(require_dev_mutations)])
