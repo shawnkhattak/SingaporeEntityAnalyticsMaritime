@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-The rebuild plan defines SEAM V2 as portfolio-first, evidence-driven, and intentionally narrower than the previous implementation. The first stable version must prioritize boot reliability, transparent source evidence, and a coherent demo path.
+The rebuild plan defines SEAM as portfolio-first, evidence-driven, and intentionally narrower than the previous implementation. The first stable version must prioritize boot reliability, transparent source evidence, and a coherent demo path.
 
 ## Decision
 

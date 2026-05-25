@@ -1,6 +1,6 @@
 # UI Overview
 
-SEAM V2 is a map-first desktop analyst workspace. The map stays visible for investigative flows; inspectors and command surfaces float over it.
+SEAM is a map-first desktop analyst workspace. The map stays visible for investigative flows; inspectors and command surfaces float over it.
 
 ## Shell Layout
 

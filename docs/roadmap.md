@@ -1,6 +1,6 @@
 # Product Roadmap
 
-This is the Markdown companion to the in-app `/roadmap` page. It keeps the repository story aligned with the current SEAM V2 product direction.
+This is the Markdown companion to the in-app `/roadmap` page. It keeps the repository story aligned with the current SEAM product direction.
 
 ## Current Posture
 

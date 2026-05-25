@@ -181,7 +181,7 @@ export function Shell() {
 
   // Browser tab title per route (bug #21).
   useEffect(() => {
-    const base = "SEAM V2";
+    const base = "SEAM";
     const label = titleForRoute(route, state);
     document.title = `${label} · ${base}`;
   }, [route, state]);

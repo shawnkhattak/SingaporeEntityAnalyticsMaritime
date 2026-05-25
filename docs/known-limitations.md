@@ -1,6 +1,6 @@
 # Known Limitations
 
-- SEAM V2 is a portfolio/demo project, not a production commercial deployment.
+- SEAM is a portfolio/demo project, not a production commercial deployment.
 - Desktop-first only. Narrow/mobile screens show a polished desktop-required gate.
 - No authentication or user management.
 - AI is optional and limited to the News page's evidence-bound Weekly Brief. It does not create risk flags, vessel matches, or sanctions conclusions.

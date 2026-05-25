@@ -1,1 +1,1 @@
-"""SEAM V2 backend."""
+"""SEAM backend."""

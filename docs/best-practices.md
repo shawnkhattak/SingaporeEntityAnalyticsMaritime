@@ -1,4 +1,4 @@
-# SEAM V2 Best Practices
+# SEAM Best Practices
 
 These practices keep the rebuild aligned with the V1 charter and make each stage easy to verify.
 

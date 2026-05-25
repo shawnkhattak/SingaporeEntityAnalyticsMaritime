@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-SEAM V2 needs a database contract before ingestion and UI work. The V1 charter requires PostgreSQL/PostGIS, latest-position workflows, traceable source evidence, manual ingestion, and transparent risk flags without TimescaleDB, AI-generated risk decisions, or numeric scoring.
+SEAM needs a database contract before ingestion and UI work. The V1 charter requires PostgreSQL/PostGIS, latest-position workflows, traceable source evidence, manual ingestion, and transparent risk flags without TimescaleDB, AI-generated risk decisions, or numeric scoring.
 
 ## Decision
 

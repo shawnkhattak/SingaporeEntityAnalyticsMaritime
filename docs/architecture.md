@@ -1,6 +1,6 @@
 # Architecture
 
-SEAM V2 runs as three local services: a React/Vite frontend, a FastAPI backend, and PostgreSQL/PostGIS. Docker Compose wires the services for local development and demo use.
+SEAM runs as three local services: a React/Vite frontend, a FastAPI backend, and PostgreSQL/PostGIS. Docker Compose wires the services for local development and demo use.
 
 ## Backend
 

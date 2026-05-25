@@ -1,10 +1,10 @@
 # SEAM Documentation
 
-This directory documents the current SEAM V2 implementation and demo journey. The docs are organized so a reviewer can understand the product first, then inspect the data model, source integrations, operations workflow, and engineering guardrails.
+This directory documents the current SEAM implementation and demo journey. The docs are organized so a reviewer can understand the product first, then inspect the data model, source integrations, operations workflow, and engineering guardrails.
 
 ## Product And Journey
 
-- [Charter](charter-v2.md) — product scope, non-goals, and build rules.
+- [Charter](charter.md) — product scope, non-goals, and build rules.
 - [Demo Script](demo-script.md) — recommended desktop demo path.
 - [Demo Data](demo-data.md) — how to populate a useful demo dataset.
 - [Data Catalog](data-catalog.md) — compact inventory of data points available for stats/analytics pages.

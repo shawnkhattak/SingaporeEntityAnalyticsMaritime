@@ -1,6 +1,6 @@
-# SEAM V2 Charter
+# SEAM Charter
 
-SEAM V2 is a desktop-first, evidence-driven maritime intelligence platform focused on Singapore maritime activity. It prioritizes a polished analyst demo, source traceability, operational clarity, and a coherent product story over commercial hardening.
+SEAM is a desktop-first, evidence-driven maritime intelligence platform focused on Singapore maritime activity. It prioritizes a polished analyst demo, source traceability, operational clarity, and a coherent product story over commercial hardening.
 
 ## Product Promise
 

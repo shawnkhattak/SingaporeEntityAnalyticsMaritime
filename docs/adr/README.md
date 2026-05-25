@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Use this folder for short architecture decisions that affect SEAM V2.
+Use this folder for short architecture decisions that affect SEAM.
 
 Each ADR should include:
 

@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-SEAM V2 is evidence-driven and manual-first. The frontend must not call OCEANS-X or other source APIs directly, because that would bypass source observations, dedupe behavior, and evidence links.
+SEAM is evidence-driven and manual-first. The frontend must not call OCEANS-X or other source APIs directly, because that would bypass source observations, dedupe behavior, and evidence links.
 
 ## Decision
 

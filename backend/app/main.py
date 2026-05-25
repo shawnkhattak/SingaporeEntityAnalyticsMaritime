@@ -19,7 +19,7 @@ from app.core.config import get_settings
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="SEAM V2 API", version="0.1.0")
+    app = FastAPI(title="SEAM API", version="0.1.0")
 
     app.add_middleware(
         CORSMiddleware,
