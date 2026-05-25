@@ -1335,6 +1335,47 @@ a.card:active, button.card:active { transform: translateY(0); transition-duratio
   cursor: pointer;
   white-space: nowrap;
 }
+.range-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+.range-overlay::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+}
+.range-overlay::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 999px;
+  border: 2px solid var(--white);
+  background: var(--ocean-500);
+  box-shadow: 0 1px 4px rgba(15,23,42,.24);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.range-overlay::-moz-range-track {
+  height: 4px;
+  background: transparent;
+}
+.range-overlay::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid var(--white);
+  background: var(--ocean-500);
+  box-shadow: 0 1px 4px rgba(15,23,42,.24);
+  pointer-events: auto;
+  cursor: pointer;
+}
 .ops-vessel-table-wrap {
   max-height: 420px;
   overflow: auto;
