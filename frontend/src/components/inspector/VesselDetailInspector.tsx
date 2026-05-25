@@ -59,7 +59,8 @@ export function VesselDetailInspector({ id }: { id: number }) {
     setLoading(true);
     setError(null);
     Promise.all([getVessel(id), getVesselObservations(id), getVesselEvents(id), getVesselRiskFlags(id)])
-      .then(([detail, observations, events, riskItems]) => {
+      .then(([detail, observations, events, rawRiskItems]) => {
+        const riskItems = normalizeRiskItems(rawRiskItems, detail.vessel.name, id);
         const risk = riskItems.map((item) => item.flag);
         const loaded = { detail, observations, events, risk, riskItems };
         setData(loaded);
@@ -260,6 +261,20 @@ export function VesselDetailInspector({ id }: { id: number }) {
       </div>
     </InspectorShell>
   );
+}
+
+function normalizeRiskItems(items: Array<RiskFeedItem | RiskFlag>, subject: string, vesselId: number): RiskFeedItem[] {
+  return items.map((item) => {
+    if ("flag" in item) return item;
+    return {
+      flag: item,
+      subject,
+      vessel_id: vesselId,
+      entity_id: null,
+      evidence_payload: null,
+      conflict_details: null,
+    };
+  });
 }
 
 function LinkedEntitiesCard({ entities }: { entities: VesselLinkedEntity[] }) {

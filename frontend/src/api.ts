@@ -393,7 +393,7 @@ export function getEntityRiskFlags(entityId: number) {
 }
 
 export function getVesselRiskFlags(vesselId: number) {
-  return getJson<RiskFeedItem[]>(`/api/vessels/${vesselId}/risk-flags`);
+  return getJson<Array<RiskFeedItem | RiskFlag>>(`/api/vessels/${vesselId}/risk-flags`);
 }
 
 export function getRiskFeed(limit = 250, includeResolved = false, flagTypes?: string[]) {
