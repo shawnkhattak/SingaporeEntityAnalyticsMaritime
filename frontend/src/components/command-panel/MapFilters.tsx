@@ -1,9 +1,7 @@
 import { ChevronDown, ChevronRight, Filter } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { getReferenceDomain, type ReferenceItem } from "../../api";
-import { useFilters, useApp } from "../../state/AppState";
+import { useState } from "react";
+import { useFilters } from "../../state/AppState";
 import { Chip } from "../primitives/Chip";
-import { MultiSelect } from "../primitives/MultiSelect";
 import type { RiskSeverity } from "../../types";
 import { DEFAULT_FILTERS } from "../../types";
 
@@ -13,16 +11,6 @@ const SEVERITY_CHIPS: { label: string; values: RiskSeverity[]; tone: "crit" | "m
   { label: "Critical", values: ["critical", "high"], tone: "crit" },
   { label: "Medium", values: ["medium"], tone: "med" },
   { label: "Low", values: ["low"], tone: "low" },
-];
-
-const VESSEL_TYPE_FALLBACK: ReferenceItem[] = [
-  { code: "Cargo", label: "Cargo" },
-  { code: "Tanker", label: "Tanker" },
-  { code: "Bulker", label: "Bulker" },
-  { code: "Container", label: "Container" },
-  { code: "Passenger", label: "Passenger" },
-  { code: "Fishing", label: "Fishing" },
-  { code: "Other", label: "Other" },
 ];
 
 function isDefault(filters: ReturnType<typeof useFilters>["filters"]) {
@@ -41,33 +29,7 @@ function isDefault(filters: ReturnType<typeof useFilters>["filters"]) {
 
 export function MapFilters() {
   const { filters, setFilters, reset } = useFilters();
-  const { state } = useApp();
   const [open, setOpen] = useState(true);
-  const [vesselTypes, setVesselTypes] = useState<ReferenceItem[]>(VESSEL_TYPE_FALLBACK);
-  const [flagStates, setFlagStates] = useState<ReferenceItem[]>([]);
-
-  useEffect(() => {
-    getReferenceDomain("vessel_type")
-      .then((items) => {
-        if (items.length > 0) setVesselTypes(items);
-      })
-      .catch(() => {
-        /* keep fallback */
-      });
-    getReferenceDomain("flag_state")
-      .then((items) => setFlagStates(items))
-      .catch(() => setFlagStates([]));
-  }, []);
-
-  // Fallback flag-state list from current vessels if reference API is empty.
-  const flagOptions = useMemo<ReferenceItem[]>(() => {
-    if (flagStates.length > 0) return flagStates;
-    const distinct = new Set<string>();
-    state.vessels.forEach((v) => v.flag_country_code && distinct.add(v.flag_country_code));
-    return Array.from(distinct)
-      .sort()
-      .map((code) => ({ code, label: code }));
-  }, [flagStates, state.vessels]);
 
   function toggleSeverityGroup(values: RiskSeverity[]) {
     const next = new Set(filters.riskSeverities);
@@ -114,24 +76,6 @@ export function MapFilters() {
                 </Chip>
               ))}
             </div>
-          </FilterGroup>
-
-          <FilterGroup label="Vessel type">
-            <MultiSelect
-              options={vesselTypes.map((v) => ({ value: v.code, label: v.label }))}
-              selected={filters.vesselTypes}
-              onChange={(next) => setFilters({ ...filters, vesselTypes: next })}
-              placeholder="All types"
-            />
-          </FilterGroup>
-
-          <FilterGroup label="Flag state">
-            <MultiSelect
-              options={flagOptions.map((v) => ({ value: v.code, label: v.label }))}
-              selected={filters.flagStates}
-              onChange={(next) => setFilters({ ...filters, flagStates: next })}
-              placeholder={flagOptions.length === 0 ? "No flags loaded yet" : "All flags"}
-            />
           </FilterGroup>
 
         </div>

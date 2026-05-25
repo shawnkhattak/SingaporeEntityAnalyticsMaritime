@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.schemas.risk import RiskFlagRead
+from app.schemas.risk import RiskFeedItem
 from app.schemas.vessels import VesselDetail, VesselEventRead, VesselObservationRead, VesselSearchResult
 from app.services.risk import RiskService
 from app.services.vessels import VesselService
@@ -56,11 +56,11 @@ async def get_vessel_events(
     return events
 
 
-@router.get("/{vessel_id}/risk-flags", response_model=list[RiskFlagRead])
+@router.get("/{vessel_id}/risk-flags", response_model=list[RiskFeedItem])
 async def get_vessel_risk_flags(
     session: Annotated[AsyncSession, Depends(get_session)],
     vessel_id: int,
-) -> list[RiskFlagRead]:
+) -> list[RiskFeedItem]:
     if await VesselService(session).detail(vessel_id) is None:
         raise HTTPException(status_code=404, detail="Vessel not found")
-    return await RiskService(session).for_vessel(vessel_id)
+    return await RiskService(session).feed_for_vessel(vessel_id)

@@ -245,7 +245,7 @@ function IdentityConflictSummary({
   return (
     <div className="identity-conflict-summary">
       <div className="t-sm">
-        <strong>{single ? `${primaryConflict.label} conflict detected:` : "Identity changes detected:"}</strong>
+        <strong>{single ? `${primaryConflict.label} conflict detected:` : "Identity conflicts detected:"}</strong>
       </div>
       <div className="col" style={{ gap: 3, marginTop: 4 }}>
         {visibleConflicts.map((conflict) => (

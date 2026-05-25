@@ -339,6 +339,10 @@ export function runRiskRecompute(vesselId?: number) {
   return postJson<Record<string, unknown>>(`/api/dev/risk/recompute${vesselId ? `?vessel_id=${vesselId}` : ""}`);
 }
 
+export function clearActiveIssues() {
+  return postJson<Record<string, number>>("/api/dev/active-issues/clear");
+}
+
 export function loadMapVessels(limit = 250) {
   if (limit === 5000 && mapVesselsInFlight) return mapVesselsInFlight;
   const promise = getJson<VesselMapFeature[]>(`/api/map/vessels?limit=${limit}&scope=latest-snapshot`)
@@ -389,7 +393,7 @@ export function getEntityRiskFlags(entityId: number) {
 }
 
 export function getVesselRiskFlags(vesselId: number) {
-  return getJson<RiskFlag[]>(`/api/vessels/${vesselId}/risk-flags`);
+  return getJson<RiskFeedItem[]>(`/api/vessels/${vesselId}/risk-flags`);
 }
 
 export function getRiskFeed(limit = 250, includeResolved = false, flagTypes?: string[]) {

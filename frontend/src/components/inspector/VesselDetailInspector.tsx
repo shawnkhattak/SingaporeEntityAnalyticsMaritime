@@ -22,7 +22,7 @@ import { closeInspectorRoute, navigateBack, navigateTo, useRoute } from "../../h
 import { requestMapCenter } from "../../hooks/useMapCenter";
 import { countryName, displaySeverity, flagEmoji, riskLabel, vesselTypeLabel } from "../../labels";
 import { recordRecentVessel, useApp, useJobRunner, useSelection, useToasts } from "../../state/AppState";
-import type { RiskFlag, VesselDetail, VesselEvent, VesselLinkedEntity, VesselObservation, VesselPosition, VesselSummary } from "../../types";
+import type { RiskFeedItem, RiskFlag, VesselDetail, VesselEvent, VesselLinkedEntity, VesselObservation, VesselPosition, VesselSummary } from "../../types";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { ErrorState } from "../primitives/ErrorState";
@@ -37,6 +37,7 @@ type Loaded = {
   observations: VesselObservation[];
   events: VesselEvent[];
   risk: RiskFlag[];
+  riskItems: RiskFeedItem[];
 };
 
 type RiskTone = "critical" | "high" | "medium" | "low" | "clear" | "unknown";
@@ -58,8 +59,9 @@ export function VesselDetailInspector({ id }: { id: number }) {
     setLoading(true);
     setError(null);
     Promise.all([getVessel(id), getVesselObservations(id), getVesselEvents(id), getVesselRiskFlags(id)])
-      .then(([detail, observations, events, risk]) => {
-        const loaded = { detail, observations, events, risk };
+      .then(([detail, observations, events, riskItems]) => {
+        const risk = riskItems.map((item) => item.flag);
+        const loaded = { detail, observations, events, risk, riskItems };
         setData(loaded);
         dispatch({ type: "CACHE_VESSEL_RISK", id, flags: risk });
         dispatch({ type: "CACHE_VESSEL_LABEL", id, label: detail.vessel.name });
@@ -223,8 +225,17 @@ export function VesselDetailInspector({ id }: { id: number }) {
               <EmptyState compact icon={<CheckCircle2 size={18} />} title="No risk flags" body="This vessel currently has no active or historical risk signals." />
             ) : (
               <div className="vessel-risk-list">
-                {data.risk.map((flag) => (
-                  <RiskCard key={flag.id} flag={flag} subject={v.name} vesselId={id} hideSubject onOpenSubject={() => undefined} />
+                {data.riskItems.map((item) => (
+                  <RiskCard
+                    key={item.flag.id}
+                    flag={item.flag}
+                    subject={v.name}
+                    evidencePayload={item.evidence_payload}
+                    conflictDetails={item.conflict_details}
+                    vesselId={id}
+                    hideSubject
+                    onOpenSubject={() => undefined}
+                  />
                 ))}
               </div>
             )}

@@ -49,6 +49,17 @@ type ResultRow = {
 };
 
 type Section = { key: SectionKey; label: string; rows: ResultRow[] };
+type PaletteFilter = "all" | SectionKey;
+
+const PALETTE_FILTERS: { value: PaletteFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "vessels", label: "Vessels" },
+  { value: "entities", label: "Entities" },
+  { value: "risk", label: "Risk" },
+  { value: "sanctions", label: "Sanctions" },
+  { value: "evidence", label: "Evidence" },
+  { value: "go", label: "Go to" },
+];
 
 const GO_TO_ITEMS: { label: string; path: string; icon: React.ReactNode }[] = [
   { label: "Map workspace", path: "/map", icon: <MapIcon size={14} /> },
@@ -68,6 +79,7 @@ export function CommandPalette({ open, onClose }: PaletteProps) {
   const [vessels, setVessels] = useState<VesselSearchResult[]>([]);
   const [entities, setEntities] = useState<Entity[]>([]);
   const [evidence, setEvidence] = useState<EvidenceDetail | null>(null);
+  const [filter, setFilter] = useState<PaletteFilter>("all");
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const { state } = useApp();
@@ -80,6 +92,7 @@ export function CommandPalette({ open, onClose }: PaletteProps) {
     setVessels([]);
     setEntities([]);
     setEvidence(null);
+    setFilter("all");
     window.setTimeout(() => inputRef.current?.focus(), 30);
   }, [open]);
 
@@ -110,7 +123,7 @@ export function CommandPalette({ open, onClose }: PaletteProps) {
       setEvidence(null);
     }
     return () => { cancelled = true; };
-  }, [debounced]);
+  }, [debounced, filter]);
 
   // In-memory risk + sanctions + ports + recent
   const localResults = useMemo(() => {
@@ -249,8 +262,8 @@ export function CommandPalette({ open, onClose }: PaletteProps) {
       if (recents.length > 0) ss.push({ key: "recent", label: "Recent", rows: recents });
     }
 
-    return ss;
-  }, [query, vessels, entities, evidence, localResults, onClose]);
+    return filter === "all" ? ss : ss.filter((section) => section.key === filter);
+  }, [query, vessels, entities, evidence, localResults, onClose, filter]);
 
   // Flatten for keyboard navigation
   const flatRows = useMemo(() => sections.flatMap((s) => s.rows), [sections]);
@@ -302,6 +315,18 @@ export function CommandPalette({ open, onClose }: PaletteProps) {
             aria-autocomplete="list"
           />
           <kbd className="kbd">Esc</kbd>
+        </div>
+        <div className="row" style={{ gap: 4, flexWrap: "wrap", padding: "0 14px 10px" }}>
+          {PALETTE_FILTERS.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              className={`chip ${filter === item.value ? "selected" : ""}`}
+              onClick={() => setFilter(item.value)}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
 
         <div className="palette-list scroll" id="palette-list" role="listbox">

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, status
@@ -10,6 +10,7 @@ from app.db import async_session_factory, get_session
 from app.schemas.dev import DevVesselBrowseRow
 from app.schemas.evidence import EvidenceRead
 from app.schemas.ingestion import IngestionJobRead, IngestionLogRead, SourceHealthRead
+from app.models.ingestion import IngestionJob, SourceHealth
 from app.models.maritime import Vessel
 from app.services.dev_console import DevConsoleService
 from app.services.enrichment import EnrichmentService
@@ -205,6 +206,27 @@ async def recompute_risk(
     vessel_id: Annotated[int | None, Query()] = None,
 ) -> dict[str, int]:
     return await RiskService(session).recompute(vessel_id=vessel_id)
+
+
+@router.post("/active-issues/clear", dependencies=[Depends(require_dev_mutations)])
+async def clear_active_issues(session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, int]:
+    now = datetime.now(UTC)
+    failed_jobs = list(await session.scalars(select(IngestionJob).where(IngestionJob.status.in_(("failed", "failure", "error")))))
+    unhealthy_sources = list(await session.scalars(select(SourceHealth)))
+    for job in failed_jobs:
+        job.status = "acknowledged"
+        if job.finished_at is None:
+            job.finished_at = now
+    for health in unhealthy_sources:
+        health.status = "healthy"
+        health.last_checked_at = now
+        health.last_success_at = now
+        health.last_error = None
+        metadata = dict(health.metadata_ or {})
+        metadata["cleared_at"] = now.isoformat()
+        health.metadata_ = metadata
+    await session.commit()
+    return {"jobs_acknowledged": len(failed_jobs), "sources_cleared": len(unhealthy_sources)}
 
 
 @router.post("/ingestion/refresh-live", dependencies=[Depends(require_dev_mutations)])

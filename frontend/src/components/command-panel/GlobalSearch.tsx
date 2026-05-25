@@ -11,6 +11,15 @@ type Result =
   | { kind: "entity"; item: Entity }
   | { kind: "evidence"; id: number };
 
+type SearchFilter = "all" | Result["kind"];
+
+const SEARCH_FILTERS: { value: SearchFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "vessel", label: "Vessels" },
+  { value: "entity", label: "Entities" },
+  { value: "evidence", label: "Evidence" },
+];
+
 export function GlobalSearch({ compact }: { compact?: boolean }) {
   const { select } = useSelection();
   const [query, setQuery] = useState("");
@@ -19,6 +28,7 @@ export function GlobalSearch({ compact }: { compact?: boolean }) {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [evidenceId, setEvidenceId] = useState<number | null>(null);
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState<SearchFilter>("all");
   const [loading, setLoading] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
@@ -60,11 +70,11 @@ export function GlobalSearch({ compact }: { compact?: boolean }) {
 
   const results = useMemo<Result[]>(() => {
     const out: Result[] = [];
-    if (evidenceId !== null) out.push({ kind: "evidence", id: evidenceId });
-    vessels.forEach((v) => out.push({ kind: "vessel", item: v }));
-    entities.forEach((e) => out.push({ kind: "entity", item: e }));
+    if ((filter === "all" || filter === "evidence") && evidenceId !== null) out.push({ kind: "evidence", id: evidenceId });
+    if (filter === "all" || filter === "vessel") vessels.forEach((v) => out.push({ kind: "vessel", item: v }));
+    if (filter === "all" || filter === "entity") entities.forEach((e) => out.push({ kind: "entity", item: e }));
     return out;
-  }, [vessels, entities, evidenceId]);
+  }, [vessels, entities, evidenceId, filter]);
 
   if (compact) {
     return (
@@ -133,6 +143,18 @@ export function GlobalSearch({ compact }: { compact?: boolean }) {
             overflow: "auto",
           }}
         >
+          <div className="row" style={{ gap: 4, padding: "2px 4px 6px", flexWrap: "wrap" }}>
+            {SEARCH_FILTERS.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                className={`chip ${filter === item.value ? "selected" : ""}`}
+                onClick={() => setFilter(item.value)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
           {loading && <div className="t-faded" style={{ padding: 8, fontSize: 12 }}>Searching…</div>}
           {!loading && results.length === 0 && debounced.trim() && (
             <button

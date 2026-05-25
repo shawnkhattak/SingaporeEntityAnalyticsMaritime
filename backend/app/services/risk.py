@@ -103,6 +103,37 @@ class RiskService:
         )
         return [RiskFlagRead.model_validate(row) for row in rows]
 
+    async def feed_for_vessel(self, vessel_id: int) -> list[RiskFeedItem]:
+        statement = (
+            select(RiskFlag, Vessel.name, Vessel.imo, SourceObservation.raw_payload)
+            .join(Vessel, RiskFlag.vessel_id == Vessel.id)
+            .outerjoin(SourceObservation, SourceObservation.id == RiskFlag.evidence_id)
+            .where(RiskFlag.vessel_id == vessel_id, RiskFlag.status == "active")
+            .order_by(desc(RiskFlag.created_at))
+        )
+        rows = list(await self.session.execute(statement))
+        vessel = None
+        for _flag, vessel_name, vessel_imo, _evidence_payload in rows:
+            vessel = Vessel(id=vessel_id, name=vessel_name or "", imo=vessel_imo)
+            break
+        conflict_details_by_vessel = await self._identity_conflicts_for_vessels([vessel]) if vessel is not None else {}
+        items: list[RiskFeedItem] = []
+        for flag, vessel_name, _vessel_imo, evidence_payload in rows:
+            conflict_details = None
+            if flag.flag_type == "conflicting_identity":
+                conflict_details = conflict_details_by_vessel.get(vessel_id)
+            items.append(
+                RiskFeedItem(
+                    flag=RiskFlagRead.model_validate(flag),
+                    subject=vessel_name or f"Vessel #{vessel_id}",
+                    vessel_id=flag.vessel_id,
+                    entity_id=flag.entity_id,
+                    evidence_payload=evidence_payload,
+                    conflict_details=conflict_details,
+                )
+            )
+        return items
+
     async def for_entity(self, entity_id: int) -> list[RiskFlagRead]:
         rows = await self.session.scalars(
             select(RiskFlag)
