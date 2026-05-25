@@ -5,7 +5,6 @@ import { BrandHeader } from "./BrandHeader";
 import { GlobalSearch } from "./GlobalSearch";
 import { PrimaryNav } from "./PrimaryNav";
 import { MapFilters } from "./MapFilters";
-import { SourceRefreshControls } from "./SourceRefreshControls";
 import { FooterStrip } from "./FooterStrip";
 
 export function CommandPanel() {
@@ -20,7 +19,6 @@ export function CommandPanel() {
         {!isCollapsed && !fullCanvas && <GlobalSearch />}
         <PrimaryNav />
         {!isCollapsed && !fullCanvas && <MapFilters />}
-        {!isCollapsed && <SourceRefreshControls />}
       </div>
       {!isCollapsed && <FooterStrip />}
     </aside>

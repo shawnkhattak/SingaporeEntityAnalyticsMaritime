@@ -29,6 +29,15 @@ export function matchesFilters(
   if (filters.riskTypes.size && !flags.some((f) => f.status !== "resolved" && filters.riskTypes.has(f.flag_type))) return false;
   if (filters.vesselTypes.size && (!v.vessel_type_code || !filters.vesselTypes.has(v.vessel_type_code))) return false;
   if (filters.flagStates.size && (!v.flag_country_code || !filters.flagStates.has(v.flag_country_code))) return false;
+  if (filters.dwtRange) {
+    if (typeof v.deadweight !== "number") return false;
+    if (v.deadweight < filters.dwtRange[0] || v.deadweight > filters.dwtRange[1]) return false;
+  }
+  if (filters.ageRange) {
+    if (typeof v.year_built !== "number") return false;
+    const age = new Date().getFullYear() - v.year_built;
+    if (age < filters.ageRange[0] || age > filters.ageRange[1]) return false;
+  }
   if (filters.hasSanctions && !flags.some((f) => f.flag_type === "sanctions")) return false;
   if (filters.hasOpenRiskFlag && !flags.some((f) => f.status === "open")) return false;
   if (filters.timeWindow !== "live" && v.position_timestamp) {

@@ -214,6 +214,8 @@ export type MapFilters = {
   riskTypes: Set<string>;
   vesselTypes: Set<string>;
   flagStates: Set<string>;
+  dwtRange: [number, number] | null;
+  ageRange: [number, number] | null;
   hasSanctions: boolean;
   hasOpenRiskFlag: boolean;
   portActivityKind: null | "due-arrive" | "due-depart";
@@ -226,6 +228,8 @@ export const DEFAULT_FILTERS: MapFilters = {
   riskTypes: new Set<string>(),
   vesselTypes: new Set<string>(),
   flagStates: new Set<string>(),
+  dwtRange: null,
+  ageRange: null,
   hasSanctions: false,
   hasOpenRiskFlag: false,
   portActivityKind: null,

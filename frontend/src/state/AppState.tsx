@@ -227,6 +227,8 @@ function makeDefaultFilters(): MapFilters {
     riskTypes: new Set(DEFAULT_FILTERS.riskTypes),
     vesselTypes: new Set(DEFAULT_FILTERS.vesselTypes),
     flagStates: new Set(DEFAULT_FILTERS.flagStates),
+    dwtRange: DEFAULT_FILTERS.dwtRange,
+    ageRange: DEFAULT_FILTERS.ageRange,
     enabledGeoLayers: new Set(DEFAULT_FILTERS.enabledGeoLayers),
   };
 }
