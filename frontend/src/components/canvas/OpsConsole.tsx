@@ -41,6 +41,7 @@ import {
   runMovements,
   runMapParticulars,
   runParticulars,
+  clearActiveIssues,
 } from "../../api";
 import { usePoll } from "../../hooks/usePoll";
 import { useApp, useJobRunner, useRunningJobs } from "../../state/AppState";
@@ -592,6 +593,13 @@ export function OpsConsole() {
         <ActiveIssuesCard
           failingSources={failingSources}
           failedJobGroups={failedJobsByType}
+          clearing={isRunning("clear-active-issues")}
+          onClear={() =>
+            runJob("clear-active-issues", clearActiveIssues, {
+              successTitle: "Active issues cleared",
+              errorTitle: "Clear active issues failed",
+            }).then(refreshDev)
+          }
         />
       </div>
 
@@ -1081,13 +1089,25 @@ function StatusMetric({ label, value, sub, tone }: { label: string; value: strin
 function ActiveIssuesCard({
   failingSources,
   failedJobGroups,
+  clearing,
+  onClear,
 }: {
   failingSources: SourceHealth[];
   failedJobGroups: { jobType: string; count: number; lastAt: string | null }[];
+  clearing: boolean;
+  onClear: () => void;
 }) {
   const empty = failingSources.length === 0 && failedJobGroups.length === 0;
   return (
-    <Panel title="Active issues" icon={<AlertTriangle size={14} />}>
+    <Panel
+      title="Active issues"
+      icon={<AlertTriangle size={14} />}
+      action={!empty ? (
+        <Button size="sm" variant="ghost" leadingIcon={<CheckCircle2 size={13} />} onClick={onClear} disabled={clearing}>
+          {clearing ? "Clearing" : "Clear"}
+        </Button>
+      ) : null}
+    >
       {empty ? (
         <div className="row" style={{ gap: 8, padding: "12px 4px", color: "var(--health-ok, #2E8F5B)" }}>
           <CheckCircle2 size={16} />
@@ -1594,12 +1614,14 @@ function Panel({
   title,
   icon,
   children,
+  action,
   shimmer,
   fill,
   compact,
 }: {
   title: React.ReactNode;
   icon?: React.ReactNode;
+  action?: React.ReactNode;
   shimmer?: boolean;
   fill?: boolean;
   compact?: boolean;
@@ -1616,6 +1638,7 @@ function Panel({
         ) : (
           <div style={{ flex: 1 }}>{title}</div>
         )}
+        {action}
       </div>
       {fill ? <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>{children}</div> : children}
     </section>

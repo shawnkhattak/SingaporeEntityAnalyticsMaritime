@@ -1,23 +1,24 @@
 import {
   AlertCircle,
-  AlertTriangle,
-  Anchor,
   Bot,
   ChevronDown,
-  ChevronRight,
   Database,
   ExternalLink,
-  Eye,
-  FileText,
+  ListChecks,
+  Newspaper,
   RefreshCw,
-  Search,
-  ShieldAlert,
   Sparkles,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { useState } from "react";
-import type { AiNewsOverviewResponse, BriefWatchItem, AiWatchKind } from "../../api";
+import type {
+  AiNewsOverviewResponse,
+  BriefKeyDevelopment,
+  BriefNewsRow,
+  BriefSupportedItem,
+  SourceClass,
+} from "../../api";
 import { formatRelative } from "../../format";
-import { navigateTo } from "../../hooks/useRoute";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { Skeleton } from "../primitives/Skeleton";
@@ -31,19 +32,13 @@ type Props = {
   regenerating: boolean;
 };
 
-const KIND_META: Record<AiWatchKind, { label: string; icon: typeof AlertTriangle }> = {
-  action: { label: "Action", icon: AlertTriangle },
-  investigate: { label: "Investigate", icon: Search },
-  monitor: { label: "Monitor", icon: Eye },
-};
-
 export function AiNewsOverviewCard({ overview, loading, error, onRetry, onRegenerate, regenerating }: Props) {
   const [debugOpen, setDebugOpen] = useState(false);
 
   if (loading) {
     return (
       <section className="ai-news-overview is-compact">
-        <BriefHeader subtitle="Building Singapore analyst brief…" />
+        <BriefHeader subtitle="Loading AI Weekly Brief..." />
         <Skeleton height={56} />
         <Skeleton height={120} />
       </section>
@@ -56,7 +51,7 @@ export function AiNewsOverviewCard({ overview, loading, error, onRetry, onRegene
         <EmptyState
           compact
           icon={<AlertCircle size={18} />}
-          title="Singapore Brief unavailable"
+          title="AI Weekly Brief unavailable"
           body={error}
           action={<Button size="sm" onClick={onRetry}>Retry</Button>}
         />
@@ -75,6 +70,16 @@ export function AiNewsOverviewCard({ overview, loading, error, onRetry, onRegene
   }
 
   const o = overview.overview;
+  const keyDevelopments = o.key_developments ?? [];
+  const newsRows = o.news_rows ?? [];
+  const visibleKeyDevelopments = keyDevelopments.filter((item) => item.source_type !== "database").slice(0, 3);
+  const importantItems = [
+    ...newsRows.slice(0, 4).map((item, index) => ({ kind: "news" as const, item, score: 100 - index })),
+  ].sort((a, b) => b.score - a.score).slice(0, 6);
+  const visibleHeadline = visibleKeyDevelopments[0]?.label ?? newsRows[0]?.title ?? "No source-linked news in this window";
+  const visibleSummary = newsRows.length > 0
+    ? newsRows.slice(0, 2).map((item) => item.summary).filter(Boolean).join(" ")
+    : "No external news items were selected for this window.";
 
   return (
     <section className="ai-news-overview is-compact">
@@ -88,57 +93,30 @@ export function AiNewsOverviewCard({ overview, loading, error, onRetry, onRegene
       />
 
       <div className="ai-brief-headline-card">
-        <h4>{o.headline}</h4>
-        {o.bottom_line && (
-          <p className="ai-brief-bottom-line">
-            <strong>Bottom line.</strong> {o.bottom_line}
-          </p>
-        )}
+        <h4>{visibleHeadline}</h4>
+        {visibleSummary && <p className="ai-brief-bottom-line">{visibleSummary}</p>}
       </div>
 
-      <div className="ai-brief-twocol">
-        <div>
+      {visibleKeyDevelopments.length > 0 && (
+        <div className="ai-key-devs">
           <div className="ai-brief-section-head">
-            <Sparkles size={11} />
-            <span>Watch list</span>
-            <span className="ai-brief-section-count">{o.watch_items.length}</span>
+            <ListChecks size={11} />
+            <span>Important Key Developments</span>
           </div>
-          {o.watch_items.length === 0 ? (
-            <div className="ai-brief-empty-line">No Singapore watch items in window.</div>
-          ) : (
-            <ul className="ai-brief-watch-list">
-              {o.watch_items.map((item, index) => (
-                <WatchRow key={`${item.title}-${index}`} item={item} />
-              ))}
-            </ul>
-          )}
+          <ol>
+            {visibleKeyDevelopments.map((item) => (
+              <KeyDevelopmentRow key={item.id || item.label} item={item} />
+            ))}
+          </ol>
         </div>
+      )}
 
-        <aside className="ai-brief-side">
-          {o.themes.length > 0 && (
-            <div>
-              <div className="ai-brief-section-head">
-                <span>Signals</span>
-              </div>
-              <ul className="ai-brief-themes-inline">
-                {o.themes.map((theme) => (
-                  <li key={theme.title}>
-                    <span className="ai-theme-title">{theme.title}</span>
-                    <span className="ai-theme-count">{theme.article_count}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <PlatformSignalsRow signals={o.platform_signals} />
-        </aside>
-      </div>
-
-      {o.coverage_gaps.length > 0 && (
-        <p className="ai-brief-gaps-line" title={o.coverage_gaps.join(" · ")}>
-          <span className="ai-brief-kicker">Gaps</span> {o.coverage_gaps.join(" · ")}
-        </p>
+      {importantItems.length > 0 && (
+        <BriefSection title="Most Important News" count={importantItems.length} icon={<Newspaper size={11} />}>
+          <ul className="ai-weekly-list">
+            {importantItems.map((entry, index) => <ImportantNewsRow key={`${entry.kind}-${index}`} entry={entry} />)}
+          </ul>
+        </BriefSection>
       )}
 
       <button type="button" className="ai-debug-toggle" onClick={() => setDebugOpen((open) => !open)}>
@@ -152,9 +130,7 @@ export function AiNewsOverviewCard({ overview, loading, error, onRetry, onRegene
           <span>cache: {overview.debug.cache_hit ? "hit" : "miss"}</span>
           <span>input: {overview.debug.input_hash?.slice(0, 10) ?? "none"}</span>
           <span>articles: {overview.debug.selected_article_count}/{overview.debug.candidate_article_count}</span>
-          {overview.debug.estimated_cost_usd != null && (
-            <span>cost: {formatCost(overview.debug.estimated_cost_usd)}</span>
-          )}
+          {overview.debug.estimated_cost_usd != null && <span>cost: {formatCost(overview.debug.estimated_cost_usd)}</span>}
           {overview.debug.warnings.map((warning) => <span key={warning} className="warn">{warning}</span>)}
         </div>
       )}
@@ -189,10 +165,8 @@ function BriefHeader({
         </span>
         <div style={{ minWidth: 0 }}>
           <div className="row" style={{ gap: 6, alignItems: "center" }}>
-            <h3>Singapore Brief</h3>
-            {windowHours != null && (
-              <span className="ai-brief-window-text">· {formatWindow(windowHours)}</span>
-            )}
+            <h3>AI Weekly Brief</h3>
+            {windowHours != null && <span className="ai-brief-window-text">· {formatWindow(windowHours)}</span>}
           </div>
           <p>
             {subtitle ?? (
@@ -207,76 +181,120 @@ function BriefHeader({
       </div>
       {onRegenerate && (
         <Button size="sm" onClick={onRegenerate} disabled={regenerating} leadingIcon={<RefreshCw size={11} className={regenerating ? "spin" : ""} />}>
-          {regenerating ? "Regenerating" : "Regenerate"}
+          {regenerating ? "Refreshing" : "Refresh"}
         </Button>
       )}
     </div>
   );
 }
 
-function WatchRow({ item }: { item: BriefWatchItem }) {
-  const meta = KIND_META[item.kind] ?? KIND_META.monitor;
-  const Icon = meta.icon;
-  const lead = item.subject ? `${item.subject} — ${item.title}` : item.title;
-  const firstCitation = item.citations[0];
+function BriefSection({ title, count, icon, children }: { title: string; count: number; icon: ReactNode; children: ReactNode }) {
   return (
-    <li className={`ai-watch-row severity-${item.severity} kind-${item.kind}`}>
-      <span className={`ai-watch-kind kind-${item.kind}`} title={`${meta.label} · ${item.summary}`}>
-        <Icon size={10} />
-        {meta.label}
-      </span>
-      <span className="ai-watch-lead" title={item.summary}>{lead}</span>
-      {firstCitation && (
-        <a
-          href={firstCitation.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ai-watch-source"
-          title={firstCitation.title}
-        >
-          {firstCitation.source}
-          <ExternalLink size={10} />
-        </a>
-      )}
+    <div className="ai-weekly-section">
+      <div className="ai-brief-section-head">
+        {icon}
+        <span>{title}</span>
+        <span className="ai-brief-section-count">{count}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function KeyDevelopmentRow({ item }: { item: BriefKeyDevelopment }) {
+  return (
+    <li title={item.why_shown || undefined}>
+      <span>{item.label}</span>
+      <SourceButtons item={item} />
     </li>
   );
 }
 
-function PlatformSignalsRow({ signals }: { signals: AiNewsOverviewResponse["overview"]["platform_signals"] }) {
-  const total = signals.new_risk_flags + signals.new_port_events + signals.new_evidence_records;
-  if (total === 0) return null;
+type ImportantEntry = { kind: "news"; item: BriefNewsRow; score: number };
+
+function ImportantNewsRow({ entry }: { entry: ImportantEntry }) {
+  return <NewsRow item={entry.item} />;
+}
+
+function NewsRow({ item }: { item: BriefNewsRow }) {
   return (
-    <div>
-      <div className="ai-brief-section-head">
-        <span>Platform</span>
+    <li className="ai-weekly-row severity-none">
+      <span className="ai-row-icon"><Newspaper size={12} /></span>
+      <div>
+        <strong>{item.title}</strong>
+        <span>
+          <SourceBadge sourceClass={item.source_class} />
+          {item.source_quality || item.source || "Source"}
+          {item.published_at ? ` · ${formatRelative(item.published_at)}` : ""}
+          {item.matched_to ? ` · ${matchedLabel(item.matched_to.type)}: ${item.matched_to.label}` : ""}
+        </span>
+        <p>{item.summary}</p>
+        <WhyShown text={item.why_shown} />
       </div>
-      <ul className="ai-platform-row">
-        <li>
-          <button type="button" onClick={() => navigateTo("/risk")} title="Open risk feed">
-            <ShieldAlert size={11} />
-            <strong>{signals.new_risk_flags}</strong>
-            <span>risk</span>
-            <ChevronRight size={10} />
-          </button>
-        </li>
-        <li>
-          <button type="button" onClick={() => navigateTo("/vessels")} title="Open vessels">
-            <Anchor size={11} />
-            <strong>{signals.new_port_events}</strong>
-            <span>ports</span>
-            <ChevronRight size={10} />
-          </button>
-        </li>
-        <li>
-          <button type="button" onClick={() => navigateTo("/data/source_observations")} title="Open evidence">
-            <FileText size={11} />
-            <strong>{signals.new_evidence_records}</strong>
-            <span>evidence</span>
-            <ChevronRight size={10} />
-          </button>
-        </li>
-      </ul>
-    </div>
+      <SourceButtons item={item} fallbackUrl={item.url ?? undefined} fallbackTitle={item.title} fallbackSource={item.source ?? undefined} />
+    </li>
+  );
+}
+
+function WhyShown({ text }: { text?: string }) {
+  if (!text) return null;
+  return <small className="ai-why" title={text}>Why shown: {text}</small>;
+}
+
+function SourceBadge({ sourceClass }: { sourceClass: SourceClass }) {
+  return <b className={`ai-source-class source-${sourceClass}`} title={sourceClassTooltip(sourceClass)}>{sourceClassLabel(sourceClass)}</b>;
+}
+
+function CitationButton({ item }: { item: BriefSupportedItem }) {
+  const supportCount = item.support_ids.length + item.article_ids.length + item.evidence_ids.length;
+  if (supportCount === 0) return null;
+  const label = [
+    item.support_ids.length ? `${item.support_ids.length} support` : null,
+    item.article_ids.length ? `${item.article_ids.length} article` : null,
+    item.evidence_ids.length ? `${item.evidence_ids.length} evidence` : null,
+  ].filter(Boolean).join(" · ");
+  return (
+    <button type="button" className="ai-citation-button" title={label}>
+      <Database size={11} />
+    </button>
+  );
+}
+
+function SourceButtons({
+  item,
+  fallbackUrl,
+  fallbackTitle,
+  fallbackSource,
+}: {
+  item: BriefSupportedItem;
+  fallbackUrl?: string;
+  fallbackTitle?: string;
+  fallbackSource?: string;
+}) {
+  const citations = item.citations.slice(0, 2);
+  if (citations.length === 0 && fallbackUrl) {
+    return (
+      <a className="ai-citation-button" href={fallbackUrl} target="_blank" rel="noopener noreferrer" title={`${fallbackSource ?? "Source"}: ${fallbackTitle ?? fallbackUrl}`}>
+        <ExternalLink size={11} />
+      </a>
+    );
+  }
+  if (citations.length === 0) return <CitationButton item={item} />;
+  return (
+    <span className="ai-source-buttons" aria-label="Sources">
+      {citations.map((citation, index) => (
+        <a
+          key={citation.id}
+          className="ai-citation-button"
+          href={citation.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`${citation.source}: ${citation.title}`}
+        >
+          {index + 1}
+        </a>
+      ))}
+    </span>
   );
 }
 
@@ -284,6 +302,32 @@ function formatWindow(hours: number) {
   if (hours === 168) return "Last 7 days";
   if (hours > 0 && hours % 24 === 0) return `Last ${hours / 24} days`;
   return `Last ${hours} hours`;
+}
+
+function sourceClassLabel(value: SourceClass) {
+  return {
+    official: "Official",
+    trade: "Trade",
+    social_unverified: "Social / Unverified",
+    general_news: "General News",
+    unknown: "Unknown",
+  }[value];
+}
+
+function sourceClassTooltip(value: SourceClass) {
+  return {
+    official: "Government, port authority, regulator, or military source.",
+    trade: "Maritime or logistics trade publication.",
+    social_unverified: "Social source; useful context but not independently verified by SEAM.",
+    general_news: "General news or search feed source.",
+    unknown: "Source classification was not available.",
+  }[value];
+}
+
+function matchedLabel(value: string) {
+  if (value === "vessel") return "Vessel match";
+  if (value === "entity") return "Entity match";
+  return "Topic match";
 }
 
 function formatCost(value: number) {

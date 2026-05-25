@@ -76,6 +76,7 @@ export function classifyJob(status: string | null | undefined): JobStatusUi {
     case "success":
     case "completed":
     case "ok":
+    case "acknowledged":
       return "success";
     case "failure":
     case "failed":

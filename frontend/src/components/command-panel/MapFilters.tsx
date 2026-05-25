@@ -1,35 +1,25 @@
 import { ChevronDown, ChevronRight, Filter } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { getReferenceDomain, type ReferenceItem } from "../../api";
-import { useFilters, useApp } from "../../state/AppState";
+import { useMemo, useState } from "react";
+import { countryName, riskLabel, vesselTypeLabel } from "../../labels";
+import { useApp, useFilters } from "../../state/AppState";
+import { DEFAULT_FILTERS, type MapFilters, type RiskSeverity } from "../../types";
 import { Chip } from "../primitives/Chip";
 import { MultiSelect } from "../primitives/MultiSelect";
-import type { RiskSeverity } from "../../types";
-import { DEFAULT_FILTERS } from "../../types";
 
-// "high" and "critical" are shown as a single tier; selecting the
-// Critical chip toggles both backend values together.
 const SEVERITY_CHIPS: { label: string; values: RiskSeverity[]; tone: "crit" | "med" | "low" }[] = [
   { label: "Critical", values: ["critical", "high"], tone: "crit" },
   { label: "Medium", values: ["medium"], tone: "med" },
   { label: "Low", values: ["low"], tone: "low" },
 ];
 
-const VESSEL_TYPE_FALLBACK: ReferenceItem[] = [
-  { code: "Cargo", label: "Cargo" },
-  { code: "Tanker", label: "Tanker" },
-  { code: "Bulker", label: "Bulker" },
-  { code: "Container", label: "Container" },
-  { code: "Passenger", label: "Passenger" },
-  { code: "Fishing", label: "Fishing" },
-  { code: "Other", label: "Other" },
-];
-
-function isDefault(filters: ReturnType<typeof useFilters>["filters"]) {
+function isDefault(filters: MapFilters) {
   return (
     filters.riskSeverities.size === 0 &&
+    filters.riskTypes.size === 0 &&
     filters.vesselTypes.size === 0 &&
     filters.flagStates.size === 0 &&
+    filters.dwtRange === null &&
+    filters.ageRange === null &&
     !filters.hasSanctions &&
     !filters.hasOpenRiskFlag &&
     filters.portActivityKind === null &&
@@ -43,40 +33,35 @@ export function MapFilters() {
   const { filters, setFilters, reset } = useFilters();
   const { state } = useApp();
   const [open, setOpen] = useState(true);
-  const [vesselTypes, setVesselTypes] = useState<ReferenceItem[]>(VESSEL_TYPE_FALLBACK);
-  const [flagStates, setFlagStates] = useState<ReferenceItem[]>([]);
 
-  useEffect(() => {
-    getReferenceDomain("vessel_type")
-      .then((items) => {
-        if (items.length > 0) setVesselTypes(items);
-      })
-      .catch(() => {
-        /* keep fallback */
-      });
-    getReferenceDomain("flag_state")
-      .then((items) => setFlagStates(items))
-      .catch(() => setFlagStates([]));
-  }, []);
-
-  // Fallback flag-state list from current vessels if reference API is empty.
-  const flagOptions = useMemo<ReferenceItem[]>(() => {
-    if (flagStates.length > 0) return flagStates;
-    const distinct = new Set<string>();
-    state.vessels.forEach((v) => v.flag_country_code && distinct.add(v.flag_country_code));
-    return Array.from(distinct)
-      .sort()
-      .map((code) => ({ code, label: code }));
-  }, [flagStates, state.vessels]);
+  const vesselTypeOptions = useMemo(() => uniqueOptions(
+    state.vessels,
+    (v) => v.vessel_type_code,
+    (code) => vesselTypeLabel(code),
+  ), [state.vessels]);
+  const flagOptions = useMemo(() => uniqueOptions(
+    state.vessels,
+    (v) => v.flag_country_code?.toUpperCase() ?? null,
+    (code) => countryName(code) ? `${countryName(code)} (${code})` : code,
+  ), [state.vessels]);
+  const riskOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    for (const flags of Object.values(state.riskByVessel)) {
+      for (const flag of flags) {
+        if (flag.status === "resolved") continue;
+        options.set(flag.flag_type, riskLabel(flag.flag_type).title);
+      }
+    }
+    return Array.from(options.entries()).sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ value, label }));
+  }, [state.riskByVessel]);
+  const dwtMax = useMemo(() => niceMax(state.vessels.map((v) => v.deadweight ?? 0)), [state.vessels]);
+  const ageMax = 30;
 
   function toggleSeverityGroup(values: RiskSeverity[]) {
     const next = new Set(filters.riskSeverities);
     const allSelected = values.every((v) => next.has(v));
-    if (allSelected) {
-      values.forEach((v) => next.delete(v));
-    } else {
-      values.forEach((v) => next.add(v));
-    }
+    if (allSelected) values.forEach((v) => next.delete(v));
+    else values.forEach((v) => next.add(v));
     setFilters({ ...filters, riskSeverities: next });
   }
 
@@ -89,12 +74,7 @@ export function MapFilters() {
           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
         {!isDefault(filters) && (
-          <button
-            type="button"
-            className="btn ghost sm"
-            style={{ flex: "0 0 auto", fontSize: 11 }}
-            onClick={reset}
-          >
+          <button type="button" className="btn ghost sm" style={{ flex: "0 0 auto", fontSize: 11 }} onClick={reset}>
             Reset
           </button>
         )}
@@ -104,50 +84,152 @@ export function MapFilters() {
           <FilterGroup label="Risk severity">
             <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
               {SEVERITY_CHIPS.map((chip) => (
-                <Chip
-                  key={chip.label}
-                  tone={chip.tone}
-                  selected={chip.values.every((v) => filters.riskSeverities.has(v))}
-                  onClick={() => toggleSeverityGroup(chip.values)}
-                >
+                <Chip key={chip.label} tone={chip.tone} selected={chip.values.every((v) => filters.riskSeverities.has(v))} onClick={() => toggleSeverityGroup(chip.values)}>
                   {chip.label}
                 </Chip>
               ))}
             </div>
           </FilterGroup>
 
+          <FilterGroup label="Risk flag">
+            <MultiSelect
+              options={riskOptions}
+              selected={filters.riskTypes}
+              onChange={(next) => setFilters({ ...filters, riskTypes: next })}
+              placeholder={riskOptions.length ? "Any risk flag" : "No active flags loaded"}
+            />
+          </FilterGroup>
+
           <FilterGroup label="Vessel type">
             <MultiSelect
-              options={vesselTypes.map((v) => ({ value: v.code, label: v.label }))}
+              options={vesselTypeOptions}
               selected={filters.vesselTypes}
               onChange={(next) => setFilters({ ...filters, vesselTypes: next })}
-              placeholder="All types"
+              placeholder={vesselTypeOptions.length ? "All types" : "No vessel types loaded"}
             />
           </FilterGroup>
 
-          <FilterGroup label="Flag state">
+          <FilterGroup label="Vessel flag">
             <MultiSelect
-              options={flagOptions.map((v) => ({ value: v.code, label: v.label }))}
+              options={flagOptions}
               selected={filters.flagStates}
               onChange={(next) => setFilters({ ...filters, flagStates: next })}
-              placeholder={flagOptions.length === 0 ? "No flags loaded yet" : "All flags"}
+              placeholder={flagOptions.length ? "All flags" : "No flags loaded"}
             />
           </FilterGroup>
 
+          <FilterGroup label="Vessel DWT">
+            <RangeFilter
+              min={0}
+              max={dwtMax}
+              step={1000}
+              value={filters.dwtRange}
+              format={(value) => `${Math.round(value).toLocaleString()} DWT`}
+              onChange={(range) => setFilters({ ...filters, dwtRange: range })}
+            />
+          </FilterGroup>
+
+          <FilterGroup label="Vessel age">
+            <RangeFilter
+              min={0}
+              max={ageMax}
+              step={1}
+              value={filters.ageRange}
+              format={(value) => `${Math.round(value)} yr`}
+              onChange={(range) => setFilters({ ...filters, ageRange: range })}
+            />
+          </FilterGroup>
         </div>
       )}
     </div>
   );
 }
 
-function FilterGroup({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
+function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="t-caption row" style={{ gap: 4, padding: "4px 4px 6px" }}>
-        {icon}
-        {label}
-      </div>
+      <div className="t-caption row" style={{ gap: 4, padding: "4px 4px 6px" }}>{label}</div>
       <div style={{ padding: "0 4px" }}>{children}</div>
     </div>
   );
+}
+
+function RangeFilter({
+  min,
+  max,
+  step,
+  value,
+  format,
+  onChange,
+}: {
+  min: number;
+  max: number;
+  step: number;
+  value: [number, number] | null;
+  format: (value: number) => string;
+  onChange: (value: [number, number] | null) => void;
+}) {
+  const current: [number, number] = value ?? [min, max];
+  const disabled = max <= min;
+  const lowerPercent = percent(current[0], min, max);
+  const upperPercent = percent(current[1], min, max);
+  function setLower(next: number) {
+    onChange([Math.min(next, current[1]), current[1]]);
+  }
+  function setUpper(next: number) {
+    onChange([current[0], Math.max(next, current[0])]);
+  }
+  return (
+    <div className="col" style={{ gap: 6 }}>
+      <div className="row" style={{ justifyContent: "space-between", gap: 8, fontSize: 11, color: "var(--slate-500)" }}>
+        <span>{value ? format(current[0]) : "Any"}</span>
+        <span>{value ? format(current[1]) : format(max)}</span>
+      </div>
+      <div style={{ position: "relative", height: 26 }}>
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: 11,
+            height: 4,
+            borderRadius: 999,
+            background: `linear-gradient(to right, var(--gray-200) 0%, var(--gray-200) ${lowerPercent}%, var(--ocean-500) ${lowerPercent}%, var(--ocean-500) ${upperPercent}%, var(--gray-200) ${upperPercent}%, var(--gray-200) 100%)`,
+          }}
+        />
+        <input className="range-overlay" type="range" min={min} max={max} step={step} value={current[0]} disabled={disabled} onChange={(e) => setLower(Number(e.target.value))} aria-label="Lower bound" />
+        <input className="range-overlay" type="range" min={min} max={max} step={step} value={current[1]} disabled={disabled} onChange={(e) => setUpper(Number(e.target.value))} aria-label="Upper bound" />
+      </div>
+      {value && (
+        <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start", fontSize: 11 }} onClick={() => onChange(null)}>
+          Clear
+        </button>
+      )}
+    </div>
+  );
+}
+
+function percent(value: number, min: number, max: number) {
+  if (max <= min) return 0;
+  return ((value - min) / (max - min)) * 100;
+}
+
+function uniqueOptions<T>(
+  rows: T[],
+  getValue: (row: T) => string | null | undefined,
+  getLabel: (value: string) => string,
+) {
+  const values = new Set<string>();
+  rows.forEach((row) => {
+    const value = getValue(row);
+    if (value) values.add(value);
+  });
+  return Array.from(values).sort((a, b) => getLabel(a).localeCompare(getLabel(b))).map((value) => ({ value, label: getLabel(value) }));
+}
+
+function niceMax(values: number[], increment = 1000) {
+  const max = Math.max(0, ...values.filter((value) => Number.isFinite(value)));
+  if (max <= 0) return increment;
+  return Math.ceil(max / increment) * increment;
 }

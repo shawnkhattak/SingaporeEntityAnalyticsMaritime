@@ -211,8 +211,11 @@ export type TimeWindow = "live" | "1h" | "6h" | "24h" | "7d";
 
 export type MapFilters = {
   riskSeverities: Set<RiskSeverity>;
+  riskTypes: Set<string>;
   vesselTypes: Set<string>;
   flagStates: Set<string>;
+  dwtRange: [number, number] | null;
+  ageRange: [number, number] | null;
   hasSanctions: boolean;
   hasOpenRiskFlag: boolean;
   portActivityKind: null | "due-arrive" | "due-depart";
@@ -222,8 +225,11 @@ export type MapFilters = {
 
 export const DEFAULT_FILTERS: MapFilters = {
   riskSeverities: new Set<RiskSeverity>(),
+  riskTypes: new Set<string>(),
   vesselTypes: new Set<string>(),
   flagStates: new Set<string>(),
+  dwtRange: null,
+  ageRange: null,
   hasSanctions: false,
   hasOpenRiskFlag: false,
   portActivityKind: null,

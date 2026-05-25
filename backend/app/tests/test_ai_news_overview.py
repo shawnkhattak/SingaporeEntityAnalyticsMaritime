@@ -1,11 +1,15 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
+from app.api.routes import ai as ai_routes
 from app.core.config import Settings
+from app.models.risk import AiNewsOverview
 from app.services.ai.mock_provider import MockNewsProvider
+from app.services.ai.news_fact_packet import NewsFactPacketService
 from app.services.ai.news_fact_packet import score_news_article
-from app.services.ai.news_overview import AiNewsOverviewService
-from app.services.ai.schemas import AiNewsOverviewPayload
+from app.services.ai.news_overview import PROMPT_VERSION, WEEKLY_SCOPE, AiNewsOverviewService
+from app.services.ai.schemas import AiNewsFactPacket, AiNewsOverviewPayload
 
 
 def run(coro):
@@ -19,8 +23,9 @@ def test_ai_disabled_response_is_safe_without_database_session():
 
     assert response.status == "disabled"
     assert response.disabled_reason
-    assert response.overview.watch_items == []
-    assert response.overview.themes == []
+    assert response.overview.vessel_risk_changes == []
+    assert response.overview.entity_linkage_changes == []
+    assert response.overview.operational_context == []
     assert response.debug.reason == "feature_ai_disabled"
 
 
@@ -44,18 +49,29 @@ def test_fact_packet_scoring_prioritizes_linked_singapore_sanctions_items():
     assert "risk/sanctions language" in reasons
 
 
-def test_mock_provider_returns_singapore_analyst_brief():
-    """Mock provider should emit the new Singapore Analyst Brief shape.
-
-    A Singapore-relevant article must surface as a watch item with the
-    correct subject, severity (OFAC → critical), and a kind that calls
-    for action.
-    """
+def test_mock_provider_returns_weekly_brief_shape():
+    """Mock provider should emit the AI Weekly Brief shape."""
     provider = MockNewsProvider(Settings(feature_ai=True))
     payload = run(
         provider.generate_news_overview(
             {
+                "article_count": 1,
                 "source_count": 2,
+                "article_ids": [1],
+                "global_metrics": {"new_risk_flags": 1, "new_port_events": 0, "active_positioned_vessels": 10},
+                "previous_window": {"article_count": 0, "new_risk_flags": 0, "new_port_events": 0},
+                "vessel_risk_changes": [
+                    {
+                        "vessel_id": 58,
+                        "vessel_name": "HERA",
+                        "change": "New sanctions exposure flag",
+                        "severity": "critical",
+                        "summary": "Stored risk flag references OFAC sanctions exposure.",
+                        "support_ids": ["risk_flag:1"],
+                        "article_ids": [],
+                        "evidence_ids": [5386],
+                    }
+                ],
                 "articles": [
                     {
                         "id": 1,
@@ -91,15 +107,483 @@ def test_mock_provider_returns_singapore_analyst_brief():
     overview = AiNewsOverviewPayload.model_validate(payload)
 
     assert overview.headline
-    assert overview.bottom_line
-    assert overview.watch_items, "Singapore article must produce a watch item"
-    top = overview.watch_items[0]
-    assert top.subject == "HERA"
+    assert overview.executive_summary
+    assert overview.metric_cards
+    assert overview.news_rows, "Singapore article must produce a source row"
+    assert overview.vessel_risk_changes, "deterministic risk changes must pass through"
+    top = overview.vessel_risk_changes[0]
+    assert top.vessel_name == "HERA"
     assert top.severity == "critical"
-    assert top.kind == "action"
-    assert top.article_ids == [1]
     assert top.evidence_ids == [5386]
-    # Non-Singapore article must NOT appear as a watch item.
-    assert all(item.article_ids != [2] for item in overview.watch_items)
-    # Themes should at least cover screening / enforcement for an OFAC item.
-    assert any("screening" in theme.title.lower() or "enforcement" in theme.title.lower() for theme in overview.themes)
+    # Non-Singapore article can be present in the raw packet but should
+    # not receive stronger claims without deterministic support.
+    assert all("recommend" not in row.summary.lower() for row in overview.news_rows)
+
+
+def test_weekly_fact_packet_schema_excludes_raw_and_admin_prompt_fields():
+    packet = AiNewsFactPacket(
+        scope=WEEKLY_SCOPE,
+        window_hours=168,
+        window_start=datetime(2026, 5, 14, tzinfo=UTC),
+        window_end=datetime(2026, 5, 21, tzinfo=UTC),
+        article_count=0,
+        source_count=0,
+        global_metrics={"new_risk_flags": 0, "support_ids": ["metric:risk_flags"]},
+        method_gaps=["Voyage irregularity is limited to stored port events and latest positions."],
+    )
+
+    dumped = packet.model_dump(mode="json")
+    flattened_keys = set(_walk_keys(dumped))
+
+    forbidden = {
+        "raw_payload",
+        "payload_hash",
+        "ingestion_logs",
+        "table_counts",
+        "geo_layers",
+        "map_filters",
+        "selected_vessels",
+        "ui_state",
+    }
+    assert flattened_keys.isdisjoint(forbidden)
+    assert "global_metrics" in dumped
+    assert "method_gaps" in dumped
+
+
+def test_risk_grouping_collapses_identity_conflicts_and_sorts_high_signal_first():
+    service = NewsFactPacketService(session=None)  # type: ignore[arg-type]
+
+    groups = service._group_risk_changes(
+        [
+            {
+                "vessel_id": 1,
+                "vessel_name": "ALPHA",
+                "imo": "1111111",
+                "flag_type": "conflicting_identity",
+                "group_type": "identity_conflict",
+                "severity": "low",
+                "status": "active",
+                "summary": "Conflicting identity fields detected: Dimensions, Vessel type.",
+                "support_ids": ["risk_flag:1"],
+                "evidence_ids": [10],
+            },
+            {
+                "vessel_id": 2,
+                "vessel_name": "BETA",
+                "imo": "2222222",
+                "flag_type": "conflicting_identity",
+                "group_type": "identity_conflict",
+                "severity": "low",
+                "status": "active",
+                "summary": "Conflicting identity fields detected: Dimensions.",
+                "support_ids": ["risk_flag:2"],
+                "evidence_ids": [11],
+            },
+            {
+                "vessel_id": 3,
+                "vessel_name": "GAMMA",
+                "flag_type": "sanctions_match",
+                "group_type": "sanctions",
+                "severity": "critical",
+                "status": "active",
+                "summary": "Source-linked sanctions record matched.",
+                "support_ids": ["risk_flag:3"],
+                "evidence_ids": [12],
+            },
+        ]
+    )
+
+    assert groups[0]["group_type"] == "sanctions"
+    identity = next(group for group in groups if group["group_type"] == "identity_conflict")
+    assert identity["count"] == 2
+    assert identity["vessel_count"] == 2
+    assert "2 vessels had 2 new identity-conflict records" in identity["summary"]
+    assert len(identity["examples"]) == 2
+
+
+def test_entity_grouping_collapses_multiple_roles_for_same_company():
+    service = NewsFactPacketService(session=None)  # type: ignore[arg-type]
+
+    groups = service._group_entity_changes(
+        [
+            {
+                "entity_id": 1,
+                "entity_name": "RCL SHIPMANAGEMENT PTE LTD",
+                "relationship_type": "ship_manager",
+                "vessel_id": 10,
+                "vessel_name": "RCL A",
+                "summary": "OCEANS-X particulars field shipManager: RCL SHIPMANAGEMENT PTE LTD",
+                "confidence": "observed",
+                "support_ids": ["relationship:1"],
+                "evidence_ids": [100],
+            },
+            {
+                "entity_id": 1,
+                "entity_name": "RCL SHIPMANAGEMENT PTE. LTD.",
+                "relationship_type": "ism_manager",
+                "vessel_id": 10,
+                "vessel_name": "RCL A",
+                "summary": "OCEANS-X particulars field ismManager: RCL SHIPMANAGEMENT PTE LTD",
+                "confidence": "observed",
+                "support_ids": ["relationship:2"],
+                "evidence_ids": [101],
+            },
+        ]
+    )
+
+    assert len(groups) == 1
+    assert groups[0]["relationship_count"] == 2
+    assert groups[0]["vessel_count"] == 1
+    assert groups[0]["roles"] == ["ISM Manager", "Ship Manager"]
+    assert groups[0]["source_summary"] == "OCEANS-X vessel particulars"
+
+
+def test_operational_grouping_collapses_ais_freshness_rows():
+    service = NewsFactPacketService(session=None)  # type: ignore[arg-type]
+
+    groups = service._group_operational_context(
+        [
+            {
+                "group_type": "ais_freshness",
+                "signal_type": "ais_gap",
+                "vessel_id": 1,
+                "vessel_name": "ALPHA",
+                "detail": "stored AIS position is 40h old",
+                "summary": "Computed from latest stored position timestamp.",
+                "support_ids": ["latest_position:1"],
+                "evidence_ids": [1],
+            },
+            {
+                "group_type": "ais_freshness",
+                "signal_type": "ais_gap",
+                "vessel_id": 2,
+                "vessel_name": "BETA",
+                "detail": "stored AIS position is 50h old",
+                "summary": "Computed from latest stored position timestamp.",
+                "support_ids": ["latest_position:2"],
+                "evidence_ids": [2],
+            },
+        ]
+    )
+
+    assert len(groups) == 1
+    assert groups[0]["group_type"] == "ais_freshness"
+    assert groups[0]["vessel_count"] == 2
+    assert "not confirmed vessel behavior" in groups[0]["summary"]
+
+
+def test_selected_news_ranking_dedupes_and_prioritizes_official_trade_sources():
+    service = NewsFactPacketService(session=None)  # type: ignore[arg-type]
+    now = datetime(2026, 5, 22, tzinfo=UTC)
+    official = SimpleNamespace(
+        id=1,
+        title="MPA Singapore port notice",
+        summary="Official update.",
+        source="MPA Singapore Media Releases",
+        source_badge="Government Source",
+        published_at=now,
+        url="https://example.test/official",
+        evidence_ids=[1],
+        linked_vessel_ids=[],
+        linked_entity_ids=[],
+        linked_vessels=[],
+        linked_entities=[],
+        relevance_score=5,
+        relevance_reasons=["Singapore maritime relevance"],
+        source_quality="Government or military source",
+    )
+    duplicate = SimpleNamespace(**{**official.__dict__, "id": 2})
+    social = SimpleNamespace(
+        **{
+            **official.__dict__,
+            "id": 3,
+            "title": "Social post",
+            "source": "X/Twitter keyword search feed",
+            "source_badge": "Twitter/X",
+            "url": "https://example.test/social",
+            "source_quality": "Social media or unverified source",
+        }
+    )
+    recruiting = SimpleNamespace(
+        **{
+            **official.__dict__,
+            "id": 4,
+            "title": "Technical Superintendent (Dry Bulk)",
+            "summary": "Hiring a superintendent for dry bulk vessels.",
+            "source": "Splash 24/7",
+            "source_badge": "Splash 24/7",
+            "url": "https://example.test/job/technical-superintendent",
+            "source_quality": "Trade publication",
+        }
+    )
+
+    rows = service._selected_news([social, duplicate, recruiting, official])
+
+    assert len(rows) == 3
+    assert rows[0]["source_class"] == "official"
+    assert rows[1]["source_class"] == "social_unverified"
+    assert rows[2]["title"] == "Technical Superintendent (Dry Bulk)"
+
+
+def test_writer_fact_pack_applies_hard_caps_and_short_snippets():
+    service = AiNewsOverviewService(session=None, settings=Settings(feature_ai=True))  # type: ignore[arg-type]
+    packet = _minimal_packet().model_dump(mode="json")
+    packet["grouped_risk_changes"] = [{"summary": f"risk {i}", "examples": [{"vessel_name": str(j)} for j in range(10)]} for i in range(10)]
+    packet["grouped_entity_changes"] = [{"entity_name": f"entity {i}", "examples": [{"role": str(j)} for j in range(10)]} for i in range(10)]
+    packet["grouped_operational_context"] = [{"group_type": "ais_freshness", "examples": [{"vessel_name": str(j)} for j in range(10)]} for i in range(10)]
+    packet["selected_news"] = [{"title": f"news {i}", "summary": "x" * 400, "article_ids": [i], "url": "https://example.test"} for i in range(10)]
+
+    writer_packet = service._writer_fact_pack(packet)
+
+    assert len(writer_packet["grouped_risk_changes"]) == 6
+    assert len(writer_packet["grouped_risk_changes"][0]["examples"]) == 5
+    assert len(writer_packet["grouped_entity_changes"]) == 6
+    assert len(writer_packet["grouped_operational_context"]) == 5
+    assert len(writer_packet["selected_news"]) == 8
+    assert len(writer_packet["selected_news"][0]["summary"]) == 240
+    assert "raw_payload" not in set(_walk_keys(writer_packet))
+
+
+def test_mock_provider_does_not_invent_advanced_signals_without_computed_context():
+    provider = MockNewsProvider(Settings(feature_ai=True))
+
+    payload = run(
+        provider.generate_news_overview(
+            {
+                "article_count": 0,
+                "source_count": 0,
+                "global_metrics": {"new_risk_flags": 0, "new_port_events": 0, "active_positioned_vessels": 0},
+                "previous_window": {"article_count": 0, "new_risk_flags": 0, "new_port_events": 0},
+                "operational_context": [],
+                "method_gaps": [
+                    "Flag-change detection found no comparable vessel identity snapshots in this window.",
+                    "Voyage irregularity is limited to stored port events and latest positions.",
+                ],
+            }
+        )
+    )
+    overview = AiNewsOverviewPayload.model_validate(payload)
+
+    assert overview.operational_context == []
+    rendered = " ".join(
+        [
+            overview.headline,
+            overview.executive_summary,
+            " ".join(row.summary for row in overview.news_rows),
+            " ".join(overview.coverage_gaps),
+        ]
+    ).lower()
+    assert "detected ais gaps" not in rendered
+    assert "sts transfer" not in rendered
+    assert "flag changed" not in rendered
+    assert overview.coverage_gaps
+
+
+def test_validator_removes_unsupported_items_and_action_oriented_language():
+    service = AiNewsOverviewService(session=None, settings=Settings(feature_ai=True))  # type: ignore[arg-type]
+    payload = AiNewsOverviewPayload.model_validate(
+        {
+            "headline": "Likely critical impact requires action",
+            "executive_summary": "Take action because this is recommended.",
+            "metric_cards": [
+                {
+                    "label": "Risk flags",
+                    "value": "1",
+                    "support_ids": ["metric:risk_flags"],
+                    "article_ids": [],
+                    "evidence_ids": [],
+                },
+                {
+                    "label": "Unsupported",
+                    "value": "bad",
+                    "support_ids": [],
+                    "article_ids": [999],
+                    "evidence_ids": [],
+                },
+            ],
+            "vessel_risk_changes": [
+                {
+                    "vessel_name": "HERA",
+                    "change": "New flag",
+                    "summary": "Recommended follow-up.",
+                    "severity": "medium",
+                    "support_ids": ["risk_flag:1"],
+                    "article_ids": [],
+                    "evidence_ids": [42],
+                }
+            ],
+            "entity_linkage_changes": [],
+            "operational_context": [],
+            "news_rows": [],
+            "method_note": "No legal conclusions.",
+            "coverage_gaps": ["The analyst should know source data was limited."],
+        }
+    )
+
+    cleaned, warnings = service._validate_payload(payload, {"article_ids": [], "evidence_ids": [], "vessel_risk_changes": [{"evidence_ids": [42]}]})
+
+    assert len(cleaned.metric_cards) == 1
+    assert cleaned.metric_cards[0].label == "Risk flags"
+    assert "likely" not in cleaned.headline.lower()
+    assert "take action" not in cleaned.executive_summary.lower()
+    assert "recommended" not in cleaned.vessel_risk_changes[0].summary.lower()
+    assert "should" not in cleaned.coverage_gaps[0].lower()
+    assert any("Dropped unsupported" in warning for warning in warnings)
+    assert any("Removed action-oriented phrase" in warning for warning in warnings)
+
+
+def test_missing_model_sections_are_filled_from_deterministic_fallback():
+    service = AiNewsOverviewService(session=None, settings=Settings(feature_ai=True))  # type: ignore[arg-type]
+    payload = AiNewsOverviewPayload.model_validate(
+        {
+            "headline": "Weekly brief",
+            "executive_summary": "Model returned a sparse but valid response.",
+            "metric_cards": [],
+            "vessel_risk_changes": [],
+            "entity_linkage_changes": [],
+            "operational_context": [],
+            "news_rows": [],
+            "method_note": "Generated from deterministic SEAM fact-pack fields only.",
+            "coverage_gaps": [],
+        }
+    )
+    packet = {
+        "article_count": 1,
+        "source_count": 1,
+        "article_ids": [1],
+        "evidence_ids": [42],
+        "global_metrics": {"new_risk_flags": 0, "new_port_events": 0, "active_positioned_vessels": 0},
+        "previous_window": {"article_count": 0, "new_risk_flags": 0, "new_port_events": 0},
+        "articles": [
+            {
+                "id": 1,
+                "title": "Singapore bunker market update",
+                "summary": "Stored RSS source reports Singapore bunker pricing context.",
+                "source": "Ship & Bunker",
+                "url": "https://example.test/story",
+                "relevance_score": 10,
+                "evidence_ids": [42],
+            }
+        ],
+    }
+
+    filled, warnings = run(service._fill_missing_from_fallback(payload, packet))
+
+    assert filled.metric_cards
+    assert filled.news_rows
+    assert filled.news_rows[0].article_ids == [1]
+    assert any("Filled news rows" in warning for warning in warnings)
+
+
+def test_public_get_without_saved_brief_does_not_mutate_session():
+    session = FakeSession()
+    service = AiNewsOverviewService(session=session, settings=Settings(feature_ai=True, ai_provider="mock"))
+
+    response = run(service.get_overview(window_hours=168, generate_if_missing=False))
+
+    assert response.status == "ready"
+    assert response.debug.reason == "no_saved_brief"
+    assert session.added == []
+    assert session.commits == 0
+
+
+def test_force_recompute_persists_weekly_scope_and_bypasses_cache(monkeypatch):
+    session = FakeSession()
+    packet = _minimal_packet()
+    service = AiNewsOverviewService(session=session, settings=Settings(feature_ai=True, ai_provider="mock", ai_news_cache_minutes=60))
+
+    async def fake_build(self, window_hours=24, bundle_name=None, max_articles=40):
+        return packet
+
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("force recompute should bypass cache lookup")
+
+    monkeypatch.setattr(NewsFactPacketService, "build", fake_build)
+    monkeypatch.setattr(service, "_cached", fail_if_called)
+
+    response = run(service.get_overview(window_hours=168, force=True))
+
+    assert response.debug.reason == "forced_regeneration"
+    assert session.commits == 1
+    assert len(session.added) == 1
+    row = session.added[0]
+    assert isinstance(row, AiNewsOverview)
+    assert row.scope == WEEKLY_SCOPE
+    assert row.prompt_version == PROMPT_VERSION
+    assert row.overview_json["headline"].startswith("Weekly brief:")
+
+
+def test_weekly_and_legacy_ai_routes_share_contract(monkeypatch):
+    calls: list[dict[str, object]] = []
+
+    class FakeService:
+        def __init__(self, session, settings):
+            self.session = session
+            self.settings = settings
+
+        async def get_overview(self, **kwargs):
+            calls.append(kwargs)
+            return "ok"
+
+    monkeypatch.setattr(ai_routes, "AiNewsOverviewService", FakeService)
+
+    settings = Settings(feature_ai=True)
+    assert run(ai_routes.get_ai_weekly_brief(session=object(), settings=settings)) == "ok"
+    assert run(ai_routes.get_ai_news_overview(session=object(), settings=settings)) == "ok"
+    assert run(ai_routes.recompute_ai_weekly_brief(session=object(), settings=settings)) == "ok"
+    assert run(ai_routes.recompute_ai_news_overview(session=object(), settings=settings)) == "ok"
+
+    assert calls == [
+        {"window_hours": 168, "bundle_name": None, "generate_if_missing": False},
+        {"window_hours": 168, "bundle_name": None, "generate_if_missing": False},
+        {"window_hours": 168, "bundle_name": None, "force": True},
+        {"window_hours": 168, "bundle_name": None, "force": True},
+    ]
+
+
+def _walk_keys(value):
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            yield key
+            yield from _walk_keys(nested)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _walk_keys(item)
+
+
+def _minimal_packet() -> AiNewsFactPacket:
+    return AiNewsFactPacket(
+        scope=WEEKLY_SCOPE,
+        window_hours=168,
+        window_start=datetime(2026, 5, 14, tzinfo=UTC),
+        window_end=datetime(2026, 5, 21, tzinfo=UTC),
+        article_count=0,
+        source_count=0,
+        global_metrics={"new_risk_flags": 0, "new_port_events": 0, "active_positioned_vessels": 0},
+        previous_window={"article_count": 0, "new_risk_flags": 0, "new_port_events": 0},
+        method_gaps=["No scoped source coverage in the selected weekly window."],
+    )
+
+
+class FakeSession:
+    def __init__(self) -> None:
+        self.added = []
+        self.commits = 0
+
+    async def scalar(self, statement):
+        return None
+
+    def add(self, row):
+        self.added.append(row)
+
+    async def commit(self):
+        self.commits += 1
+
+    async def refresh(self, row):
+        row.id = 1
+
+    async def scalars(self, statement):
+        return []
+
+    async def execute(self, statement):
+        return SimpleNamespace(all=lambda: [])
