@@ -2626,6 +2626,17 @@ textarea.textarea:focus { outline: none; border-color: var(--ocean-500); box-sha
 }
 .cmd-section-head:hover { color: var(--navy-700); }
 
+.multi-select-menu {
+  min-width: 220px;
+  box-shadow: 0 18px 36px rgba(15,23,42,.18);
+}
+.multi-select-menu label:hover {
+  background: rgba(58,127,184,.08);
+}
+.multi-select-menu input[type="checkbox"] {
+  flex: 0 0 auto;
+}
+
 .cmd-rail { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 0; }
 .cmd-rail .nav {
   width: 36px; height: 36px;

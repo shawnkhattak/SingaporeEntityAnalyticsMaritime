@@ -74,13 +74,23 @@ export function MultiSelect({
     if (selected.size) onChange(new Set());
   }
 
+  function updateMenuRect() {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    const maxTop = Math.max(12, window.innerHeight - 300);
+    setMenuRect({ left: rect.left, top: Math.min(rect.bottom + 4, maxTop), width: rect.width });
+  }
+
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button
         type="button"
         className="input"
         style={{ width: "100%", justifyContent: "space-between" }}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          updateMenuRect();
+          setOpen((v) => !v);
+        }}
       >
         <span className={selected.size ? "" : "t-faded"} style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {summary}
@@ -99,7 +109,7 @@ export function MultiSelect({
       </button>
       {open && (
         <div
-          className="panel-solid"
+          className="panel-solid multi-select-menu"
           onMouseDown={(event) => event.stopPropagation()}
           style={{
             position: "fixed",
@@ -129,7 +139,6 @@ export function MultiSelect({
                 fontSize: 13,
                 cursor: "pointer",
               }}
-              onMouseDown={(e) => e.preventDefault()}
             >
               <input
                 type="checkbox"
