@@ -109,14 +109,24 @@ export function MapFilters() {
             />
           </FilterGroup>
 
+          <FilterGroup label="Vessel flag">
+            <MultiSelect
+              options={flagOptions}
+              selected={filters.flagStates}
+              onChange={(next) => setFilters({ ...filters, flagStates: next })}
+              placeholder={flagOptions.length ? "All flags" : "No flags loaded"}
+            />
+          </FilterGroup>
+
           <FilterGroup label="Vessel DWT">
             <RangeFilter
               min={0}
               max={dwtMax}
               step={1000}
               value={filters.dwtRange}
+              defaultValue={0}
               format={(value) => `${Math.round(value).toLocaleString()} DWT`}
-              onChange={(range) => setFilters({ ...filters, dwtRange: range })}
+              onChange={(threshold) => setFilters({ ...filters, dwtRange: threshold === null ? null : [threshold, dwtMax] })}
             />
           </FilterGroup>
 
@@ -126,17 +136,9 @@ export function MapFilters() {
               max={ageMax}
               step={1}
               value={filters.ageRange}
+              defaultValue={0}
               format={(value) => `${Math.round(value)} yr`}
-              onChange={(range) => setFilters({ ...filters, ageRange: range })}
-            />
-          </FilterGroup>
-
-          <FilterGroup label="Vessel flag">
-            <MultiSelect
-              options={flagOptions}
-              selected={filters.flagStates}
-              onChange={(next) => setFilters({ ...filters, flagStates: next })}
-              placeholder={flagOptions.length ? "All flags" : "No flags loaded"}
+              onChange={(threshold) => setFilters({ ...filters, ageRange: threshold === null ? null : [threshold, ageMax] })}
             />
           </FilterGroup>
         </div>
@@ -159,6 +161,7 @@ function RangeFilter({
   max,
   step,
   value,
+  defaultValue,
   format,
   onChange,
 }: {
@@ -166,28 +169,22 @@ function RangeFilter({
   max: number;
   step: number;
   value: [number, number] | null;
+  defaultValue: number;
   format: (value: number) => string;
-  onChange: (value: [number, number] | null) => void;
+  onChange: (value: number | null) => void;
 }) {
-  const current: [number, number] = value ?? [min, max];
+  const current = value?.[0] ?? defaultValue;
   const disabled = max <= min;
-  function setLower(next: number) {
-    onChange([Math.min(next, current[1]), current[1]]);
-  }
-  function setUpper(next: number) {
-    onChange([current[0], Math.max(next, current[0])]);
-  }
   return (
     <div className="col" style={{ gap: 6 }}>
       <div className="row" style={{ justifyContent: "space-between", gap: 8, fontSize: 11, color: "var(--slate-500)" }}>
-        <span>{format(current[0])}</span>
-        <span>{format(current[1])}</span>
+        <span>{value ? `At least ${format(current)}` : "Any"}</span>
+        <span>{format(max)}</span>
       </div>
-      <input type="range" min={min} max={max} step={step} value={current[0]} disabled={disabled} onChange={(e) => setLower(Number(e.target.value))} />
-      <input type="range" min={min} max={max} step={step} value={current[1]} disabled={disabled} onChange={(e) => setUpper(Number(e.target.value))} />
+      <input type="range" min={min} max={max} step={step} value={current} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))} />
       {value && (
         <button type="button" className="btn ghost sm" style={{ alignSelf: "flex-start", fontSize: 11 }} onClick={() => onChange(null)}>
-          Clear range
+          Clear
         </button>
       )}
     </div>
