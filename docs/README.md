@@ -39,6 +39,3 @@ This directory documents the current SEAM V2 implementation and demo journey. Th
 - [ADR Index](adr/README.md) — accepted architectural decisions.
 - [Archive](archive/README.md) — obsolete docs retained for reference.
 
-## Historical Design Package
-
-`frontend/design/` contains early design/wiring notes. Treat it as historical reference, not the current source of truth. Current behavior is documented in the files above.
