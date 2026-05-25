@@ -6,7 +6,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-RiskLevel = Literal["critical", "medium", "low", "none"]
+RiskLevel = Literal["critical", "high", "medium", "low", "none"]
+SourceClass = Literal["official", "trade", "social_unverified", "general_news", "unknown"]
 
 
 class BriefCitation(BaseModel):
@@ -32,6 +33,18 @@ class BriefMetricCard(BriefSupportMixin):
     value: str
     delta: str | None = None
     tone: Literal["neutral", "up", "down", "warning"] = "neutral"
+    why_shown: str = ""
+
+
+class BriefKeyDevelopment(BriefSupportMixin):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    label: str
+    facts: list[str] = Field(default_factory=list)
+    source_type: Literal["official", "trade", "database", "social_unverified", "mixed"] = "database"
+    confidence: Literal["source_linked", "system_recorded"] = "system_recorded"
+    why_shown: str = ""
 
 
 class BriefRiskChange(BriefSupportMixin):
@@ -42,6 +55,31 @@ class BriefRiskChange(BriefSupportMixin):
     change: str
     severity: RiskLevel = "low"
     summary: str
+    why_shown: str = ""
+
+
+class BriefRiskExample(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    vessel_name: str
+    imo: str | None = None
+    fields: list[str] = Field(default_factory=list)
+    source_label: str | None = None
+    evidence_id: int | None = None
+
+
+class BriefGroupedRiskChange(BriefSupportMixin):
+    model_config = ConfigDict(extra="ignore")
+
+    group_type: Literal["sanctions", "watchlist", "detention", "high_risk_flag_country", "identity_conflict", "adverse_news", "other"]
+    severity: RiskLevel | None = None
+    status: Literal["active", "open", "resolved"] | None = None
+    count: int = 0
+    vessel_count: int = 0
+    summary: str
+    examples: list[BriefRiskExample] = Field(default_factory=list)
+    hidden_example_count: int = 0
+    why_shown: str = ""
 
 
 class BriefEntityLinkageChange(BriefSupportMixin):
@@ -52,6 +90,30 @@ class BriefEntityLinkageChange(BriefSupportMixin):
     change: str
     relationship_type: str | None = None
     summary: str
+    why_shown: str = ""
+
+
+class BriefEntityExample(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    vessel_name: str | None = None
+    role: str
+    evidence_id: int | None = None
+
+
+class BriefGroupedEntityChange(BriefSupportMixin):
+    model_config = ConfigDict(extra="ignore")
+
+    entity_name: str
+    country_code: str | None = None
+    roles: list[str] = Field(default_factory=list)
+    vessel_count: int = 0
+    relationship_count: int = 0
+    confidence: str | None = None
+    source_summary: str | None = None
+    examples: list[BriefEntityExample] = Field(default_factory=list)
+    hidden_example_count: int = 0
+    why_shown: str = ""
 
 
 class BriefOperationalItem(BriefSupportMixin):
@@ -61,6 +123,29 @@ class BriefOperationalItem(BriefSupportMixin):
     summary: str
     signal_type: Literal["ais_gap", "flag_change", "ownership_change", "voyage_port_irregularity", "port_activity", "platform_delta", "method_gap"] = "platform_delta"
     severity: RiskLevel = "none"
+    why_shown: str = ""
+
+
+class BriefOperationalExample(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    vessel_name: str
+    detail: str
+    timestamp: str | None = None
+    source: str | None = None
+    evidence_id: int | None = None
+
+
+class BriefGroupedOperationalContext(BriefSupportMixin):
+    model_config = ConfigDict(extra="ignore")
+
+    group_type: Literal["ais_freshness", "port_activity", "arrival_departure", "movement", "other"]
+    count: int = 0
+    vessel_count: int = 0
+    summary: str
+    examples: list[BriefOperationalExample] = Field(default_factory=list)
+    hidden_example_count: int = 0
+    why_shown: str = ""
 
 
 class BriefNewsRow(BriefSupportMixin):
@@ -70,8 +155,24 @@ class BriefNewsRow(BriefSupportMixin):
 
     title: str
     source: str | None = None
+    published_at: datetime | None = None
+    url: str | None = None
     summary: str = ""
     source_quality: str | None = None
+    source_class: SourceClass = "unknown"
+    matched_to: dict[str, str] | None = None
+    why_shown: str = ""
+
+
+class BriefMetadata(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    evidence_record_count: int | None = None
+    active_positioned_vessel_count: int | None = None
+    candidate_article_count: int | None = None
+    source_health: list[dict[str, Any]] = Field(default_factory=list)
+    gaps: list[str] = Field(default_factory=list)
+    method: list[str] = Field(default_factory=list)
 
 
 class BriefPlatformSignals(BaseModel):
@@ -96,12 +197,17 @@ class AiNewsOverviewPayload(BaseModel):
 
     headline: str
     executive_summary: str
+    key_developments: list[BriefKeyDevelopment] = Field(default_factory=list)
     metric_cards: list[BriefMetricCard] = Field(default_factory=list)
     vessel_risk_changes: list[BriefRiskChange] = Field(default_factory=list)
     entity_linkage_changes: list[BriefEntityLinkageChange] = Field(default_factory=list)
     operational_context: list[BriefOperationalItem] = Field(default_factory=list)
+    grouped_risk_changes: list[BriefGroupedRiskChange] = Field(default_factory=list)
+    grouped_entity_changes: list[BriefGroupedEntityChange] = Field(default_factory=list)
+    grouped_operational_context: list[BriefGroupedOperationalContext] = Field(default_factory=list)
     news_rows: list[BriefNewsRow] = Field(default_factory=list)
     method_note: str = ""
+    metadata: BriefMetadata = Field(default_factory=BriefMetadata)
     platform_signals: BriefPlatformSignals = Field(default_factory=BriefPlatformSignals)
     coverage_gaps: list[str] = Field(default_factory=list)
 
@@ -174,6 +280,12 @@ class AiNewsFactPacket(BaseModel):
     risk_context: dict[str, int] = Field(default_factory=dict)
     global_metrics: dict[str, Any] = Field(default_factory=dict)
     previous_window: dict[str, Any] = Field(default_factory=dict)
+    key_developments: list[dict[str, Any]] = Field(default_factory=list)
+    grouped_risk_changes: list[dict[str, Any]] = Field(default_factory=list)
+    grouped_entity_changes: list[dict[str, Any]] = Field(default_factory=list)
+    grouped_operational_context: list[dict[str, Any]] = Field(default_factory=list)
+    selected_news: list[dict[str, Any]] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     vessel_risk_changes: list[dict[str, Any]] = Field(default_factory=list)
     entity_linkage_changes: list[dict[str, Any]] = Field(default_factory=list)
     operational_context: list[dict[str, Any]] = Field(default_factory=list)

@@ -1,29 +1,24 @@
 import {
   AlertCircle,
-  Anchor,
   Bot,
   ChevronDown,
   Database,
   ExternalLink,
-  FileText,
-  Network,
+  ListChecks,
+  Newspaper,
   RefreshCw,
-  ShieldAlert,
   Sparkles,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import type {
   AiNewsOverviewResponse,
-  BriefEntityLinkageChange,
-  BriefMetricCard,
+  BriefKeyDevelopment,
   BriefNewsRow,
-  BriefOperationalItem,
-  BriefRiskChange,
   BriefSupportedItem,
+  SourceClass,
 } from "../../api";
 import { formatRelative } from "../../format";
-import { navigateTo } from "../../hooks/useRoute";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { Skeleton } from "../primitives/Skeleton";
@@ -75,6 +70,16 @@ export function AiNewsOverviewCard({ overview, loading, error, onRetry, onRegene
   }
 
   const o = overview.overview;
+  const keyDevelopments = o.key_developments ?? [];
+  const newsRows = o.news_rows ?? [];
+  const visibleKeyDevelopments = keyDevelopments.filter((item) => item.source_type !== "database").slice(0, 3);
+  const importantItems = [
+    ...newsRows.slice(0, 4).map((item, index) => ({ kind: "news" as const, item, score: 100 - index })),
+  ].sort((a, b) => b.score - a.score).slice(0, 6);
+  const visibleHeadline = visibleKeyDevelopments[0]?.label ?? newsRows[0]?.title ?? "No source-linked news in this window";
+  const visibleSummary = newsRows.length > 0
+    ? newsRows.slice(0, 2).map((item) => item.summary).filter(Boolean).join(" ")
+    : "No external news items were selected for this window.";
 
   return (
     <section className="ai-news-overview is-compact">
@@ -88,69 +93,30 @@ export function AiNewsOverviewCard({ overview, loading, error, onRetry, onRegene
       />
 
       <div className="ai-brief-headline-card">
-        <h4>{o.headline}</h4>
-        {o.executive_summary && <p className="ai-brief-bottom-line">{o.executive_summary}</p>}
+        <h4>{visibleHeadline}</h4>
+        {visibleSummary && <p className="ai-brief-bottom-line">{visibleSummary}</p>}
       </div>
 
-      {o.metric_cards.length > 0 && (
-        <div className="ai-weekly-metrics">
-          {o.metric_cards.map((metric) => (
-            <MetricCard key={metric.label} metric={metric} />
-          ))}
+      {visibleKeyDevelopments.length > 0 && (
+        <div className="ai-key-devs">
+          <div className="ai-brief-section-head">
+            <ListChecks size={11} />
+            <span>Important Key Developments</span>
+          </div>
+          <ol>
+            {visibleKeyDevelopments.map((item) => (
+              <KeyDevelopmentRow key={item.id || item.label} item={item} />
+            ))}
+          </ol>
         </div>
       )}
 
-      <div className="ai-weekly-grid">
-        <BriefSection title="Vessel Risk Changes" count={o.vessel_risk_changes.length} icon={<ShieldAlert size={11} />}>
-          {o.vessel_risk_changes.length === 0 ? (
-            <div className="ai-brief-empty-line">No supported vessel risk changes.</div>
-          ) : (
-            <ul className="ai-weekly-list">
-              {o.vessel_risk_changes.map((item, index) => <RiskChangeRow key={`${item.vessel_name}-${index}`} item={item} />)}
-            </ul>
-          )}
+      {importantItems.length > 0 && (
+        <BriefSection title="Most Important News" count={importantItems.length} icon={<Newspaper size={11} />}>
+          <ul className="ai-weekly-list">
+            {importantItems.map((entry, index) => <ImportantNewsRow key={`${entry.kind}-${index}`} entry={entry} />)}
+          </ul>
         </BriefSection>
-
-        <BriefSection title="Entity Linkages" count={o.entity_linkage_changes.length} icon={<Network size={11} />}>
-          {o.entity_linkage_changes.length === 0 ? (
-            <div className="ai-brief-empty-line">No supported entity linkage changes.</div>
-          ) : (
-            <ul className="ai-weekly-list">
-              {o.entity_linkage_changes.map((item, index) => <EntityChangeRow key={`${item.entity_name}-${index}`} item={item} />)}
-            </ul>
-          )}
-        </BriefSection>
-
-        <BriefSection title="Operational Context" count={o.operational_context.length} icon={<Anchor size={11} />}>
-          {o.operational_context.length === 0 ? (
-            <div className="ai-brief-empty-line">No computed operational signals.</div>
-          ) : (
-            <ul className="ai-weekly-list">
-              {o.operational_context.map((item, index) => <OperationalRow key={`${item.title}-${index}`} item={item} />)}
-            </ul>
-          )}
-        </BriefSection>
-
-        <BriefSection title="News Sources" count={o.news_rows.length} icon={<FileText size={11} />}>
-          {o.news_rows.length === 0 ? (
-            <div className="ai-brief-empty-line">No scoped source rows.</div>
-          ) : (
-            <ul className="ai-weekly-list">
-              {o.news_rows.map((item, index) => <NewsRow key={`${item.title}-${index}`} item={item} />)}
-            </ul>
-          )}
-        </BriefSection>
-      </div>
-
-      <PlatformSignalsRow signals={o.platform_signals} />
-
-      {(o.method_note || o.coverage_gaps.length > 0) && (
-        <div className="ai-method-row">
-          {o.method_note && <p><span className="ai-brief-kicker">Method</span>{o.method_note}</p>}
-          {o.coverage_gaps.length > 0 && (
-            <p title={o.coverage_gaps.join(" · ")}><span className="ai-brief-kicker">Gaps</span>{o.coverage_gaps.join(" · ")}</p>
-          )}
-        </div>
       )}
 
       <button type="button" className="ai-debug-toggle" onClick={() => setDebugOpen((open) => !open)}>
@@ -235,74 +201,48 @@ function BriefSection({ title, count, icon, children }: { title: string; count: 
   );
 }
 
-function MetricCard({ metric }: { metric: BriefMetricCard }) {
+function KeyDevelopmentRow({ item }: { item: BriefKeyDevelopment }) {
   return (
-    <div className={`ai-weekly-metric tone-${metric.tone}`}>
-      <span>{metric.label}</span>
-      <strong>{metric.value}</strong>
-      {metric.delta && <small>{metric.delta}</small>}
-      <CitationButton item={metric} />
-    </div>
-  );
-}
-
-function RiskChangeRow({ item }: { item: BriefRiskChange }) {
-  return (
-    <li className={`ai-weekly-row severity-${item.severity}`}>
-      <div>
-        <strong>{item.vessel_name}</strong>
-        <span>{item.change}</span>
-        <p>{item.summary}</p>
-      </div>
-      <CitationButton item={item} />
+    <li title={item.why_shown || undefined}>
+      <span>{item.label}</span>
+      <SourceButtons item={item} />
     </li>
   );
 }
 
-function EntityChangeRow({ item }: { item: BriefEntityLinkageChange }) {
-  return (
-    <li className="ai-weekly-row severity-none">
-      <div>
-        <strong>{item.entity_name}</strong>
-        <span>{item.change}</span>
-        <p>{item.summary}</p>
-      </div>
-      <CitationButton item={item} />
-    </li>
-  );
-}
+type ImportantEntry = { kind: "news"; item: BriefNewsRow; score: number };
 
-function OperationalRow({ item }: { item: BriefOperationalItem }) {
-  return (
-    <li className={`ai-weekly-row severity-${item.severity}`}>
-      <div>
-        <strong>{item.title}</strong>
-        <span>{signalLabel(item.signal_type)}</span>
-        <p>{item.summary}</p>
-      </div>
-      <CitationButton item={item} />
-    </li>
-  );
+function ImportantNewsRow({ entry }: { entry: ImportantEntry }) {
+  return <NewsRow item={entry.item} />;
 }
 
 function NewsRow({ item }: { item: BriefNewsRow }) {
-  const firstCitation = item.citations[0];
   return (
     <li className="ai-weekly-row severity-none">
+      <span className="ai-row-icon"><Newspaper size={12} /></span>
       <div>
         <strong>{item.title}</strong>
-        <span>{item.source_quality || item.source || "Source"}</span>
+        <span>
+          <SourceBadge sourceClass={item.source_class} />
+          {item.source_quality || item.source || "Source"}
+          {item.published_at ? ` · ${formatRelative(item.published_at)}` : ""}
+          {item.matched_to ? ` · ${matchedLabel(item.matched_to.type)}: ${item.matched_to.label}` : ""}
+        </span>
         <p>{item.summary}</p>
+        <WhyShown text={item.why_shown} />
       </div>
-      {firstCitation ? (
-        <a className="ai-citation-button" href={firstCitation.url} target="_blank" rel="noopener noreferrer" title={`${firstCitation.source}: ${firstCitation.title}`}>
-          <ExternalLink size={11} />
-        </a>
-      ) : (
-        <CitationButton item={item} />
-      )}
+      <SourceButtons item={item} fallbackUrl={item.url ?? undefined} fallbackTitle={item.title} fallbackSource={item.source ?? undefined} />
     </li>
   );
+}
+
+function WhyShown({ text }: { text?: string }) {
+  if (!text) return null;
+  return <small className="ai-why" title={text}>Why shown: {text}</small>;
+}
+
+function SourceBadge({ sourceClass }: { sourceClass: SourceClass }) {
+  return <b className={`ai-source-class source-${sourceClass}`} title={sourceClassTooltip(sourceClass)}>{sourceClassLabel(sourceClass)}</b>;
 }
 
 function CitationButton({ item }: { item: BriefSupportedItem }) {
@@ -320,44 +260,74 @@ function CitationButton({ item }: { item: BriefSupportedItem }) {
   );
 }
 
-function PlatformSignalsRow({ signals }: { signals: AiNewsOverviewResponse["overview"]["platform_signals"] }) {
-  const total = signals.new_risk_flags + signals.new_port_events + signals.new_evidence_records;
-  if (total === 0) return null;
+function SourceButtons({
+  item,
+  fallbackUrl,
+  fallbackTitle,
+  fallbackSource,
+}: {
+  item: BriefSupportedItem;
+  fallbackUrl?: string;
+  fallbackTitle?: string;
+  fallbackSource?: string;
+}) {
+  const citations = item.citations.slice(0, 2);
+  if (citations.length === 0 && fallbackUrl) {
+    return (
+      <a className="ai-citation-button" href={fallbackUrl} target="_blank" rel="noopener noreferrer" title={`${fallbackSource ?? "Source"}: ${fallbackTitle ?? fallbackUrl}`}>
+        <ExternalLink size={11} />
+      </a>
+    );
+  }
+  if (citations.length === 0) return <CitationButton item={item} />;
   return (
-    <ul className="ai-platform-row ai-platform-inline">
-      <li>
-        <button type="button" onClick={() => navigateTo("/risk")} title="Open risk feed">
-          <ShieldAlert size={11} />
-          <strong>{signals.new_risk_flags}</strong>
-          <span>risk flags since last brief</span>
-        </button>
-      </li>
-      <li>
-        <button type="button" onClick={() => navigateTo("/vessels")} title="Open vessels">
-          <Anchor size={11} />
-          <strong>{signals.new_port_events}</strong>
-          <span>port events since last brief</span>
-        </button>
-      </li>
-      <li>
-        <button type="button" onClick={() => navigateTo("/data/source_observations")} title="Open evidence">
-          <FileText size={11} />
-          <strong>{signals.new_evidence_records}</strong>
-          <span>evidence records since last brief</span>
-        </button>
-      </li>
-    </ul>
+    <span className="ai-source-buttons" aria-label="Sources">
+      {citations.map((citation, index) => (
+        <a
+          key={citation.id}
+          className="ai-citation-button"
+          href={citation.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`${citation.source}: ${citation.title}`}
+        >
+          {index + 1}
+        </a>
+      ))}
+    </span>
   );
-}
-
-function signalLabel(signal: BriefOperationalItem["signal_type"]) {
-  return signal.replaceAll("_", " ");
 }
 
 function formatWindow(hours: number) {
   if (hours === 168) return "Last 7 days";
   if (hours > 0 && hours % 24 === 0) return `Last ${hours / 24} days`;
   return `Last ${hours} hours`;
+}
+
+function sourceClassLabel(value: SourceClass) {
+  return {
+    official: "Official",
+    trade: "Trade",
+    social_unverified: "Social / Unverified",
+    general_news: "General News",
+    unknown: "Unknown",
+  }[value];
+}
+
+function sourceClassTooltip(value: SourceClass) {
+  return {
+    official: "Government, port authority, regulator, or military source.",
+    trade: "Maritime or logistics trade publication.",
+    social_unverified: "Social source; useful context but not independently verified by SEAM.",
+    general_news: "General news or search feed source.",
+    unknown: "Source classification was not available.",
+  }[value];
+}
+
+function matchedLabel(value: string) {
+  if (value === "vessel") return "Vessel match";
+  if (value === "entity") return "Entity match";
+  return "Topic match";
 }
 
 function formatCost(value: number) {

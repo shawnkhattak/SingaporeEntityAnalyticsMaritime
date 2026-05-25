@@ -150,6 +150,200 @@ def test_weekly_fact_packet_schema_excludes_raw_and_admin_prompt_fields():
     assert "method_gaps" in dumped
 
 
+def test_risk_grouping_collapses_identity_conflicts_and_sorts_high_signal_first():
+    service = NewsFactPacketService(session=None)  # type: ignore[arg-type]
+
+    groups = service._group_risk_changes(
+        [
+            {
+                "vessel_id": 1,
+                "vessel_name": "ALPHA",
+                "imo": "1111111",
+                "flag_type": "conflicting_identity",
+                "group_type": "identity_conflict",
+                "severity": "low",
+                "status": "active",
+                "summary": "Conflicting identity fields detected: Dimensions, Vessel type.",
+                "support_ids": ["risk_flag:1"],
+                "evidence_ids": [10],
+            },
+            {
+                "vessel_id": 2,
+                "vessel_name": "BETA",
+                "imo": "2222222",
+                "flag_type": "conflicting_identity",
+                "group_type": "identity_conflict",
+                "severity": "low",
+                "status": "active",
+                "summary": "Conflicting identity fields detected: Dimensions.",
+                "support_ids": ["risk_flag:2"],
+                "evidence_ids": [11],
+            },
+            {
+                "vessel_id": 3,
+                "vessel_name": "GAMMA",
+                "flag_type": "sanctions_match",
+                "group_type": "sanctions",
+                "severity": "critical",
+                "status": "active",
+                "summary": "Source-linked sanctions record matched.",
+                "support_ids": ["risk_flag:3"],
+                "evidence_ids": [12],
+            },
+        ]
+    )
+
+    assert groups[0]["group_type"] == "sanctions"
+    identity = next(group for group in groups if group["group_type"] == "identity_conflict")
+    assert identity["count"] == 2
+    assert identity["vessel_count"] == 2
+    assert "2 vessels had 2 new identity-conflict records" in identity["summary"]
+    assert len(identity["examples"]) == 2
+
+
+def test_entity_grouping_collapses_multiple_roles_for_same_company():
+    service = NewsFactPacketService(session=None)  # type: ignore[arg-type]
+
+    groups = service._group_entity_changes(
+        [
+            {
+                "entity_id": 1,
+                "entity_name": "RCL SHIPMANAGEMENT PTE LTD",
+                "relationship_type": "ship_manager",
+                "vessel_id": 10,
+                "vessel_name": "RCL A",
+                "summary": "OCEANS-X particulars field shipManager: RCL SHIPMANAGEMENT PTE LTD",
+                "confidence": "observed",
+                "support_ids": ["relationship:1"],
+                "evidence_ids": [100],
+            },
+            {
+                "entity_id": 1,
+                "entity_name": "RCL SHIPMANAGEMENT PTE. LTD.",
+                "relationship_type": "ism_manager",
+                "vessel_id": 10,
+                "vessel_name": "RCL A",
+                "summary": "OCEANS-X particulars field ismManager: RCL SHIPMANAGEMENT PTE LTD",
+                "confidence": "observed",
+                "support_ids": ["relationship:2"],
+                "evidence_ids": [101],
+            },
+        ]
+    )
+
+    assert len(groups) == 1
+    assert groups[0]["relationship_count"] == 2
+    assert groups[0]["vessel_count"] == 1
+    assert groups[0]["roles"] == ["ISM Manager", "Ship Manager"]
+    assert groups[0]["source_summary"] == "OCEANS-X vessel particulars"
+
+
+def test_operational_grouping_collapses_ais_freshness_rows():
+    service = NewsFactPacketService(session=None)  # type: ignore[arg-type]
+
+    groups = service._group_operational_context(
+        [
+            {
+                "group_type": "ais_freshness",
+                "signal_type": "ais_gap",
+                "vessel_id": 1,
+                "vessel_name": "ALPHA",
+                "detail": "stored AIS position is 40h old",
+                "summary": "Computed from latest stored position timestamp.",
+                "support_ids": ["latest_position:1"],
+                "evidence_ids": [1],
+            },
+            {
+                "group_type": "ais_freshness",
+                "signal_type": "ais_gap",
+                "vessel_id": 2,
+                "vessel_name": "BETA",
+                "detail": "stored AIS position is 50h old",
+                "summary": "Computed from latest stored position timestamp.",
+                "support_ids": ["latest_position:2"],
+                "evidence_ids": [2],
+            },
+        ]
+    )
+
+    assert len(groups) == 1
+    assert groups[0]["group_type"] == "ais_freshness"
+    assert groups[0]["vessel_count"] == 2
+    assert "not confirmed vessel behavior" in groups[0]["summary"]
+
+
+def test_selected_news_ranking_dedupes_and_prioritizes_official_trade_sources():
+    service = NewsFactPacketService(session=None)  # type: ignore[arg-type]
+    now = datetime(2026, 5, 22, tzinfo=UTC)
+    official = SimpleNamespace(
+        id=1,
+        title="MPA Singapore port notice",
+        summary="Official update.",
+        source="MPA Singapore Media Releases",
+        source_badge="Government Source",
+        published_at=now,
+        url="https://example.test/official",
+        evidence_ids=[1],
+        linked_vessel_ids=[],
+        linked_entity_ids=[],
+        linked_vessels=[],
+        linked_entities=[],
+        relevance_score=5,
+        relevance_reasons=["Singapore maritime relevance"],
+        source_quality="Government or military source",
+    )
+    duplicate = SimpleNamespace(**{**official.__dict__, "id": 2})
+    social = SimpleNamespace(
+        **{
+            **official.__dict__,
+            "id": 3,
+            "title": "Social post",
+            "source": "X/Twitter keyword search feed",
+            "source_badge": "Twitter/X",
+            "url": "https://example.test/social",
+            "source_quality": "Social media or unverified source",
+        }
+    )
+    recruiting = SimpleNamespace(
+        **{
+            **official.__dict__,
+            "id": 4,
+            "title": "Technical Superintendent (Dry Bulk)",
+            "summary": "Hiring a superintendent for dry bulk vessels.",
+            "source": "Splash 24/7",
+            "source_badge": "Splash 24/7",
+            "url": "https://example.test/job/technical-superintendent",
+            "source_quality": "Trade publication",
+        }
+    )
+
+    rows = service._selected_news([social, duplicate, recruiting, official])
+
+    assert len(rows) == 3
+    assert rows[0]["source_class"] == "official"
+    assert rows[1]["source_class"] == "social_unverified"
+    assert rows[2]["title"] == "Technical Superintendent (Dry Bulk)"
+
+
+def test_writer_fact_pack_applies_hard_caps_and_short_snippets():
+    service = AiNewsOverviewService(session=None, settings=Settings(feature_ai=True))  # type: ignore[arg-type]
+    packet = _minimal_packet().model_dump(mode="json")
+    packet["grouped_risk_changes"] = [{"summary": f"risk {i}", "examples": [{"vessel_name": str(j)} for j in range(10)]} for i in range(10)]
+    packet["grouped_entity_changes"] = [{"entity_name": f"entity {i}", "examples": [{"role": str(j)} for j in range(10)]} for i in range(10)]
+    packet["grouped_operational_context"] = [{"group_type": "ais_freshness", "examples": [{"vessel_name": str(j)} for j in range(10)]} for i in range(10)]
+    packet["selected_news"] = [{"title": f"news {i}", "summary": "x" * 400, "article_ids": [i], "url": "https://example.test"} for i in range(10)]
+
+    writer_packet = service._writer_fact_pack(packet)
+
+    assert len(writer_packet["grouped_risk_changes"]) == 6
+    assert len(writer_packet["grouped_risk_changes"][0]["examples"]) == 5
+    assert len(writer_packet["grouped_entity_changes"]) == 6
+    assert len(writer_packet["grouped_operational_context"]) == 5
+    assert len(writer_packet["selected_news"]) == 8
+    assert len(writer_packet["selected_news"][0]["summary"]) == 240
+    assert "raw_payload" not in set(_walk_keys(writer_packet))
+
+
 def test_mock_provider_does_not_invent_advanced_signals_without_computed_context():
     provider = MockNewsProvider(Settings(feature_ai=True))
 

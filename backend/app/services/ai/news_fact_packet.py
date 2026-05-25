@@ -50,6 +50,7 @@ SINGAPORE_FLAG_CODES = ("SG", "SGP")
 OIL_GAS_WORDS = ("tanker", "lng", "crude", "bunker", "oil", "gas", "refinery", "vlcc")
 CREDIBLE_SOURCES = ("government source", "tradewinds", "gcaptain", "the maritime executive", "maritime news", "splash 24/7", "lloyd")
 GENERIC_MARITIME_WORDS = ("shipping", "maritime", "vessel", "ship", "port")
+RECRUITING_WORDS = (" job ", "/job/", "career", "hiring", "vacancy", "superintendent", "recruitment")
 VESSEL_CONTEXT_WORDS = (
     "vessel",
     "ship",
@@ -71,6 +72,24 @@ VESSEL_CONTEXT_WORDS = (
     "captain",
 )
 
+RISK_GROUP_ORDER = {
+    "sanctions": 0,
+    "watchlist": 1,
+    "detention": 2,
+    "adverse_news": 3,
+    "high_risk_flag_country": 4,
+    "identity_conflict": 5,
+    "other": 6,
+}
+SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "none": 4, None: 5}
+ROLE_LABELS = {
+    "owner": "Registered Owner",
+    "registered_owner": "Registered Owner",
+    "operator": "Operator",
+    "ship_manager": "Ship Manager",
+    "ism_manager": "ISM Manager",
+}
+
 
 def normalize_headline(value: str) -> str:
     value = re.sub(r"[^a-z0-9\s]", " ", value.casefold())
@@ -89,6 +108,60 @@ def source_quality_label(source: str | None, badge: str | None) -> str:
     if "rss.app search" in text or "search feed" in text:
         return "General news source"
     return "Unclassified source"
+
+
+def source_class(source: str | None, badge: str | None) -> str:
+    quality = source_quality_label(source, badge).casefold()
+    if "government" in quality or "military" in quality:
+        return "official"
+    if "trade" in quality:
+        return "trade"
+    if "social" in quality:
+        return "social_unverified"
+    if "general" in quality:
+        return "general_news"
+    return "unknown"
+
+
+def risk_group_type(flag_type: str | None) -> str:
+    text = (flag_type or "").casefold()
+    if "sanction" in text:
+        return "sanctions"
+    if "watchlist" in text:
+        return "watchlist"
+    if "detention" in text or "detained" in text:
+        return "detention"
+    if "adverse" in text or "news" in text:
+        return "adverse_news"
+    if "high_risk_flag" in text or "high risk flag" in text:
+        return "high_risk_flag_country"
+    if "identity" in text or "conflict" in text:
+        return "identity_conflict"
+    return "other"
+
+
+def normalize_entity_name(value: str) -> str:
+    return re.sub(r"\s+", " ", value.casefold().replace(".", "")).strip()
+
+
+def clip_words(value: str, max_words: int) -> str:
+    value = re.sub(r"\s+", " ", value).strip()
+    words = value.split()
+    if len(words) <= max_words:
+        return value
+    return " ".join(words[:max_words]).rstrip(".,;:") + "..."
+
+
+def is_recruiting_article(article: Any) -> bool:
+    def get_value(name: str) -> str:
+        if isinstance(article, dict):
+            value = article.get(name)
+        else:
+            value = getattr(article, name, None)
+        return str(value or "")
+
+    text = f" {get_value('title')} {get_value('summary')} {get_value('url')} ".casefold()
+    return any(word in text for word in RECRUITING_WORDS)
 
 
 def has_singapore_signal(article: dict[str, Any]) -> bool:
@@ -148,6 +221,9 @@ def score_news_article(article: dict[str, Any], now: datetime | None = None) -> 
     if any(word in text for word in GENERIC_MARITIME_WORDS) and not has_specific_tie:
         score -= 3
         reasons.append("generic maritime article")
+    if is_recruiting_article(article):
+        score -= 8
+        reasons.append("recruiting article")
     return score, reasons
 
 
@@ -315,6 +391,37 @@ class NewsFactPacketService:
         selected_vessel_ids = sorted({id_ for article in selected for id_ in article.linked_vessel_ids})
         selected_entity_ids = sorted({id_ for article in selected for id_ in article.linked_entity_ids})
         sources = {article.source for article in selected if article.source}
+        selected_news = self._selected_news(selected)
+        grouped_risk_changes = self._group_risk_changes(vessel_risk_changes)
+        grouped_entity_changes = self._group_entity_changes(entity_linkage_changes)
+        grouped_operational_context = self._group_operational_context(operational_context)
+        affected_vessel_count = len({item.get("vessel_id") for item in vessel_risk_changes if item.get("vessel_id") is not None})
+        high_or_critical = sum(
+            1
+            for item in vessel_risk_changes
+            if item.get("status") in {"active", "open"} and item.get("severity") in {"critical", "high"}
+        )
+        global_metrics.update(
+            {
+                "affected_vessel_count": affected_vessel_count,
+                "high_or_critical_active_risk_count": high_or_critical,
+                "new_entity_link_count": len(entity_linkage_changes),
+                "selected_news_count": len(selected_news),
+            }
+        )
+        metadata = {
+            "evidence_record_count": global_metrics.get("new_evidence_records"),
+            "active_positioned_vessel_count": global_metrics.get("active_positioned_vessels"),
+            "candidate_article_count": len(article_rows),
+            "gaps": method_gaps,
+            "method": [
+                "Generated from deterministic SEAM fact-pack fields only.",
+                "Risk, entity, operation, and news sections are grouped before model phrasing.",
+                "AIS freshness uses stored position timestamps and is not a confirmed AIS outage.",
+                "Sanctions and watchlist records are source matches; original sources remain available for review.",
+            ],
+        }
+        key_developments = self._key_developments(grouped_risk_changes, grouped_entity_changes, grouped_operational_context, selected_news)
         packet = AiNewsFactPacket(
             scope="singapore_maritime_news",
             window_hours=window_hours,
@@ -333,6 +440,12 @@ class NewsFactPacketService:
             risk_context={**risk_context, "duplicate_headlines": duplicate_count},
             global_metrics=global_metrics,
             previous_window=previous_window,
+            key_developments=key_developments,
+            grouped_risk_changes=grouped_risk_changes,
+            grouped_entity_changes=grouped_entity_changes,
+            grouped_operational_context=grouped_operational_context,
+            selected_news=selected_news,
+            metadata=metadata,
             vessel_risk_changes=vessel_risk_changes,
             entity_linkage_changes=entity_linkage_changes,
             operational_context=operational_context,
@@ -403,14 +516,18 @@ class NewsFactPacketService:
             .outerjoin(Vessel, Vessel.id == RiskFlag.vessel_id)
             .where(RiskFlag.created_at >= window_start, RiskFlag.vessel_id.is_not(None))
             .order_by(desc(RiskFlag.created_at), RiskFlag.id)
-            .limit(8)
+            .limit(80)
         )
         return [
             {
                 "vessel_id": vessel.id if vessel else flag.vessel_id,
                 "vessel_name": vessel.name if vessel else f"Vessel {flag.vessel_id}",
+                "imo": vessel.imo if vessel else None,
+                "flag_type": flag.flag_type,
+                "group_type": risk_group_type(flag.flag_type),
                 "change": f"New {flag.flag_type.replace('_', ' ')} flag",
-                "severity": "critical" if flag.severity == "high" else flag.severity,
+                "severity": flag.severity,
+                "status": flag.status,
                 "summary": flag.summary,
                 "support_ids": [f"risk_flag:{flag.id}"],
                 "evidence_ids": [flag.evidence_id] if flag.evidence_id is not None else [],
@@ -426,7 +543,7 @@ class NewsFactPacketService:
             .outerjoin(Vessel, Vessel.id == Relationship.vessel_id)
             .where(Relationship.created_at >= window_start)
             .order_by(desc(Relationship.created_at), Relationship.id)
-            .limit(8)
+            .limit(80)
         )
         changes: list[dict[str, Any]] = []
         seen: set[tuple[int | None, int | None, str]] = set()
@@ -441,9 +558,13 @@ class NewsFactPacketService:
                 {
                     "entity_id": entity.id if entity else relationship.to_entity_id or relationship.from_entity_id,
                     "entity_name": subject,
+                    "country_code": entity.country_code if entity else None,
+                    "vessel_id": vessel.id if vessel else relationship.vessel_id,
+                    "vessel_name": vessel.name if vessel else None,
                     "relationship_type": relationship.relationship_type,
                     "change": f"New {relationship.relationship_type.replace('_', ' ')} linkage",
                     "summary": relationship.evidence_summary or f"{subject} linked to {target}.",
+                    "confidence": relationship.confidence,
                     "support_ids": [f"relationship:{relationship.id}"],
                     "evidence_ids": [relationship.evidence_id] if relationship.evidence_id is not None else [],
                     "article_ids": [],
@@ -461,7 +582,7 @@ class NewsFactPacketService:
             .join(VesselPositionLatest, VesselPositionLatest.vessel_id == Vessel.id)
             .where(VesselPositionLatest.position_timestamp < stale_threshold)
             .order_by(VesselPositionLatest.position_timestamp, Vessel.name)
-            .limit(5)
+            .limit(50)
         )
         for vessel, position in stale_rows:
             hours = int((now - position.position_timestamp).total_seconds() // 3600)
@@ -470,6 +591,11 @@ class NewsFactPacketService:
                     "title": f"{vessel.name} AIS position is {hours}h old",
                     "summary": "Computed from latest stored position timestamp; this is a data freshness signal, not a confirmed AIS outage.",
                     "signal_type": "ais_gap",
+                    "group_type": "ais_freshness",
+                    "vessel_id": vessel.id,
+                    "vessel_name": vessel.name,
+                    "detail": f"stored AIS position is {hours}h old",
+                    "timestamp": position.position_timestamp.isoformat(),
                     "severity": "medium" if hours >= 72 else "low",
                     "support_ids": [f"latest_position:{vessel.id}"],
                     "evidence_ids": [position.evidence_id] if position.evidence_id is not None else [],
@@ -482,7 +608,7 @@ class NewsFactPacketService:
             .outerjoin(Vessel, Vessel.id == PortEvent.vessel_id)
             .where(or_(PortEvent.created_at >= window_start, PortEvent.event_time >= window_start))
             .order_by(desc(PortEvent.event_time).nullslast(), desc(PortEvent.created_at))
-            .limit(5)
+            .limit(40)
         )
         for event, vessel in port_rows:
             vessel_name = vessel.name if vessel else "Unlinked vessel"
@@ -492,6 +618,12 @@ class NewsFactPacketService:
                     "title": f"{vessel_name} {event.event_type.replace('_', ' ')} at {port_name}",
                     "summary": "Stored port event observed in the weekly window.",
                     "signal_type": "port_activity",
+                    "group_type": "port_activity",
+                    "vessel_id": vessel.id if vessel else event.vessel_id,
+                    "vessel_name": vessel_name,
+                    "detail": f"{event.event_type.replace('_', ' ')} at {port_name}",
+                    "timestamp": (event.event_time or event.created_at).isoformat() if (event.event_time or event.created_at) else None,
+                    "source": "stored port event",
                     "severity": "none",
                     "support_ids": [f"port_event:{event.id}"],
                     "evidence_ids": [event.evidence_id] if event.evidence_id is not None else [],
@@ -506,7 +638,7 @@ class NewsFactPacketService:
         if not await self.session.scalar(select(func.count(Relationship.id)).where(Relationship.created_at >= window_start)):
             method_gaps.append("Ownership and manager changes require relationship history; no new relationship rows were available in this window.")
         method_gaps.append("Voyage irregularity is limited to stored port events and latest positions; planned voyage schedules are not available.")
-        return context[:10], method_gaps[:4]
+        return context[:100], method_gaps[:4]
 
     async def _flag_change_context(self, window_start: datetime) -> list[dict[str, Any]]:
         rows = await self.session.scalars(
@@ -554,3 +686,246 @@ class NewsFactPacketService:
                 last_flag = flag
                 last_observation = observation
         return changes[:5]
+
+    def _group_risk_changes(self, changes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        grouped: dict[tuple[str, str | None, str | None], list[dict[str, Any]]] = defaultdict(list)
+        for item in changes:
+            grouped[(item.get("group_type") or "other", item.get("severity"), item.get("status"))].append(item)
+        result: list[dict[str, Any]] = []
+        for (group_type, severity, status), items in grouped.items():
+            vessel_ids = {item.get("vessel_id") for item in items if item.get("vessel_id") is not None}
+            field_counter: Counter[str] = Counter()
+            examples = []
+            for item in items:
+                fields = _identity_fields(item.get("summary") or "")
+                field_counter.update(fields)
+                if len(examples) < 8:
+                    examples.append(
+                        {
+                            "vessel_name": item.get("vessel_name") or "Vessel",
+                            "imo": item.get("imo"),
+                            "fields": fields,
+                            "source_label": item.get("flag_type"),
+                            "evidence_id": (item.get("evidence_ids") or [None])[0],
+                        }
+                    )
+            summary = self._risk_group_summary(group_type, len(items), len(vessel_ids), field_counter)
+            result.append(
+                {
+                    "group_type": group_type,
+                    "severity": severity,
+                    "status": status,
+                    "count": len(items),
+                    "vessel_count": len(vessel_ids),
+                    "summary": summary,
+                    "examples": examples,
+                    "hidden_example_count": max(0, len(items) - len(examples)),
+                    "why_shown": "New risk flag records were created during this report window.",
+                    "support_ids": sorted({sid for item in items for sid in item.get("support_ids", [])}),
+                    "article_ids": [],
+                    "evidence_ids": sorted({eid for item in items for eid in item.get("evidence_ids", []) if eid is not None}),
+                }
+            )
+        result.sort(key=lambda item: (RISK_GROUP_ORDER.get(item["group_type"], 99), SEVERITY_ORDER.get(item.get("severity"), 99), -item["vessel_count"], -item["count"]))
+        return result[:6]
+
+    def _risk_group_summary(self, group_type: str, count: int, vessel_count: int, fields: Counter[str]) -> str:
+        if group_type == "identity_conflict":
+            common = ", ".join(name.lower() for name, _ in fields.most_common(3)) or "stored vessel details"
+            return f"{vessel_count} vessels had {count} new identity-conflict records this week. Most involved {common}."
+        if group_type == "high_risk_flag_country":
+            return f"{vessel_count} vessels had {count} new high-risk flag country records this week."
+        label = group_type.replace("_", " ")
+        return f"{vessel_count} vessels had {count} new {label} records this week."
+
+    def _group_entity_changes(self, changes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        display_names: dict[str, str] = {}
+        for item in changes:
+            key = normalize_entity_name(item.get("entity_name") or "Entity")
+            grouped[key].append(item)
+            display_names[key] = item.get("entity_name") or "Entity"
+        result: list[dict[str, Any]] = []
+        for key, items in grouped.items():
+            vessel_ids = {item.get("vessel_id") for item in items if item.get("vessel_id") is not None}
+            roles = sorted({ROLE_LABELS.get(item.get("relationship_type"), str(item.get("relationship_type") or "Relationship").replace("_", " ").title()) for item in items})
+            examples = [
+                {
+                    "vessel_name": item.get("vessel_name"),
+                    "role": ROLE_LABELS.get(item.get("relationship_type"), str(item.get("relationship_type") or "Relationship").replace("_", " ").title()),
+                    "evidence_id": (item.get("evidence_ids") or [None])[0],
+                }
+                for item in items[:8]
+            ]
+            result.append(
+                {
+                    "entity_name": display_names[key],
+                    "country_code": next((item.get("country_code") for item in items if item.get("country_code")), None),
+                    "roles": roles,
+                    "vessel_count": len(vessel_ids),
+                    "relationship_count": len(items),
+                    "confidence": next((item.get("confidence") for item in items if item.get("confidence")), None),
+                    "source_summary": _source_summary(items),
+                    "examples": examples,
+                    "hidden_example_count": max(0, len(items) - len(examples)),
+                    "why_shown": "New vessel relationship records were added during this report window.",
+                    "support_ids": sorted({sid for item in items for sid in item.get("support_ids", [])}),
+                    "article_ids": [],
+                    "evidence_ids": sorted({eid for item in items for eid in item.get("evidence_ids", []) if eid is not None}),
+                }
+            )
+        result.sort(key=lambda item: (-item["vessel_count"], -item["relationship_count"], item["entity_name"]))
+        return result[:6]
+
+    def _group_operational_context(self, context: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for item in context:
+            group_type = item.get("group_type") or ("ais_freshness" if item.get("signal_type") == "ais_gap" else item.get("signal_type") or "other")
+            if group_type == "ais_gap":
+                group_type = "ais_freshness"
+            grouped[group_type].append(item)
+        result: list[dict[str, Any]] = []
+        for group_type, items in grouped.items():
+            vessel_ids = {item.get("vessel_id") for item in items if item.get("vessel_id") is not None}
+            examples = [
+                {
+                    "vessel_name": item.get("vessel_name") or item.get("title") or "Vessel",
+                    "detail": item.get("detail") or item.get("summary") or "",
+                    "timestamp": item.get("timestamp"),
+                    "source": item.get("source"),
+                    "evidence_id": (item.get("evidence_ids") or [None])[0],
+                }
+                for item in items[:5]
+            ]
+            if group_type == "ais_freshness":
+                summary = f"{len(vessel_ids)} vessels had stored AIS positions older than expected. SEAM treats this as data freshness, not confirmed vessel behavior."
+                why = "Stored AIS position timestamps were older than the weekly freshness threshold."
+            elif group_type == "port_activity":
+                summary = f"{len(items)} stored port event observations were recorded for {len(vessel_ids)} vessels."
+                why = "Stored port event records were observed during this report window."
+            else:
+                summary = f"{len(items)} stored operational context records were observed for {len(vessel_ids)} vessels."
+                why = "Stored operational records were observed during this report window."
+            result.append(
+                {
+                    "group_type": group_type,
+                    "count": len(items),
+                    "vessel_count": len(vessel_ids),
+                    "summary": summary,
+                    "examples": examples,
+                    "hidden_example_count": max(0, len(items) - len(examples)),
+                    "why_shown": why,
+                    "support_ids": sorted({sid for item in items for sid in item.get("support_ids", [])}),
+                    "article_ids": [],
+                    "evidence_ids": sorted({eid for item in items for eid in item.get("evidence_ids", []) if eid is not None}),
+                }
+            )
+        order = {"ais_freshness": 0, "port_activity": 1, "arrival_departure": 2, "movement": 3, "other": 4}
+        result.sort(key=lambda item: (order.get(item["group_type"], 99), -item["count"]))
+        return result[:5]
+
+    def _selected_news(self, articles: list[ScoredNewsArticle]) -> list[dict[str, Any]]:
+        seen_urls: set[str] = set()
+        seen_titles: set[str] = set()
+        ranked = sorted(articles, key=lambda item: (_news_rank(item), item.published_at or datetime.min.replace(tzinfo=UTC), item.id), reverse=True)
+        rows: list[dict[str, Any]] = []
+        for article in ranked:
+            normalized = normalize_headline(article.title)
+            if article.url in seen_urls or normalized in seen_titles:
+                continue
+            seen_urls.add(article.url)
+            seen_titles.add(normalized)
+            matched_to = None
+            if article.linked_vessels:
+                matched_to = {"type": "vessel", "label": str(article.linked_vessels[0].get("name") or "Vessel")}
+            elif article.linked_entities:
+                matched_to = {"type": "entity", "label": str(article.linked_entities[0].get("name") or "Entity")}
+            elif article.relevance_reasons:
+                matched_to = {"type": "topic", "label": article.relevance_reasons[0]}
+            cls = source_class(article.source, article.source_badge)
+            rows.append(
+                {
+                    "title": article.title,
+                    "source": article.source_badge or article.source,
+                    "published_at": article.published_at.isoformat() if article.published_at else None,
+                    "url": article.url,
+                    "summary": clip_words(article.summary or article.title, 38),
+                    "source_quality": article.source_quality,
+                    "source_class": cls,
+                    "matched_to": matched_to,
+                    "why_shown": _news_why_shown(cls, matched_to),
+                    "support_ids": [f"article:{article.id}"],
+                    "article_ids": [article.id],
+                    "evidence_ids": article.evidence_ids[:5],
+                }
+            )
+            if len(rows) >= 8:
+                break
+        return rows
+
+    def _key_developments(
+        self,
+        risk_groups: list[dict[str, Any]],
+        entity_groups: list[dict[str, Any]],
+        operational_groups: list[dict[str, Any]],
+        selected_news: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        developments: list[dict[str, Any]] = []
+        for article in selected_news:
+            if len(developments) >= 3:
+                break
+            developments.append(
+                {
+                    "id": f"news-{article['article_ids'][0]}",
+                    "label": _news_development_label(article),
+                    "facts": [article["summary"]],
+                    "source_type": "official" if article["source_class"] == "official" else "trade" if article["source_class"] == "trade" else "social_unverified" if article["source_class"] == "social_unverified" else "mixed",
+                    "confidence": "source_linked",
+                    "why_shown": article["why_shown"],
+                    "support_ids": article.get("support_ids", []),
+                    "article_ids": article.get("article_ids", []),
+                    "evidence_ids": article.get("evidence_ids", [])[:5],
+                }
+            )
+        return developments[:3]
+
+
+def _news_development_label(article: dict[str, Any]) -> str:
+    title = str(article.get("title") or "Source-linked maritime news")
+    matched_to = article.get("matched_to") if isinstance(article.get("matched_to"), dict) else None
+    vessel_name = str(matched_to.get("label") or "").strip() if matched_to and matched_to.get("type") == "vessel" else ""
+    if vessel_name and vessel_name.casefold() not in title.casefold():
+        return clip_words(f"{vessel_name}: {title}", 24)
+    return clip_words(title, 24)
+
+
+def _identity_fields(summary: str) -> list[str]:
+    match = re.search(r"Conflicting identity fields detected:\s*(.+)", summary, flags=re.IGNORECASE)
+    if not match:
+        return []
+    return [part.strip().strip(".") for part in match.group(1).split(",") if part.strip()]
+
+
+def _source_summary(items: list[dict[str, Any]]) -> str:
+    text = " ".join(str(item.get("summary") or "") for item in items).casefold()
+    if "oceans-x" in text or "particulars" in text:
+        return "OCEANS-X vessel particulars"
+    return items[0].get("summary") or "Stored relationship records"
+
+
+def _news_rank(article: ScoredNewsArticle) -> int:
+    cls = source_class(article.source, article.source_badge)
+    class_score = {"official": 40, "trade": 30, "general_news": 20, "social_unverified": 5, "unknown": 0}.get(cls, 0)
+    link_score = 12 if article.linked_vessel_ids or article.linked_entity_ids else 0
+    recruiting_penalty = 30 if is_recruiting_article(article) else 0
+    return class_score + link_score + article.relevance_score - recruiting_penalty
+
+
+def _news_why_shown(cls: str, matched_to: dict[str, str] | None) -> str:
+    if matched_to:
+        if matched_to["type"] == "topic":
+            return "Article selected because it matched a SEAM topic."
+        return f"Article selected because it matched a SEAM {matched_to['type']} or topic."
+    if cls == "official":
+        return "Official source included because it is related to Singapore maritime operations."
+    return "Article selected from the scoped weekly Singapore maritime source set."

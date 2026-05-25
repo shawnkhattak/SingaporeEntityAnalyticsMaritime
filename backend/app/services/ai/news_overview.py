@@ -32,6 +32,7 @@ from app.services.ingestion import stable_payload_hash
 
 PROMPT_VERSION = "agentic-weekly-brief-v1"
 WEEKLY_SCOPE = "agentic_weekly_brief"
+METHOD_NOTE = "Source-linked facts only. No legal, compliance, trading, or operational recommendations."
 BLOCKED_PHRASES = (
     "take action",
     "recommended",
@@ -45,12 +46,14 @@ BLOCKED_PHRASES = (
 EMPTY_OVERVIEW = AiNewsOverviewPayload(
     headline="Weekly brief: no supported developments in this window",
     executive_summary="No scoped source coverage or deterministic SEAM changes were available for this weekly window.",
+    key_developments=[],
     metric_cards=[],
     vessel_risk_changes=[],
     entity_linkage_changes=[],
     operational_context=[],
     news_rows=[],
-    method_note="Generated from deterministic SEAM fact-pack fields only.",
+    method_note=METHOD_NOTE,
+    metadata={"method": ["Generated from deterministic SEAM fact-pack fields only."]},
     platform_signals=BriefPlatformSignals(),
     coverage_gaps=["No scoped source coverage in the selected weekly window."],
 )
@@ -120,15 +123,16 @@ class AiNewsOverviewService:
             max_articles=self.settings.ai_news_max_articles,
         )
         packet_dict = packet.model_dump(mode="json")
+        writer_packet = self._writer_fact_pack(packet_dict)
         previous = await self._latest(provider_name=provider_name, model_name=model_name, bundle_name=bundle_name)
         if previous is not None:
             previous_overview = previous.overview_json or {}
-            packet_dict["previous_brief"] = {
+            writer_packet["previous_brief"] = {
                 "generated_at": previous.generated_at.isoformat() if previous.generated_at else None,
                 "article_ids": previous.article_ids or [],
                 "headline": previous_overview.get("headline"),
             }
-        input_hash = stable_payload_hash(packet_dict)
+        input_hash = stable_payload_hash(writer_packet)
         cached = None if force else await self._cached(input_hash, provider_name=provider_name, model_name=model_name)
         if cached and not force:
             payload = AiNewsOverviewPayload.model_validate(cached.overview_json or {})
@@ -142,17 +146,17 @@ class AiNewsOverviewService:
             return self._read(cached, payload=payload, window_hours=window_hours, status="ready", debug=debug)
 
         try:
-            raw = await provider.generate_news_overview(packet_dict)
+            raw = await provider.generate_news_overview(writer_packet)
         except Exception as exc:
             warnings.append(f"{getattr(provider, 'name', 'AI')} provider failed; falling back to mock: {exc}")
             provider = MockNewsProvider(self.settings)
-            raw = await provider.generate_news_overview(packet_dict)
-        payload = AiNewsOverviewPayload.model_validate(self._coerce(raw, packet_dict))
-        payload, validation_warnings = self._validate_payload(payload, packet_dict)
+            raw = await provider.generate_news_overview(writer_packet)
+        payload = AiNewsOverviewPayload.model_validate(self._coerce(raw, writer_packet))
+        payload, validation_warnings = self._validate_payload(payload, writer_packet)
         warnings.extend(validation_warnings)
-        payload, fallback_warnings = await self._fill_missing_from_fallback(payload, packet_dict)
+        payload, fallback_warnings = await self._fill_missing_from_fallback(payload, writer_packet)
         warnings.extend(fallback_warnings)
-        payload = self._attach_citations(payload, packet_dict)
+        payload = self._attach_citations(payload, writer_packet)
         raw_response = raw
 
         now = datetime.now(UTC)
@@ -281,47 +285,164 @@ class AiNewsOverviewService:
 
     # --------------------- shaping ---------------------
 
+    def _writer_fact_pack(self, packet: dict[str, Any]) -> dict[str, Any]:
+        metrics = packet.get("global_metrics") or {}
+        metadata = packet.get("metadata") or {}
+        return {
+            "window": {
+                "start": packet.get("window_start"),
+                "end": packet.get("window_end"),
+                "generated_at": datetime.now(UTC).isoformat(),
+                "article_count": packet.get("article_count", 0),
+                "source_count": packet.get("source_count", 0),
+            },
+            "metrics": {
+                "new_risk_flags": metrics.get("new_risk_flags", 0),
+                "affected_vessel_count": metrics.get("affected_vessel_count", 0),
+                "high_or_critical_active_risk_count": metrics.get("high_or_critical_active_risk_count", 0),
+                "new_entity_link_count": metrics.get("new_entity_link_count", 0),
+                "port_event_count": metrics.get("new_port_events", 0),
+                "selected_news_count": metrics.get("selected_news_count", packet.get("article_count", 0)),
+            },
+            "previous_window": packet.get("previous_window") or {},
+            "key_developments": self._limit_items(packet.get("key_developments") or [], max_items=3, max_examples=0),
+            "grouped_risk_changes": self._limit_items(packet.get("grouped_risk_changes") or [], max_items=6, max_examples=5),
+            "grouped_entity_changes": self._limit_items(packet.get("grouped_entity_changes") or [], max_items=6, max_examples=5),
+            "grouped_operational_context": self._limit_items(packet.get("grouped_operational_context") or [], max_items=5, max_examples=5),
+            "selected_news": self._limit_news(packet.get("selected_news") or [], max_items=8),
+            "metadata": {
+                "evidence_record_count": metadata.get("evidence_record_count"),
+                "active_positioned_vessel_count": metadata.get("active_positioned_vessel_count"),
+                "candidate_article_count": metadata.get("candidate_article_count"),
+                "source_health": (metadata.get("source_health") or [])[:6],
+                "gaps": (metadata.get("gaps") or [])[:6],
+                "method": (metadata.get("method") or [])[:6],
+            },
+            "article_ids": packet.get("article_ids", []),
+            "evidence_ids": packet.get("evidence_ids", []),
+            "articles": self._citation_articles(packet.get("selected_news") or []),
+        }
+
+    def _limit_items(self, items: list[dict[str, Any]], max_items: int, max_examples: int) -> list[dict[str, Any]]:
+        limited: list[dict[str, Any]] = []
+        for item in items[:max_items]:
+            copy = dict(item)
+            if "examples" in copy:
+                copy["examples"] = list(copy.get("examples") or [])[:max_examples]
+            limited.append(copy)
+        return limited
+
+    def _limit_news(self, items: list[dict[str, Any]], max_items: int) -> list[dict[str, Any]]:
+        limited: list[dict[str, Any]] = []
+        for item in items[:max_items]:
+            copy = dict(item)
+            summary = str(copy.get("summary") or "")
+            copy["summary"] = summary[:240]
+            limited.append(copy)
+        return limited
+
+    def _citation_articles(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        articles: list[dict[str, Any]] = []
+        for item in items:
+            article_ids = item.get("article_ids") or []
+            if not article_ids:
+                continue
+            articles.append(
+                {
+                    "id": article_ids[0],
+                    "title": item.get("title"),
+                    "source": item.get("source"),
+                    "url": item.get("url"),
+                }
+            )
+        return articles
+
     def _coerce(self, raw: dict[str, Any], packet_dict: dict[str, Any] | None = None) -> dict[str, Any]:
         """Light coercion so AI / mock output validates cleanly."""
         data = dict(raw)
         data.setdefault("headline", "Weekly brief")
         data.setdefault("executive_summary", "")
+        data.setdefault("key_developments", [])
         data.setdefault("metric_cards", [])
         data.setdefault("vessel_risk_changes", [])
         data.setdefault("entity_linkage_changes", [])
         data.setdefault("operational_context", [])
+        data.setdefault("grouped_risk_changes", [])
+        data.setdefault("grouped_entity_changes", [])
+        data.setdefault("grouped_operational_context", [])
         data.setdefault("news_rows", [])
         data.setdefault("method_note", "Generated from deterministic SEAM fact-pack fields only.")
+        data.setdefault("metadata", (packet_dict or {}).get("metadata") or {})
         data.setdefault("coverage_gaps", [])
         data.pop("platform_signals", None)  # runtime overwrites
         if not data["metric_cards"] and packet_dict is not None:
-            metrics = packet_dict.get("global_metrics") or {}
+            metrics = packet_dict.get("metrics") or packet_dict.get("global_metrics") or {}
             data["metric_cards"] = [
                 {
-                    "label": "News sources",
-                    "value": f"{packet_dict.get('article_count', 0)} articles / {packet_dict.get('source_count', 0)} sources",
-                    "support_ids": ["metric:articles", "metric:sources"],
-                    "article_ids": packet_dict.get("article_ids", [])[:12],
-                    "evidence_ids": [],
-                },
-                {
-                    "label": "Risk flags",
+                    "label": "New risk flags",
                     "value": str(metrics.get("new_risk_flags", 0)),
                     "support_ids": ["metric:risk_flags"],
                     "article_ids": [],
                     "evidence_ids": [],
+                    "why_shown": "New risk flag records created during this report window.",
+                },
+                {
+                    "label": "Vessels affected",
+                    "value": str(metrics.get("affected_vessel_count", 0)),
+                    "support_ids": ["metric:affected_vessels"],
+                    "article_ids": [],
+                    "evidence_ids": [],
+                    "why_shown": "Distinct vessels with new risk flag records in this window.",
+                },
+                {
+                    "label": "High/Critical active risks",
+                    "value": str(metrics.get("high_or_critical_active_risk_count", 0)),
+                    "support_ids": ["metric:high_critical_active_risks"],
+                    "article_ids": [],
+                    "evidence_ids": [],
+                    "why_shown": "Active high or critical risk records created during this report window.",
+                },
+                {
+                    "label": "New entity links",
+                    "value": str(metrics.get("new_entity_link_count", 0)),
+                    "support_ids": ["metric:entity_links"],
+                    "article_ids": [],
+                    "evidence_ids": [],
+                    "why_shown": "New vessel relationship records added during this report window.",
+                },
+                {
+                    "label": "Port events",
+                    "value": str(metrics.get("port_event_count", metrics.get("new_port_events", 0))),
+                    "support_ids": ["metric:port_events"],
+                    "article_ids": [],
+                    "evidence_ids": [],
+                    "why_shown": "Stored port event records observed during this report window.",
+                },
+                {
+                    "label": "Selected news",
+                    "value": str(metrics.get("selected_news_count", 0)),
+                    "support_ids": ["metric:selected_news"],
+                    "article_ids": packet_dict.get("article_ids", [])[:8],
+                    "evidence_ids": [],
+                    "why_shown": "News items selected after source ranking and deduplication.",
                 },
             ]
-        for section in ("metric_cards", "vessel_risk_changes", "entity_linkage_changes", "operational_context", "news_rows"):
+        for passthrough in ("key_developments", "grouped_risk_changes", "grouped_entity_changes", "grouped_operational_context"):
+            if not data.get(passthrough) and packet_dict is not None:
+                data[passthrough] = packet_dict.get(passthrough) or []
+        if not data.get("news_rows") and packet_dict is not None:
+            data["news_rows"] = packet_dict.get("selected_news") or packet_dict.get("news_rows") or []
+        for section in ("metric_cards", "key_developments", "vessel_risk_changes", "entity_linkage_changes", "operational_context", "grouped_risk_changes", "grouped_entity_changes", "grouped_operational_context", "news_rows"):
             if not isinstance(data.get(section), list):
                 data[section] = []
-        for section in ("metric_cards", "vessel_risk_changes", "entity_linkage_changes", "operational_context", "news_rows"):
+        for section in ("metric_cards", "key_developments", "vessel_risk_changes", "entity_linkage_changes", "operational_context", "grouped_risk_changes", "grouped_entity_changes", "grouped_operational_context", "news_rows"):
             for item in data.get(section, []):
                 if not isinstance(item, dict):
                     continue
                 item.setdefault("support_ids", [])
                 item.setdefault("article_ids", [])
                 item.setdefault("evidence_ids", [])
+                item.setdefault("why_shown", "")
         for item in data.get("metric_cards", []):
             if not isinstance(item, dict):
                 continue
@@ -338,9 +459,7 @@ class AiNewsOverviewService:
             item.setdefault("change", "Stored risk change")
             item.setdefault("summary", "")
             item.setdefault("severity", "low")
-            if item.get("severity") == "high":
-                item["severity"] = "critical"
-            if item.get("severity") not in {"critical", "medium", "low", "none"}:
+            if item.get("severity") not in {"critical", "high", "medium", "low", "none"}:
                 item["severity"] = "low"
         for item in data.get("entity_linkage_changes", []):
             if not isinstance(item, dict):
@@ -366,17 +485,19 @@ class AiNewsOverviewService:
             }:
                 item["signal_type"] = "platform_delta"
             item.setdefault("severity", "none")
-            if item.get("severity") == "high":
-                item["severity"] = "critical"
-            if item.get("severity") not in {"critical", "medium", "low", "none"}:
+            if item.get("severity") not in {"critical", "high", "medium", "low", "none"}:
                 item["severity"] = "none"
         for item in data.get("news_rows", []):
             if not isinstance(item, dict):
                 continue
             item.setdefault("title", "Stored source")
             item.setdefault("source", None)
+            item.setdefault("published_at", None)
+            item.setdefault("url", None)
             item.setdefault("summary", "")
             item.setdefault("source_quality", None)
+            item.setdefault("source_class", "unknown")
+            item.setdefault("matched_to", None)
         return data
 
     def _attach_citations(self, payload: AiNewsOverviewPayload, packet_dict: dict[str, Any]) -> AiNewsOverviewPayload:
@@ -393,9 +514,13 @@ class AiNewsOverviewService:
                 except (TypeError, ValueError):
                     continue
         items = [
+            *payload.key_developments,
             *payload.vessel_risk_changes,
             *payload.entity_linkage_changes,
             *payload.operational_context,
+            *payload.grouped_risk_changes,
+            *payload.grouped_entity_changes,
+            *payload.grouped_operational_context,
             *payload.news_rows,
             *payload.metric_cards,
         ]
@@ -431,7 +556,7 @@ class AiNewsOverviewService:
         warnings: list[str] = []
         valid_articles = {int(id_) for id_ in packet_dict.get("article_ids", []) if isinstance(id_, int)}
         valid_evidence = {int(id_) for id_ in packet_dict.get("evidence_ids", []) if isinstance(id_, int)}
-        for section in ("vessel_risk_changes", "entity_linkage_changes", "operational_context"):
+        for section in ("vessel_risk_changes", "entity_linkage_changes", "operational_context", "grouped_risk_changes", "grouped_entity_changes", "grouped_operational_context", "selected_news", "key_developments"):
             for item in packet_dict.get(section, []) or []:
                 if isinstance(item, dict):
                     valid_evidence.update(int(id_) for id_ in item.get("evidence_ids", []) if isinstance(id_, int))
@@ -458,11 +583,11 @@ class AiNewsOverviewService:
 
         payload.headline = clean_text(payload.headline) or EMPTY_OVERVIEW.headline
         payload.executive_summary = clean_text(payload.executive_summary) or EMPTY_OVERVIEW.executive_summary
-        payload.method_note = clean_text(payload.method_note) or EMPTY_OVERVIEW.method_note
-        for collection_name in ("metric_cards", "vessel_risk_changes", "entity_linkage_changes", "operational_context", "news_rows"):
+        payload.method_note = METHOD_NOTE
+        for collection_name in ("metric_cards", "key_developments", "vessel_risk_changes", "entity_linkage_changes", "operational_context", "grouped_risk_changes", "grouped_entity_changes", "grouped_operational_context", "news_rows"):
             kept = []
             for item in getattr(payload, collection_name):
-                for field in ("label", "value", "delta", "title", "vessel_name", "entity_name", "change", "summary", "source_quality"):
+                for field in ("label", "value", "delta", "title", "vessel_name", "entity_name", "change", "summary", "source_quality", "why_shown", "source_summary"):
                     if hasattr(item, field):
                         value = getattr(item, field)
                         if isinstance(value, str):
@@ -473,6 +598,8 @@ class AiNewsOverviewService:
                     warnings.append(f"Dropped unsupported weekly brief item from {collection_name}.")
             setattr(payload, collection_name, kept)
         payload.coverage_gaps = [clean_text(gap) for gap in payload.coverage_gaps if clean_text(gap)]
+        payload.metadata.gaps = [clean_text(gap) for gap in payload.metadata.gaps if clean_text(gap)]
+        payload.metadata.method = [clean_text(method) for method in payload.metadata.method if clean_text(method)]
         return payload, warnings
 
     async def _fill_missing_from_fallback(
@@ -483,6 +610,10 @@ class AiNewsOverviewService:
         warnings: list[str] = []
         needs_fallback = (
             not payload.metric_cards
+            or (bool(packet_dict.get("key_developments")) and not payload.key_developments)
+            or (bool(packet_dict.get("grouped_risk_changes")) and not payload.grouped_risk_changes)
+            or (bool(packet_dict.get("grouped_entity_changes")) and not payload.grouped_entity_changes)
+            or (bool(packet_dict.get("grouped_operational_context")) and not payload.grouped_operational_context)
             or (bool(packet_dict.get("articles")) and not payload.news_rows)
             or (bool(packet_dict.get("vessel_risk_changes")) and not payload.vessel_risk_changes)
             or (bool(packet_dict.get("entity_linkage_changes")) and not payload.entity_linkage_changes)
@@ -499,7 +630,19 @@ class AiNewsOverviewService:
         if not payload.metric_cards and fallback.metric_cards:
             payload.metric_cards = fallback.metric_cards
             warnings.append("Filled metric cards from deterministic fallback.")
-        if packet_dict.get("articles") and not payload.news_rows and fallback.news_rows:
+        if packet_dict.get("key_developments") and not payload.key_developments and fallback.key_developments:
+            payload.key_developments = fallback.key_developments
+            warnings.append("Filled key developments from deterministic fallback.")
+        if packet_dict.get("grouped_risk_changes") and not payload.grouped_risk_changes and fallback.grouped_risk_changes:
+            payload.grouped_risk_changes = fallback.grouped_risk_changes
+            warnings.append("Filled grouped risk changes from deterministic fallback.")
+        if packet_dict.get("grouped_entity_changes") and not payload.grouped_entity_changes and fallback.grouped_entity_changes:
+            payload.grouped_entity_changes = fallback.grouped_entity_changes
+            warnings.append("Filled grouped entity changes from deterministic fallback.")
+        if packet_dict.get("grouped_operational_context") and not payload.grouped_operational_context and fallback.grouped_operational_context:
+            payload.grouped_operational_context = fallback.grouped_operational_context
+            warnings.append("Filled grouped operational context from deterministic fallback.")
+        if (packet_dict.get("articles") or packet_dict.get("selected_news")) and not payload.news_rows and fallback.news_rows:
             payload.news_rows = fallback.news_rows
             warnings.append("Filled news rows from deterministic fallback.")
         if packet_dict.get("vessel_risk_changes") and not payload.vessel_risk_changes and fallback.vessel_risk_changes:

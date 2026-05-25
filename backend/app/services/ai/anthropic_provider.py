@@ -29,14 +29,13 @@ class AnthropicNewsProvider:
     def _generate_sync(self, fact_packet: dict[str, Any]) -> dict[str, Any]:
         body = {
             "model": self.model_name,
-            "max_tokens": 2500,
+            "max_tokens": 1400,
             "system": (
-                "You write the SEAM AI Weekly Brief from a deterministic fact pack. "
-                "SEAM services already computed counts, rankings, risk changes, relationship changes, operational signals, method gaps, support IDs, article IDs, and evidence IDs. "
-                "Your job is only to phrase that data into concise human-readable JSON. "
-                "Do not add outside knowledge, predictions, recommendations, legal conclusions, compliance conclusions, or unsupported risk judgments. "
-                "Do not use action-oriented language such as 'take action', 'recommended', 'likely', 'must', 'should', or 'critical impact'. "
-                "Every substantive item must keep support_ids and any article_ids/evidence_ids from the fact pack. "
+                "You are writing a weekly source-linked maritime brief for SEAM. Use only facts in the provided fact pack. "
+                "Do not add facts, infer intent, speculate, or provide legal, compliance, trading, risk, or operational recommendations. "
+                "Avoid 'suggests', 'signals', 'raises concerns', and 'indicates' unless the source directly says it. "
+                "Use neutral verbs such as recorded, reported, matched, linked, observed, and stored. "
+                "Write clearly for maritime, energy, and business readers. "
                 "Output ONLY through the provided tool."
             ),
             "tools": [self._overview_tool()],
@@ -45,8 +44,12 @@ class AnthropicNewsProvider:
                 {
                     "role": "user",
                     "content": (
-                        "Produce the SEAM AI Weekly Brief from the fact packet below. Return headline, executive_summary, metric_cards, vessel_risk_changes, entity_linkage_changes, operational_context, news_rows, method_note, and coverage_gaps. "
-                        "Keep every section concise. Preserve supplied support_ids, article_ids, and evidence_ids. Omit items that lack support. Do not populate platform_signals.\n\n"
+                        "Produce a simple most-important-news brief from this deterministic fact pack. Use external news items for news and key developments. "
+                        "Do not mention internal system records, platform context, database counts, risk records, relationship records, port events, evidence counts, or vessel counts. "
+                        "When selected_news or key_developments include matched_to.type='vessel', include that exact vessel name in the key development label unless the label already names it. "
+                        "Do not use the word grouped. Do not create new facts.\n"
+                        "Limits: headline <= 140 characters, executive_summary <= 120 words, up to 3 key_developments, each key development label <= 24 words. "
+                        "method_note must be: Source-linked facts only. No legal, compliance, trading, or operational recommendations.\n\n"
                         f"FACT_PACKET:\n{json.dumps(fact_packet, ensure_ascii=True, default=str)}"
                     ),
                 }
@@ -106,63 +109,22 @@ class AnthropicNewsProvider:
         return 3.00, 15.00
 
     def _overview_tool(self) -> dict[str, Any]:
-        severity_levels = ["critical", "medium", "low", "none"]
         return {
             "name": "create_singapore_brief",
-            "description": "Create an evidence-backed SEAM AI Weekly Brief from stored fact-pack data.",
+            "description": "Phrase the concise narrative fields for an evidence-backed SEAM AI Weekly Brief.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "headline": {"type": "string"},
                     "executive_summary": {"type": "string"},
-                    "metric_cards": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "label": {"type": "string"},
-                                "value": {"type": "string"},
-                                "delta": {"type": ["string", "null"]},
-                                "tone": {"type": "string", "enum": ["neutral", "up", "down", "warning"]},
-                                "support_ids": {"type": "array", "items": {"type": "string"}},
-                                "article_ids": {"type": "array", "items": {"type": "integer"}},
-                                "evidence_ids": {"type": "array", "items": {"type": "integer"}},
-                            },
-                            "required": ["label", "value", "support_ids", "article_ids", "evidence_ids"],
-                            "additionalProperties": False,
-                        },
-                    },
-                    "vessel_risk_changes": {"type": "array", "items": self._supported_item_schema({"vessel_id": {"type": ["integer", "null"]}, "vessel_name": {"type": "string"}, "change": {"type": "string"}, "severity": {"type": "string", "enum": severity_levels}, "summary": {"type": "string"}}, ["vessel_name", "change", "severity", "summary"])},
-                    "entity_linkage_changes": {"type": "array", "items": self._supported_item_schema({"entity_id": {"type": ["integer", "null"]}, "entity_name": {"type": "string"}, "change": {"type": "string"}, "relationship_type": {"type": ["string", "null"]}, "summary": {"type": "string"}}, ["entity_name", "change", "summary"])},
-                    "operational_context": {"type": "array", "items": self._supported_item_schema({"title": {"type": "string"}, "summary": {"type": "string"}, "signal_type": {"type": "string"}, "severity": {"type": "string", "enum": severity_levels}}, ["title", "summary", "signal_type", "severity"])},
-                    "news_rows": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "title": {"type": "string"},
-                                "source": {"type": ["string", "null"]},
-                                "summary": {"type": "string"},
-                                "source_quality": {"type": ["string", "null"]},
-                                "support_ids": {"type": "array", "items": {"type": "string"}},
-                                "article_ids": {"type": "array", "items": {"type": "integer"}},
-                                "evidence_ids": {"type": "array", "items": {"type": "integer"}},
-                            },
-                            "required": ["title", "summary", "support_ids", "article_ids", "evidence_ids"],
-                            "additionalProperties": False,
-                        },
-                    },
+                    "key_developments": {"type": "array", "items": self._key_development_schema(), "maxItems": 3},
                     "method_note": {"type": "string"},
                     "coverage_gaps": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
                 },
                 "required": [
                     "headline",
                     "executive_summary",
-                    "metric_cards",
-                    "vessel_risk_changes",
-                    "entity_linkage_changes",
-                    "operational_context",
-                    "news_rows",
+                    "key_developments",
                     "method_note",
                     "coverage_gaps",
                 ],
@@ -183,6 +145,19 @@ class AnthropicNewsProvider:
             "required": [*required, "support_ids", "article_ids", "evidence_ids"],
             "additionalProperties": False,
         }
+
+    def _key_development_schema(self) -> dict[str, Any]:
+        return self._supported_item_schema(
+            {
+                "id": {"type": "string"},
+                "label": {"type": "string"},
+                "facts": {"type": "array", "items": {"type": "string"}},
+                "source_type": {"type": "string", "enum": ["official", "trade", "database", "social_unverified", "mixed"]},
+                "confidence": {"type": "string", "enum": ["source_linked", "system_recorded"]},
+                "why_shown": {"type": "string"},
+            },
+            ["id", "label", "facts", "source_type", "confidence", "why_shown"],
+        )
 
     def _extract_tool_input(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         for block in payload.get("content", []):

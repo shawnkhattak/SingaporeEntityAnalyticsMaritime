@@ -16,7 +16,8 @@ import type {
 } from "./types";
 
 // AI Weekly Brief — see backend/app/services/ai/schemas.py.
-export type AiRiskLevel = "critical" | "medium" | "low" | "none";
+export type AiRiskLevel = "critical" | "high" | "medium" | "low" | "none";
+export type SourceClass = "official" | "trade" | "social_unverified" | "general_news" | "unknown";
 
 export type BriefCitation = {
   id: number;
@@ -37,6 +38,16 @@ export type BriefMetricCard = BriefSupportedItem & {
   value: string;
   delta: string | null;
   tone: "neutral" | "up" | "down" | "warning";
+  why_shown: string;
+};
+
+export type BriefKeyDevelopment = BriefSupportedItem & {
+  id: string;
+  label: string;
+  facts: string[];
+  source_type: "official" | "trade" | "database" | "social_unverified" | "mixed";
+  confidence: "source_linked" | "system_recorded";
+  why_shown: string;
 };
 
 export type BriefRiskChange = BriefSupportedItem & {
@@ -45,6 +56,27 @@ export type BriefRiskChange = BriefSupportedItem & {
   change: string;
   severity: AiRiskLevel;
   summary: string;
+  why_shown: string;
+};
+
+export type BriefRiskExample = {
+  vessel_name: string;
+  imo: string | null;
+  fields: string[];
+  source_label: string | null;
+  evidence_id: number | null;
+};
+
+export type BriefGroupedRiskChange = BriefSupportedItem & {
+  group_type: "sanctions" | "watchlist" | "detention" | "high_risk_flag_country" | "identity_conflict" | "adverse_news" | "other";
+  severity: AiRiskLevel | null;
+  status: "active" | "open" | "resolved" | null;
+  count: number;
+  vessel_count: number;
+  summary: string;
+  examples: BriefRiskExample[];
+  hidden_example_count: number;
+  why_shown: string;
 };
 
 export type BriefEntityLinkageChange = BriefSupportedItem & {
@@ -53,6 +85,26 @@ export type BriefEntityLinkageChange = BriefSupportedItem & {
   change: string;
   relationship_type: string | null;
   summary: string;
+  why_shown: string;
+};
+
+export type BriefEntityExample = {
+  vessel_name: string | null;
+  role: string;
+  evidence_id: number | null;
+};
+
+export type BriefGroupedEntityChange = BriefSupportedItem & {
+  entity_name: string;
+  country_code: string | null;
+  roles: string[];
+  vessel_count: number;
+  relationship_count: number;
+  confidence: string | null;
+  source_summary: string | null;
+  examples: BriefEntityExample[];
+  hidden_example_count: number;
+  why_shown: string;
 };
 
 export type BriefOperationalItem = BriefSupportedItem & {
@@ -60,13 +112,46 @@ export type BriefOperationalItem = BriefSupportedItem & {
   summary: string;
   signal_type: "ais_gap" | "flag_change" | "ownership_change" | "voyage_port_irregularity" | "port_activity" | "platform_delta" | "method_gap";
   severity: AiRiskLevel;
+  why_shown: string;
+};
+
+export type BriefOperationalExample = {
+  vessel_name: string;
+  detail: string;
+  timestamp: string | null;
+  source: string | null;
+  evidence_id: number | null;
+};
+
+export type BriefGroupedOperationalContext = BriefSupportedItem & {
+  group_type: "ais_freshness" | "port_activity" | "arrival_departure" | "movement" | "other";
+  count: number;
+  vessel_count: number;
+  summary: string;
+  examples: BriefOperationalExample[];
+  hidden_example_count: number;
+  why_shown: string;
 };
 
 export type BriefNewsRow = BriefSupportedItem & {
   title: string;
   source: string | null;
+  published_at: string | null;
+  url: string | null;
   summary: string;
   source_quality: string | null;
+  source_class: SourceClass;
+  matched_to: { type: "vessel" | "entity" | "topic"; label: string } | null;
+  why_shown: string;
+};
+
+export type BriefMetadata = {
+  evidence_record_count: number | null;
+  active_positioned_vessel_count: number | null;
+  candidate_article_count: number | null;
+  source_health: { source: string; status: string; lastChecked?: string }[];
+  gaps: string[];
+  method: string[];
 };
 
 export type BriefPlatformSignals = {
@@ -79,12 +164,17 @@ export type BriefPlatformSignals = {
 export type AiNewsOverviewPayload = {
   headline: string;
   executive_summary: string;
+  key_developments: BriefKeyDevelopment[];
   metric_cards: BriefMetricCard[];
   vessel_risk_changes: BriefRiskChange[];
   entity_linkage_changes: BriefEntityLinkageChange[];
   operational_context: BriefOperationalItem[];
+  grouped_risk_changes: BriefGroupedRiskChange[];
+  grouped_entity_changes: BriefGroupedEntityChange[];
+  grouped_operational_context: BriefGroupedOperationalContext[];
   news_rows: BriefNewsRow[];
   method_note: string;
+  metadata: BriefMetadata;
   platform_signals: BriefPlatformSignals;
   coverage_gaps: string[];
 };

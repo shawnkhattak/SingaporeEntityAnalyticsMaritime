@@ -4337,8 +4337,59 @@ button.ai-citation-chip:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
+.ai-key-devs {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(124,58,237,.14);
+  border-radius: 8px;
+  background: rgba(255,255,255,.76);
+}
+.ai-key-devs ol {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+.ai-key-devs li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  color: var(--navy-800);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.ai-key-devs li > span:first-child {
+  min-width: 0;
+}
+.ai-key-devs li .ai-source-buttons {
+  margin-top: -2px;
+}
+.ai-key-devs li .ai-citation-button {
+  vertical-align: middle;
+}
 .ai-weekly-section {
   min-width: 0;
+  margin-bottom: 10px;
+}
+.ai-weekly-details {
+  border: 0;
+}
+.ai-weekly-details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.ai-weekly-details > summary::-webkit-details-marker { display: none; }
+.ai-weekly-details > summary .ai-brief-section-head::after {
+  content: "Show";
+  margin-left: 6px;
+  color: var(--slate-400);
+  font-size: 9px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ai-weekly-details[open] > summary .ai-brief-section-head::after {
+  content: "Hide";
 }
 .ai-weekly-list {
   margin: 0;
@@ -4351,11 +4402,11 @@ button.ai-citation-chip:hover {
 .ai-weekly-row {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 22px;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: start;
   min-height: 58px;
-  padding: 7px 7px 7px 11px;
+  padding: 7px 8px 7px 11px;
   border: 1px solid var(--gray-200);
   border-radius: 8px;
   background: var(--white);
@@ -4373,10 +4424,24 @@ button.ai-citation-chip:hover {
 .ai-weekly-row.severity-low::before { background: var(--risk-low); }
 .ai-weekly-row.severity-none::before { background: var(--slate-300, #cbd5e1); }
 .ai-weekly-row strong,
-.ai-weekly-row span,
+.ai-weekly-row > div > span,
 .ai-weekly-row p {
   display: block;
   min-width: 0;
+}
+.ai-row-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(245,243,255,.86);
+  color: var(--ai-purple-700);
+  border: 1px solid rgba(124,58,237,.14);
+}
+.ai-row-icon svg {
+  width: 12px;
+  height: 12px;
 }
 .ai-weekly-row strong {
   color: var(--navy-900);
@@ -4384,7 +4449,7 @@ button.ai-citation-chip:hover {
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
-.ai-weekly-row span {
+.ai-weekly-row > div > span {
   margin-top: 1px;
   color: var(--ai-purple-700);
   font-size: 10.5px;
@@ -4401,9 +4466,62 @@ button.ai-citation-chip:hover {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.ai-example-list {
+  margin-top: 5px;
+}
+.ai-example-list summary {
+  color: var(--ai-purple-700);
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.ai-example-list ul {
+  margin: 4px 0 0;
+  padding-left: 14px;
+  color: var(--slate-600);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+.ai-why {
+  display: block;
+  margin-top: 4px;
+  color: var(--slate-400);
+  font-size: 10px;
+  line-height: 1.3;
+}
+.ai-source-class {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 5px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid rgba(124,58,237,.16);
+  background: rgba(245,243,255,.8);
+  color: var(--ai-purple-700);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.ai-source-class.source-official {
+  color: var(--health-ok);
+  background: rgba(46,125,50,.08);
+  border-color: rgba(46,125,50,.18);
+}
+.ai-source-class.source-trade {
+  color: var(--ocean-700, #255f91);
+  background: rgba(58,127,184,.08);
+  border-color: rgba(58,127,184,.18);
+}
+.ai-source-class.source-social_unverified {
+  color: #8a6500;
+  background: rgba(229,148,19,.1);
+  border-color: rgba(229,148,19,.18);
+}
 .ai-citation-button {
   display: inline-grid;
   place-items: center;
+  flex: 0 0 auto;
   width: 22px;
   height: 22px;
   padding: 0;
@@ -4416,6 +4534,13 @@ button.ai-citation-chip:hover {
 }
 .ai-citation-button:hover {
   background: var(--ai-purple-100);
+}
+.ai-source-buttons {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
 }
 .ai-platform-inline {
   display: grid;
@@ -4432,11 +4557,30 @@ button.ai-citation-chip:hover {
   padding-top: 7px;
   border-top: 1px dashed rgba(124,58,237,.18);
 }
+.ai-method-row details > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.ai-method-row details > summary::-webkit-details-marker { display: none; }
 .ai-method-row p {
   margin: 0 0 4px;
   color: var(--slate-500);
   font-size: 10.5px;
   line-height: 1.4;
+}
+.ai-metadata-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+.ai-metadata-strip span {
+  padding: 2px 6px;
+  border: 1px solid rgba(196,181,253,.28);
+  border-radius: 999px;
+  background: rgba(255,255,255,.7);
+  color: var(--slate-500);
+  font-size: 10px;
 }
 
 /* Gaps — one inline italic line, truncated with a tooltip for the full text */
