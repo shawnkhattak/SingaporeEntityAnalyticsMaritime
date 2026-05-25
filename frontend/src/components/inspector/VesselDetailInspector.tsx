@@ -22,7 +22,7 @@ import { closeInspectorRoute, navigateBack, navigateTo, useRoute } from "../../h
 import { requestMapCenter } from "../../hooks/useMapCenter";
 import { countryName, displaySeverity, flagEmoji, riskLabel, vesselTypeLabel } from "../../labels";
 import { recordRecentVessel, useApp, useJobRunner, useSelection, useToasts } from "../../state/AppState";
-import type { RiskFeedItem, RiskFlag, VesselDetail, VesselEvent, VesselLinkedEntity, VesselObservation, VesselPosition, VesselSummary } from "../../types";
+import type { IdentityConflictDetail, RiskFeedItem, RiskFlag, VesselDetail, VesselEvent, VesselLinkedEntity, VesselObservation, VesselPosition, VesselSummary } from "../../types";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { ErrorState } from "../primitives/ErrorState";
@@ -60,7 +60,8 @@ export function VesselDetailInspector({ id }: { id: number }) {
     setError(null);
     Promise.all([getVessel(id), getVesselObservations(id), getVesselEvents(id), getVesselRiskFlags(id)])
       .then(([detail, observations, events, rawRiskItems]) => {
-        const riskItems = normalizeRiskItems(rawRiskItems, detail.vessel.name, id);
+        const observationConflicts = identityConflictsFromObservations(observations);
+        const riskItems = normalizeRiskItems(rawRiskItems, detail.vessel.name, id, observationConflicts);
         const risk = riskItems.map((item) => item.flag);
         const loaded = { detail, observations, events, risk, riskItems };
         setData(loaded);
@@ -263,18 +264,99 @@ export function VesselDetailInspector({ id }: { id: number }) {
   );
 }
 
-function normalizeRiskItems(items: Array<RiskFeedItem | RiskFlag>, subject: string, vesselId: number): RiskFeedItem[] {
+function normalizeRiskItems(items: Array<RiskFeedItem | RiskFlag>, subject: string, vesselId: number, observationConflicts: IdentityConflictDetail[]): RiskFeedItem[] {
   return items.map((item) => {
-    if ("flag" in item) return item;
+    if ("flag" in item) {
+      return item.flag.flag_type === "conflicting_identity" && (!item.conflict_details || item.conflict_details.length === 0)
+        ? { ...item, conflict_details: observationConflicts }
+        : item;
+    }
     return {
       flag: item,
       subject,
       vessel_id: vesselId,
       entity_id: null,
       evidence_payload: null,
-      conflict_details: null,
+      conflict_details: item.flag_type === "conflicting_identity" ? observationConflicts : null,
     };
   });
+}
+
+function identityConflictsFromObservations(observations: VesselObservation[]): IdentityConflictDetail[] {
+  const fields: Record<string, { label: string; values: Map<string, string> }> = {
+    name: { label: "Name", values: new Map() },
+    imo: { label: "IMO", values: new Map() },
+    mmsi: { label: "MMSI", values: new Map() },
+    flag: { label: "Flag", values: new Map() },
+    call_sign: { label: "Callsign", values: new Map() },
+    owner: { label: "Owner", values: new Map() },
+    operator: { label: "Operator", values: new Map() },
+    vessel_type: { label: "Vessel type", values: new Map() },
+    dimensions: { label: "Dimensions", values: new Map() },
+  };
+
+  for (const obs of observations) {
+    const payload = obs.raw_payload ?? {};
+    const particulars = objectValue(payload.vesselParticulars) ?? objectValue(payload.vessel_particulars) ?? objectValue(payload.particulars) ?? {};
+    addValue(fields.name, firstText(payload, particulars, "vesselName", "name", "vessel_name"));
+    addValue(fields.imo, cleanIdentity(firstText(payload, particulars, "imoNumber", "imo", "imo_number"), true));
+    addValue(fields.mmsi, cleanIdentity(firstText(payload, particulars, "mmsiNumber", "mmsi", "mmsi_number"), true));
+    addValue(fields.flag, firstText(payload, particulars, "flag", "flagCountryCode", "flag_country_code"));
+    addValue(fields.call_sign, firstText(payload, particulars, "callSign", "call_sign", "callsign"));
+    addValue(fields.owner, firstText(payload, particulars, "registeredOwner", "registeredOwnership", "registered_owner", "owner"));
+    addValue(fields.operator, firstText(payload, particulars, "operator", "shipOperator", "ship_operator"));
+    addValue(fields.vessel_type, firstText(payload, particulars, "vesselType", "vessel_type", "vesselTypeCode", "vessel_type_code", "shipType", "ship_type"));
+    const dimensions = [
+      cleanIdentity(firstText(payload, particulars, "vesselLength", "length", "loa", "dimA"), true),
+      cleanIdentity(firstText(payload, particulars, "vesselBreadth", "breadth", "beam", "dimB"), true),
+      cleanIdentity(firstText(payload, particulars, "vesselDepth", "depth"), true),
+    ].filter(Boolean).join(" x ");
+    if (dimensions.includes(" x ")) addValue(fields.dimensions, dimensions);
+  }
+
+  return Object.entries(fields)
+    .map(([field, item]) => ({ field, label: item.label, values: Array.from(item.values.values()).slice(0, 6) }))
+    .filter((item) => item.values.length > 1);
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function firstText(primary: Record<string, unknown>, secondary: Record<string, unknown>, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const raw = primary[key] ?? secondary[key];
+    const cleaned = cleanIdentity(raw);
+    if (cleaned) return cleaned;
+  }
+  return null;
+}
+
+function addValue(target: { values: Map<string, string> }, value: string | null) {
+  if (!value) return;
+  target.values.set(value.toLowerCase(), value);
+}
+
+function cleanIdentity(value: unknown, numeric = false): string | null {
+  if (value == null) return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const cleaned = cleanIdentity(item, numeric);
+      if (cleaned) return cleaned;
+    }
+    return null;
+  }
+  let text = String(value).trim();
+  if (!text) return null;
+  const upper = text.toUpperCase();
+  if (["0", "00", "0000000", "000000000", "UNKNOWN", "UNK", "N/A", "NA", "NULL", "NONE", "-"].includes(upper)) return null;
+  if (numeric) {
+    text = text.toUpperCase().replace(/^IMO\s*/, "");
+    if (text.endsWith(".0")) text = text.slice(0, -2);
+    const digits = text.replace(/\D/g, "");
+    return digits || null;
+  }
+  return text.replace(/\s+/g, " ");
 }
 
 function LinkedEntitiesCard({ entities }: { entities: VesselLinkedEntity[] }) {
