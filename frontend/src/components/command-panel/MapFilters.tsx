@@ -16,6 +16,7 @@ const SEVERITY_CHIPS: { label: string; values: RiskSeverity[]; tone: "crit" | "m
 function isDefault(filters: ReturnType<typeof useFilters>["filters"]) {
   return (
     filters.riskSeverities.size === 0 &&
+    filters.riskTypes.size === 0 &&
     filters.vesselTypes.size === 0 &&
     filters.flagStates.size === 0 &&
     !filters.hasSanctions &&

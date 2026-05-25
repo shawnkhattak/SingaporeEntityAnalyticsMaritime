@@ -1,13 +1,15 @@
-import { Building2, FileText, Search, Ship } from "lucide-react";
+import { Building2, FileText, Filter, Search, Ship } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { searchEntities, searchVessels } from "../../api";
 import { useDebounce } from "../../hooks/useDebounce";
 import { navigateTo } from "../../hooks/useRoute";
-import { useSelection } from "../../state/AppState";
+import { useApp, useFilters, useSelection } from "../../state/AppState";
+import { buildSearchFilterActions, localVesselSearchHits, type SearchFilterAction, type SearchVesselHit } from "../../searchFilters";
 import type { Entity, VesselSearchResult } from "../../types";
 
 type Result =
-  | { kind: "vessel"; item: VesselSearchResult }
+  | { kind: "filter"; item: SearchFilterAction }
+  | { kind: "vessel"; item: SearchVesselHit }
   | { kind: "entity"; item: Entity }
   | { kind: "evidence"; id: number };
 
@@ -15,6 +17,7 @@ type SearchFilter = "all" | Result["kind"];
 
 const SEARCH_FILTERS: { value: SearchFilter; label: string }[] = [
   { value: "all", label: "All" },
+  { value: "filter", label: "Filters" },
   { value: "vessel", label: "Vessels" },
   { value: "entity", label: "Entities" },
   { value: "evidence", label: "Evidence" },
@@ -22,6 +25,8 @@ const SEARCH_FILTERS: { value: SearchFilter; label: string }[] = [
 
 export function GlobalSearch({ compact }: { compact?: boolean }) {
   const { select } = useSelection();
+  const { state } = useApp();
+  const { filters, setFilters } = useFilters();
   const [query, setQuery] = useState("");
   const debounced = useDebounce(query, 200);
   const [vessels, setVessels] = useState<VesselSearchResult[]>([]);
@@ -70,11 +75,23 @@ export function GlobalSearch({ compact }: { compact?: boolean }) {
 
   const results = useMemo<Result[]>(() => {
     const out: Result[] = [];
+    if (filter === "all" || filter === "filter") {
+      buildSearchFilterActions(debounced, state.vessels, state.riskByVessel).forEach((item) => out.push({ kind: "filter", item }));
+    }
     if ((filter === "all" || filter === "evidence") && evidenceId !== null) out.push({ kind: "evidence", id: evidenceId });
-    if (filter === "all" || filter === "vessel") vessels.forEach((v) => out.push({ kind: "vessel", item: v }));
+    if (filter === "all" || filter === "vessel") {
+      const seen = new Set<number>();
+      vessels.forEach((v) => {
+        seen.add(v.id);
+        out.push({ kind: "vessel", item: v });
+      });
+      localVesselSearchHits(debounced, state.vessels, state.riskByVessel).forEach((v) => {
+        if (!seen.has(v.id)) out.push({ kind: "vessel", item: v });
+      });
+    }
     if (filter === "all" || filter === "entity") entities.forEach((e) => out.push({ kind: "entity", item: e }));
     return out;
-  }, [vessels, entities, evidenceId, filter]);
+  }, [debounced, vessels, state.vessels, state.riskByVessel, entities, evidenceId, filter]);
 
   if (compact) {
     return (
@@ -109,7 +126,10 @@ export function GlobalSearch({ compact }: { compact?: boolean }) {
             const first = results[0];
             if (first) {
               e.preventDefault();
-              if (first.kind === "vessel") {
+              if (first.kind === "filter") {
+                setFilters(first.item.apply(filters));
+                navigateTo("/map");
+              } else if (first.kind === "vessel") {
                 select({ kind: "vessel", id: first.item.id });
                 navigateTo(`/vessels/${first.item.id}`);
               } else if (first.kind === "entity") {
@@ -170,15 +190,19 @@ export function GlobalSearch({ compact }: { compact?: boolean }) {
             </button>
           )}
           {results.map((r, idx) => {
-            const Icon = r.kind === "vessel" ? Ship : r.kind === "entity" ? Building2 : FileText;
+            const Icon = r.kind === "filter" ? Filter : r.kind === "vessel" ? Ship : r.kind === "entity" ? Building2 : FileText;
             const label =
-              r.kind === "vessel"
+              r.kind === "filter"
+                ? r.item.label
+                : r.kind === "vessel"
                 ? r.item.name
                 : r.kind === "entity"
                 ? r.item.name
                 : `Evidence #${r.id}`;
             const hint =
-              r.kind === "vessel"
+              r.kind === "filter"
+                ? r.item.meta
+                : r.kind === "vessel"
                 ? r.item.imo ? `IMO ${r.item.imo}` : r.item.mmsi ? `MMSI ${r.item.mmsi}` : ""
                 : r.kind === "entity"
                 ? r.item.entity_type
@@ -186,7 +210,10 @@ export function GlobalSearch({ compact }: { compact?: boolean }) {
             const onClick = () => {
               // Dispatch selection BEFORE the route push so the map +
               // inspector see the new subject on the same render cycle.
-              if (r.kind === "vessel") {
+              if (r.kind === "filter") {
+                setFilters(r.item.apply(filters));
+                navigateTo("/map");
+              } else if (r.kind === "vessel") {
                 select({ kind: "vessel", id: r.item.id });
                 navigateTo(`/vessels/${r.item.id}`);
               } else if (r.kind === "entity") {

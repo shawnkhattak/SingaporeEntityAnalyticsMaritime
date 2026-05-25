@@ -211,6 +211,7 @@ export type TimeWindow = "live" | "1h" | "6h" | "24h" | "7d";
 
 export type MapFilters = {
   riskSeverities: Set<RiskSeverity>;
+  riskTypes: Set<string>;
   vesselTypes: Set<string>;
   flagStates: Set<string>;
   hasSanctions: boolean;
@@ -222,6 +223,7 @@ export type MapFilters = {
 
 export const DEFAULT_FILTERS: MapFilters = {
   riskSeverities: new Set<RiskSeverity>(),
+  riskTypes: new Set<string>(),
   vesselTypes: new Set<string>(),
   flagStates: new Set<string>(),
   hasSanctions: false,

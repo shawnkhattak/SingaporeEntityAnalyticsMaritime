@@ -87,7 +87,7 @@ function readNum(key: string, fallback: number): number {
 }
 
 const initialState: AppState = {
-  filters: DEFAULT_FILTERS,
+  filters: makeDefaultFilters(),
   selected: null,
   isPanelCollapsed: readBool("seam:panel-collapsed", false),
   panelManuallyExpanded: false,
@@ -116,7 +116,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "SET_FILTERS":
       return { ...state, filters: action.filters };
     case "RESET_FILTERS":
-      return { ...state, filters: { ...DEFAULT_FILTERS, enabledGeoLayers: new Set(DEFAULT_FILTERS.enabledGeoLayers) } };
+      return { ...state, filters: makeDefaultFilters() };
     case "SELECT_SUBJECT":
       return { ...state, selected: action.subject };
     case "CLEAR_SELECTION":
@@ -218,6 +218,17 @@ function reducer(state: AppState, action: Action): AppState {
     default:
       return state;
   }
+}
+
+function makeDefaultFilters(): MapFilters {
+  return {
+    ...DEFAULT_FILTERS,
+    riskSeverities: new Set(DEFAULT_FILTERS.riskSeverities),
+    riskTypes: new Set(DEFAULT_FILTERS.riskTypes),
+    vesselTypes: new Set(DEFAULT_FILTERS.vesselTypes),
+    flagStates: new Set(DEFAULT_FILTERS.flagStates),
+    enabledGeoLayers: new Set(DEFAULT_FILTERS.enabledGeoLayers),
+  };
 }
 
 type AppContextValue = {

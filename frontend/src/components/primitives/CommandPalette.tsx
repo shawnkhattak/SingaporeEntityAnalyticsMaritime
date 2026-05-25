@@ -19,7 +19,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getEvidence, searchEntities, searchVessels, type EvidenceDetail } from "../../api";
 import { useDebounce } from "../../hooks/useDebounce";
 import { navigateTo } from "../../hooks/useRoute";
-import { readRecent, useApp, type RecentEntry } from "../../state/AppState";
+import { buildSearchFilterActions, localVesselSearchHits, type SearchVesselHit } from "../../searchFilters";
+import { readRecent, useApp, useFilters, type RecentEntry } from "../../state/AppState";
 import { countryName, flagEmoji, riskLabel, vesselTypeLabel } from "../../labels";
 import type { Entity, RiskFlag, VesselSearchResult } from "../../types";
 
@@ -30,6 +31,7 @@ type PaletteProps = {
 
 type SectionKey =
   | "go"
+  | "filters"
   | "vessels"
   | "entities"
   | "evidence"
@@ -53,6 +55,7 @@ type PaletteFilter = "all" | SectionKey;
 
 const PALETTE_FILTERS: { value: PaletteFilter; label: string }[] = [
   { value: "all", label: "All" },
+  { value: "filters", label: "Filters" },
   { value: "vessels", label: "Vessels" },
   { value: "entities", label: "Entities" },
   { value: "risk", label: "Risk" },
@@ -83,6 +86,7 @@ export function CommandPalette({ open, onClose }: PaletteProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const { state } = useApp();
+  const { filters, setFilters } = useFilters();
 
   // Reset on open
   useEffect(() => {
@@ -182,6 +186,20 @@ export function CommandPalette({ open, onClose }: PaletteProps) {
     const q = query.trim().toLowerCase();
     const ss: Section[] = [];
 
+    const filterRows = buildSearchFilterActions(query, state.vessels, state.riskByVessel).map<ResultRow>((action) => ({
+      key: action.key,
+      section: "filters",
+      primary: action.label,
+      meta: <span className="t-faded" style={{ fontSize: 11 }}>{action.meta}</span>,
+      icon: <Filter size={14} />,
+      onSelect: () => {
+        setFilters(action.apply(filters));
+        navigateTo("/map");
+        onClose();
+      },
+    }));
+    if (filterRows.length > 0) ss.push({ key: "filters", label: "Search filters", rows: filterRows });
+
     // Go to (always shown; filtered when query is non-empty)
     const goRows = GO_TO_ITEMS
       .filter((g) => !q || g.label.toLowerCase().includes(q) || g.path.includes(q))
@@ -196,7 +214,16 @@ export function CommandPalette({ open, onClose }: PaletteProps) {
     if (goRows.length > 0) ss.push({ key: "go", label: "Go to", rows: goRows.slice(0, 5) });
 
     // Vessels
-    const vRows = vessels.slice(0, 5).map<ResultRow>((v) => ({
+    const vesselHits: SearchVesselHit[] = [];
+    const seenVessels = new Set<number>();
+    vessels.forEach((v) => {
+      seenVessels.add(v.id);
+      vesselHits.push(v);
+    });
+    localVesselSearchHits(query, state.vessels, state.riskByVessel).forEach((v) => {
+      if (!seenVessels.has(v.id)) vesselHits.push(v);
+    });
+    const vRows = vesselHits.slice(0, 7).map<ResultRow>((v) => ({
       key: `vessel-${v.id}`,
       section: "vessels",
       primary: v.name,
@@ -263,7 +290,7 @@ export function CommandPalette({ open, onClose }: PaletteProps) {
     }
 
     return filter === "all" ? ss : ss.filter((section) => section.key === filter);
-  }, [query, vessels, entities, evidence, localResults, onClose, filter]);
+  }, [query, vessels, entities, evidence, localResults, onClose, filter, state.vessels, state.riskByVessel, setFilters, filters]);
 
   // Flatten for keyboard navigation
   const flatRows = useMemo(() => sections.flatMap((s) => s.rows), [sections]);

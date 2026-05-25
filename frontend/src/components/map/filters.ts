@@ -26,6 +26,7 @@ export function matchesFilters(
   const flags = riskByVessel[v.vessel_id] ?? v.risk_flags ?? [];
   const highest = highestSeverity(flags);
   if (filters.riskSeverities.size && !filters.riskSeverities.has(highest)) return false;
+  if (filters.riskTypes.size && !flags.some((f) => f.status !== "resolved" && filters.riskTypes.has(f.flag_type))) return false;
   if (filters.vesselTypes.size && (!v.vessel_type_code || !filters.vesselTypes.has(v.vessel_type_code))) return false;
   if (filters.flagStates.size && (!v.flag_country_code || !filters.flagStates.has(v.flag_country_code))) return false;
   if (filters.hasSanctions && !flags.some((f) => f.flag_type === "sanctions")) return false;
