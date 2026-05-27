@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">SEAM 🌊</h1>
-<p align="center"><strong>Singapore Entity Analytics — Maritime Intelligence 🚢</strong></p>
+<p align="center"><strong>Singapore Entity Analytics Maritime 🚢</strong></p>
 
 <p align="center">
   <em>A live maritime intelligence workspace for tracking vessels, understanding ownership networks, monitoring sanctions and risk, and preserving the evidence behind every claim.</em>
