@@ -52,6 +52,48 @@ const CAPABILITIES = [
   },
 ];
 
+const STORY_BEATS = [
+  {
+    label: "Geography",
+    title: "Houston, Central Asia, and trade routes",
+    body:
+      "I grew up in Houston, an energy city by identity, but spent formative years living and traveling through Central Asia, particularly Uzbekistan. Seeing how geography, infrastructure, and landlocked supply chains shape whole economies stayed with me.",
+  },
+  {
+    label: "Maritime logistics",
+    title: "Turning an old instinct into a field of study",
+    body:
+      "At the University of Houston, studying Supply Chain and Logistics on the Maritime Logistics pathway sharpened those early instincts into a more practical interest in ports, vessels, energy flows, and trade systems.",
+  },
+  {
+    label: "Market analysis",
+    title: "AIS, crude, LNG, and sanctions exposure",
+    body:
+      "During my Hanwha Shipping internship as an Oil and Gas Market Analyst, I worked with AIS data, tracked crude oil and LNG flows, researched sanctions exposure, and mapped geopolitical risk onto market movement.",
+  },
+  {
+    label: "The itch",
+    title: "Maritime intelligence was too fragmented",
+    body:
+      "OFAC lists were in one place, AIS positions somewhere else, ownership records buried in registries, and news in another tab. SEAM started as a way to pull those threads into one working intelligence workspace.",
+  },
+];
+
+const BUILD_BEATS = [
+  "First version: built quickly, then thrown out",
+  "Second version: rebuilt around real analyst workflow",
+  "Solo build: finished while moving houses",
+  "Deadline: complete before starting at EnerMech",
+];
+
+const DATA_LAYERS = [
+  "AIS positions",
+  "Ownership networks",
+  "Sanctions screening",
+  "Port activity",
+  "Maritime news",
+];
+
 export function AboutPage() {
   return (
     <div className="about-page">
@@ -88,47 +130,61 @@ export function AboutPage() {
         </aside>
       </section>
 
-      <section className="about-story panel-solid">
-        <div className="t-caption">Why I built this</div>
-        <h2>From trade routes to maritime intelligence</h2>
-        <p>
-          I grew up in Houston, an energy city by identity, but I spent formative years living and traveling through
-          Central Asia, particularly Uzbekistan. Watching how geography shapes trade routes, how landlocked countries
-          navigate global supply chains, and how infrastructure either connects or isolates whole economies planted
-          something in me that I have never really stopped thinking about.
-        </p>
-        <p>
-          When I started studying Supply Chain and Logistics at the University of Houston and chose the Maritime
-          Logistics pathway, those early instincts started to sharpen. Then, during my internship at Hanwha Shipping as
-          an Oil and Gas Market Analyst, I spent months working with AIS vessel data, tracking crude oil and LNG flows,
-          researching sanctions exposure, and mapping geopolitical risk onto live market movements.
-        </p>
-        <p>
-          I got genuinely hooked, not just on the analysis, but on the problem of how fragmented maritime data actually
-          is. OFAC lists over here. AIS positions somewhere else. Ownership networks buried in ship registries. News in
-          a different tab.
-        </p>
-        <p>
-          SEAM started as a way to scratch that itch. I wanted to see if I could pull those threads together - sanctions
-          data, vessel positions, ownership structures, port activity, and live news - and build something that felt like
-          a working intelligence workspace, not just a dashboard exercise.
-        </p>
-        <p>
-          The honest build story is this: I finished a first version after about two weeks, looked at it, and threw it
-          out. It was not something I was proud of, so I went back to the drawing board. I spent time reflecting on what
-          I actually wanted the tool to do, made a list of real improvements, and started over.
-        </p>
-        <p>
-          I built the whole thing solo, in the middle of moving houses, with a personal deadline to finish before my
-          internship at EnerMech started this summer. That constraint ended up being useful - it forced me to make
-          decisions instead of endlessly refining. The version you are looking at is that second build, and it is the one
-          I am proud of.
-        </p>
-        <p>
-          At its core, this project lives at the intersection of two things I care about: the craft of data visualization
-          and analysis, and the world of maritime trade and energy markets. Building SEAM was genuinely fun. That is the
-          most honest thing I can say about why I did it.
-        </p>
+      <section className="about-story about-story-feature panel-solid">
+        <div className="about-story-layout">
+          <div className="about-story-copy">
+            <div className="t-caption">Why I built this</div>
+            <h2>From trade routes to maritime intelligence</h2>
+            <p className="about-lead">
+              SEAM came from a long-running curiosity about how geography, energy, infrastructure, and risk shape the
+              way goods move through the world.
+            </p>
+            <div className="about-beat-list">
+              {STORY_BEATS.map((beat) => (
+                <article key={beat.label} className="about-beat">
+                  <span>{beat.label}</span>
+                  <h3>{beat.title}</h3>
+                  <p>{beat.body}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+          <aside className="about-route-visual" aria-label="Animated explanation of the project origin">
+            <div className="about-route-map">
+              <span className="route-node houston">Houston</span>
+              <span className="route-node asia">Central Asia</span>
+              <span className="route-node singapore">Singapore</span>
+              <span className="route-line line-one" />
+              <span className="route-line line-two" />
+              <span className="route-vessel"><Ship size={16} /></span>
+            </div>
+            <div className="about-build-track">
+              {BUILD_BEATS.map((item, index) => (
+                <div key={item} className="about-build-step" style={{ animationDelay: `${index * 120}ms` }}>
+                  <span>{index + 1}</span>
+                  <p>{item}</p>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+        <div className="about-reflection">
+          <p>
+            The honest build story is this: I finished a first version after about two weeks, looked at it, and threw it
+            out. It was not something I was proud of, so I went back to the drawing board, made a list of real
+            improvements, and started over.
+          </p>
+          <p>
+            I built the whole thing solo, in the middle of moving houses, with a personal deadline to finish before my
+            internship at EnerMech started this summer. That constraint was useful: it forced decisions instead of
+            endless refinement.
+          </p>
+          <p>
+            At its core, this project lives at the intersection of two things I care about: the craft of data
+            visualization and analysis, and the world of maritime trade and energy markets. Building SEAM was genuinely
+            fun. That is the most honest thing I can say about why I did it.
+          </p>
+        </div>
       </section>
 
       <section className="about-capabilities" aria-label="SEAM capabilities">
@@ -145,16 +201,27 @@ export function AboutPage() {
       </section>
 
       <section className="about-story panel-solid">
-        <div className="t-caption">What SEAM does</div>
-        <h2>Four intelligence layers in one workspace</h2>
-        <p>
-          SEAM is focused on the port of Singapore, one of the world's busiest maritime chokepoints, and aggregates four
-          layers of intelligence into a single workspace. Live AIS vessel positions give you the operational picture.
-          Entity ownership networks let you trace who actually controls a vessel, not just who is listed on the manifest.
-          Sanctions screening runs against OFAC SDN, Canada SEMA, and OpenSanctions simultaneously, flagging vessels of
-          interest across registries. A live news feed, summarized by Claude AI, keeps the context current without
-          requiring you to tab away.
-        </p>
+        <div className="about-layer-layout">
+          <div>
+            <div className="t-caption">What SEAM does</div>
+            <h2>Four intelligence layers in one workspace</h2>
+            <p>
+              SEAM is focused on the port of Singapore, one of the world's busiest maritime chokepoints, and aggregates
+              multiple intelligence layers into a single workspace. Live AIS vessel positions give you the operational
+              picture. Entity ownership networks let you trace who actually controls a vessel, not just who is listed on
+              the manifest. Sanctions screening runs against OFAC SDN, Canada SEMA, and OpenSanctions simultaneously.
+              A live news feed, summarized by Claude AI, keeps context current without requiring you to tab away.
+            </p>
+          </div>
+          <div className="about-layer-visual" aria-label="Animated data integration diagram">
+            <div className="about-layer-core">SEAM</div>
+            {DATA_LAYERS.map((layer, index) => (
+              <span key={layer} className={`about-layer layer-${index + 1}`}>
+                {layer}
+              </span>
+            ))}
+          </div>
+        </div>
         <div className="about-stat-grid" aria-label="Dataset coverage">
           {STATS.map((stat) => (
             <div key={stat.label} className="about-stat">

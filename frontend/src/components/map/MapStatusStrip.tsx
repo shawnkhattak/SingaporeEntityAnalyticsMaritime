@@ -51,7 +51,7 @@ export function MapStatusStrip({ vesselCount, runJob }: MapStatusStripProps) {
       </span>
       {DEMO_MODE && (
         <span className="demo-snapshot-badge" title="Portfolio demo data is intentionally static.">
-          Demo snapshot — data captured June 2026. Live ingestion paused.
+          Demo snapshot — data captured June 2026.
         </span>
       )}
       {DEMO_MODE && (
