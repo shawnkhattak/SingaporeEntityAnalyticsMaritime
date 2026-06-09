@@ -94,6 +94,13 @@ const DATA_LAYERS = [
   "Maritime news",
 ];
 
+const FRAGMENTED_SOURCES = [
+  "OFAC lists",
+  "AIS positions",
+  "Ownership records",
+  "News tabs",
+];
+
 export function AboutPage() {
   return (
     <div className="about-page">
@@ -149,14 +156,33 @@ export function AboutPage() {
               ))}
             </div>
           </div>
-          <aside className="about-route-visual" aria-label="Animated explanation of the project origin">
-            <div className="about-route-map">
-              <span className="route-node houston">Houston</span>
-              <span className="route-node asia">Central Asia</span>
-              <span className="route-node singapore">Singapore</span>
-              <span className="route-line line-one" />
-              <span className="route-line line-two" />
-              <span className="route-vessel"><Ship size={16} /></span>
+          <aside className="about-route-visual" aria-label="Animated explanation of fragmented data becoming SEAM">
+            <div className="about-fragment-visual">
+              <div className="about-fragment-column">
+                <span className="about-visual-label">Before</span>
+                {FRAGMENTED_SOURCES.map((source, index) => (
+                  <span key={source} className="fragment-source" style={{ animationDelay: `${index * 160}ms` }}>
+                    {source}
+                  </span>
+                ))}
+              </div>
+              <div className="about-unify-column">
+                <span className="about-flow-line" />
+                <div className="about-unify-core">
+                  <Network size={18} />
+                  <strong>SEAM</strong>
+                  <small>unified workspace</small>
+                </div>
+                <span className="about-flow-line out" />
+              </div>
+              <div className="about-output-column">
+                <span className="about-visual-label">After</span>
+                <div className="about-output-card">
+                  <Map size={16} />
+                  <strong>Analyst view</strong>
+                  <span>Map, entities, sanctions, news, and evidence in one flow</span>
+                </div>
+              </div>
             </div>
             <div className="about-build-track">
               {BUILD_BEATS.map((item, index) => (
