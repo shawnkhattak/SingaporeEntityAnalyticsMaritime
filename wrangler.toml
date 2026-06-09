@@ -1,0 +1,10 @@
+name = "seamproject"
+compatibility_date = "2026-05-26"
+
+[[routes]]
+pattern = "www.seamproject.org"
+custom_domain = true
+
+[assets]
+directory = "./demo"
+not_found_handling = "single-page-application"

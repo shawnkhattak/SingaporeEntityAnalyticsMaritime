@@ -528,6 +528,10 @@ export function OpsConsole() {
         <div style={{ flex: 1 }}>
           <div className="t-caption">Data operations</div>
           <h1 className="t-display" style={{ margin: 0, fontSize: 22 }}>Operations Center</h1>
+          <div className="ops-access-note">
+            <Settings size={12} />
+            <span>Admin view — demo access enabled</span>
+          </div>
           <p className="t-sm" style={{ margin: "6px 0 0", color: "var(--slate-500)" }}>
             Monitor live maritime data, refresh sources, review ingestion issues, and manage risk intelligence.
           </p>

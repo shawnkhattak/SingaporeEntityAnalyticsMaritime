@@ -1,0 +1,21 @@
+/* Demo-only overrides — hides refresh/recompute buttons and adjusts status text */
+
+/* Hide map refresh button */
+.map-refresh-button { display: none !important; }
+
+/* Hide the separator and "last refresh" text */
+.map-status > span.t-muted { display: none !important; }
+
+/* Hide risk recompute button in footer */
+.inspector [class*="footer"] .btn.primary:has(svg) { display: none !important; }
+
+/* Hide news refresh buttons */
+.news-footer-actions { display: none !important; }
+
+/* Hide the AI refresh button */
+.ai-refresh-button { display: none !important; }
+
+/* Hide Operations and Roadmap nav items */
+.primary-nav .hr,
+.primary-nav .nav[href="/operations"],
+.primary-nav .nav[href="/roadmap"] { display: none !important; }

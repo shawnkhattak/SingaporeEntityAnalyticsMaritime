@@ -5,6 +5,7 @@ import {
   Clock,
   Database,
   Filter,
+  Info,
   Map as MapIcon,
   MapPin,
   Newspaper,
@@ -74,6 +75,7 @@ const GO_TO_ITEMS: { label: string; path: string; icon: React.ReactNode }[] = [
   { label: "Schema atlas", path: "/schema", icon: <TableProperties size={14} /> },
   { label: "Operations console", path: "/operations", icon: <Database size={14} /> },
   { label: "Roadmap", path: "/roadmap", icon: <RouteIcon size={14} /> },
+  { label: "About", path: "/about", icon: <Info size={14} /> },
 ];
 
 export function CommandPalette({ open, onClose }: PaletteProps) {

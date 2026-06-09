@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Shell } from "./components/Shell";
-import { getHealth, runNewsLive, runPositionsSnapshot } from "./api";
+import { DEMO_MODE, getHealth, runNewsLive, runPositionsSnapshot } from "./api";
+import { DemoSnapshotModal } from "./components/DemoSnapshotModal";
 import { useRoute } from "./hooks/useRoute";
 import { useApp, useRunningJobs, useToasts } from "./state/AppState";
 import { usePoll } from "./hooks/usePoll";
@@ -15,7 +16,7 @@ export function App() {
   const { dispatch } = useApp();
   const toasts = useToasts();
   const { running, start, finish } = useRunningJobs();
-  const mapVisible = !["ops", "schema", "roadmap", "not-found"].includes(route.name);
+  const mapVisible = !["ops", "schema", "data-browser", "roadmap", "about", "not-found"].includes(route.name);
 
   // Global health poller (drives "backend unreachable" state).
   usePoll(
@@ -77,5 +78,10 @@ export function App() {
       .catch(() => dispatch({ type: "SET_BACKEND_ONLINE", online: false }));
   }, [dispatch]);
 
-  return <Shell />;
+  return (
+    <>
+      <Shell />
+      {DEMO_MODE && <DemoSnapshotModal />}
+    </>
+  );
 }

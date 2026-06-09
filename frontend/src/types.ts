@@ -274,6 +274,7 @@ export type RouteState =
   | { name: "ops" }
   | { name: "data-browser"; table: string }
   | { name: "roadmap" }
+  | { name: "about" }
   | { name: "not-found"; path: string };
 
 export function isFullCanvas(route: RouteState): boolean {
@@ -282,6 +283,7 @@ export function isFullCanvas(route: RouteState): boolean {
     route.name === "ops" ||
     route.name === "data-browser" ||
     route.name === "roadmap" ||
+    route.name === "about" ||
     route.name === "not-found"
   );
 }

@@ -8,6 +8,7 @@ import { ToastViewport } from "./primitives/ToastViewport";
 import { CommandPalette } from "./primitives/CommandPalette";
 import { CommandPanel } from "./command-panel/CommandPanel";
 import { Button } from "./primitives/Button";
+import { SeamBrand, SeamWordmark } from "./brand/SeamBrand";
 import { ChevronRight, Home } from "lucide-react";
 
 const VesselListInspector = lazy(() => import("./inspector/VesselListInspector").then((m) => ({ default: m.VesselListInspector })));
@@ -23,6 +24,7 @@ const MapCanvas = lazy(() => import("./map/MapCanvas").then((m) => ({ default: m
 const SchemaCanvas = lazy(() => import("./canvas/SchemaCanvas").then((m) => ({ default: m.SchemaCanvas })));
 const OpsConsole = lazy(() => import("./canvas/OpsConsole").then((m) => ({ default: m.OpsConsole })));
 const RoadmapPage = lazy(() => import("./pages/RoadmapPage").then((m) => ({ default: m.RoadmapPage })));
+const AboutPage = lazy(() => import("./pages/AboutPage").then((m) => ({ default: m.AboutPage })));
 const DataBrowserPage = lazy(() => import("./pages/DataBrowserPage").then((m) => ({ default: m.DataBrowserPage })));
 
 function renderInspector(route: RouteState) {
@@ -71,6 +73,8 @@ function renderFullCanvas(route: RouteState) {
       return <DataBrowserPage table={route.table} />;
     case "roadmap":
       return <RoadmapPage />;
+    case "about":
+      return <AboutPage />;
     case "not-found":
       return <NotFoundPage path={route.path} />;
     default:
@@ -98,6 +102,7 @@ function titleForRoute(route: RouteState, state: ReturnType<typeof useApp>["stat
     case "ops": return "Operations";
     case "data-browser": return route.table;
     case "roadmap": return "Roadmap";
+    case "about": return "About";
     case "not-found": return "Page not found";
     case "map":
     default: return "Map";
@@ -340,7 +345,7 @@ function SeamLoaderMark({ compact = false }: { compact?: boolean }) {
       <span className="seam-loader-ring ring-one" />
       <span className="seam-loader-ring ring-two" />
       <span className="seam-loader-sweep" />
-      <span className="seam-loader-core">SEAM</span>
+      <span className="seam-loader-core"><SeamWordmark size={compact ? "sm" : "md"} /></span>
     </div>
   );
 }
@@ -350,7 +355,7 @@ function SeamLoadingOverlay() {
     <div className="app-loading-overlay" role="status" aria-live="polite" aria-label="Loading SEAM">
       <SeamLoaderMark />
       <div className="app-loading-copy">
-        <strong>SEAM</strong>
+        <strong><SeamWordmark size="md" /></strong>
         <span>Bringing the maritime picture online</span>
       </div>
     </div>
@@ -396,7 +401,7 @@ function DesktopGate() {
   return (
     <div className="desktop-gate">
       <div className="desktop-gate-card">
-        <div className="desktop-gate-mark">SEAM</div>
+        <div className="desktop-gate-mark"><SeamBrand size="lg" stacked animated showTagline /></div>
         <h1>Desktop required</h1>
         <p>SEAM is optimized for desktop. Please open this app on a desktop or laptop for the best experience.</p>
       </div>
@@ -443,7 +448,7 @@ function FullCanvas({ routeKey, children }: { routeKey: string; children: ReactN
   }, [routeKey]);
 
   return (
-    <div ref={ref} className="fullcanvas">
+    <div ref={ref} className="fullcanvas" data-tour="workspace">
       {children}
     </div>
   );

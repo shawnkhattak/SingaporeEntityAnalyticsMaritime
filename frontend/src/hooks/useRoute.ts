@@ -24,6 +24,17 @@ function replaceAppRoute(href: string) {
   window.history.replaceState({ seamDepth: currentDepth() }, "", href);
 }
 
+function isFileRouteMode() {
+  return window.location.protocol === "file:";
+}
+
+function toHistoryHref(href: string) {
+  if (!isFileRouteMode()) return href;
+  const url = new URL(href, window.location.href);
+  const appPath = `${url.pathname}${url.search}`;
+  return `${window.location.pathname}#${appPath.startsWith("/") ? appPath : `/${appPath}`}`;
+}
+
 function parsePath(path: string, search: string): RouteState {
   const clean = path.replace(/\/+$/, "") || "/";
   const params = new URLSearchParams(search);
@@ -41,6 +52,7 @@ function parsePath(path: string, search: string): RouteState {
   }
   if (clean === "/ports") return { name: "ports" };
   if (clean === "/risk") return { name: "risk" };
+  if (clean === "/risk-sanctions") return { name: "risk" };
   if (clean === "/news") return { name: "news" };
   if (clean === "/sanctions") return { name: "risk" };
   if (clean.startsWith("/evidence/")) {
@@ -54,10 +66,32 @@ function parsePath(path: string, search: string): RouteState {
     return table ? { name: "data-browser", table } : { name: "ops" };
   }
   if (clean === "/roadmap") return { name: "roadmap" };
+  if (clean === "/about") return { name: "about" };
   return { name: "not-found", path: clean };
 }
 
+function redirectLegacyPath() {
+  if (isFileRouteMode()) {
+    const hashPath = window.location.hash.startsWith("#/") ? window.location.hash.slice(1) : "";
+    const [path, search = ""] = hashPath.split("?");
+    if ((path.replace(/\/+$/, "") || "/") === "/risk-sanctions") {
+      replaceAppRoute(toHistoryHref(`/risk${search ? `?${search}` : ""}`));
+      return true;
+    }
+    return false;
+  }
+  const clean = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (clean !== "/risk-sanctions") return false;
+  replaceAppRoute(`/risk${window.location.search}`);
+  return true;
+}
+
 function currentRoute(): RouteState {
+  if (isFileRouteMode()) {
+    const hashPath = window.location.hash.startsWith("#/") ? window.location.hash.slice(1) : "/map";
+    const [path, search = ""] = hashPath.split("?");
+    return parsePath(path, search ? `?${search}` : "");
+  }
   return parsePath(window.location.pathname, window.location.search);
 }
 
@@ -66,10 +100,21 @@ export function useRoute(): RouteState {
 
   useEffect(() => {
     ensureHistoryState();
+    if (redirectLegacyPath()) {
+      setRoute(currentRoute());
+    }
     function onPopState() {
+      if (redirectLegacyPath()) {
+        setRoute(currentRoute());
+        return;
+      }
       setRoute(currentRoute());
     }
     function onNav() {
+      if (redirectLegacyPath()) {
+        setRoute(currentRoute());
+        return;
+      }
       setRoute(currentRoute());
     }
     function onClick(event: MouseEvent) {
@@ -81,10 +126,12 @@ export function useRoute(): RouteState {
       const anchor = target.closest("a");
       if (!anchor || anchor.target || anchor.hasAttribute("download") || anchor.getAttribute("rel") === "external") return;
       if (anchor.origin !== window.location.origin) return;
-      const samePath = anchor.pathname === window.location.pathname && anchor.search === window.location.search;
+      const samePath = isFileRouteMode()
+        ? window.location.hash === `#${anchor.pathname}${anchor.search}`
+        : anchor.pathname === window.location.pathname && anchor.search === window.location.search;
       event.preventDefault();
       if (!samePath) {
-        pushAppRoute(anchor.href);
+        pushAppRoute(toHistoryHref(anchor.href));
       }
       // Dispatch a global event so every useRoute instance updates, not just this one.
       window.dispatchEvent(new Event("seam:navigate"));
@@ -103,7 +150,7 @@ export function useRoute(): RouteState {
 }
 
 export function navigateTo(href: string) {
-  pushAppRoute(href);
+  pushAppRoute(toHistoryHref(href));
   window.dispatchEvent(new Event("seam:navigate"));
 }
 
@@ -112,11 +159,11 @@ export function navigateBack(fallback = "/map") {
     window.history.back();
     return;
   }
-  replaceAppRoute(fallback);
+  replaceAppRoute(toHistoryHref(fallback));
   window.dispatchEvent(new Event("seam:navigate"));
 }
 
 export function closeInspectorRoute() {
-  replaceAppRoute("/map");
+  replaceAppRoute(toHistoryHref("/map"));
   window.dispatchEvent(new Event("seam:navigate"));
 }
