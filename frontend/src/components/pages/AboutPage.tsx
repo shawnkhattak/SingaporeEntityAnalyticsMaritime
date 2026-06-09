@@ -52,33 +52,6 @@ const CAPABILITIES = [
   },
 ];
 
-const STORY_BEATS = [
-  {
-    label: "Geography",
-    title: "Houston, Central Asia, and trade routes",
-    body:
-      "I grew up in Houston, an energy city by identity, but spent formative years living and traveling through Central Asia, particularly Uzbekistan. Seeing how geography, infrastructure, and landlocked supply chains shape whole economies stayed with me.",
-  },
-  {
-    label: "Maritime logistics",
-    title: "Turning an old instinct into a field of study",
-    body:
-      "At the University of Houston, studying Supply Chain and Logistics on the Maritime Logistics pathway sharpened those early instincts into a more practical interest in ports, vessels, energy flows, and trade systems.",
-  },
-  {
-    label: "Market analysis",
-    title: "AIS, crude, LNG, and sanctions exposure",
-    body:
-      "During my Hanwha Shipping internship as an Oil and Gas Market Analyst, I worked with AIS data, tracked crude oil and LNG flows, researched sanctions exposure, and mapped geopolitical risk onto market movement.",
-  },
-  {
-    label: "The itch",
-    title: "Maritime intelligence was too fragmented",
-    body:
-      "OFAC lists were in one place, AIS positions somewhere else, ownership records buried in registries, and news in another tab. SEAM started as a way to pull those threads into one working intelligence workspace.",
-  },
-];
-
 const BUILD_BEATS = [
   "First version: built quickly, then thrown out",
   "Second version: rebuilt around real analyst workflow",
@@ -146,14 +119,30 @@ export function AboutPage() {
               SEAM came from a long-running curiosity about how geography, energy, infrastructure, and risk shape the
               way goods move through the world.
             </p>
-            <div className="about-beat-list">
-              {STORY_BEATS.map((beat) => (
-                <article key={beat.label} className="about-beat">
-                  <span>{beat.label}</span>
-                  <h3>{beat.title}</h3>
-                  <p>{beat.body}</p>
-                </article>
-              ))}
+            <div className="about-personal-prose">
+              <p>
+                I grew up in Houston, an energy city by identity, but I spent formative years living and traveling
+                through Central Asia, particularly Uzbekistan. Watching how geography shapes trade routes, how landlocked
+                countries navigate global supply chains, and how infrastructure either connects or isolates whole
+                economies planted something in me that I have never really stopped thinking about.
+              </p>
+              <p>
+                When I started studying Supply Chain and Logistics at the University of Houston and chose the Maritime
+                Logistics pathway, those early instincts started to sharpen. Then, during my internship at Hanwha
+                Shipping as an Oil and Gas Market Analyst, I spent months working with AIS vessel data, tracking crude
+                oil and LNG flows, researching sanctions exposure, and mapping geopolitical risk onto live market
+                movements.
+              </p>
+              <p>
+                I got genuinely hooked, not just on the analysis, but on the problem of how fragmented maritime data
+                actually is. OFAC lists over here. AIS positions somewhere else. Ownership networks buried in ship
+                registries. News in a different tab.
+              </p>
+              <p>
+                SEAM started as a way to scratch that itch. I wanted to see if I could pull those threads together -
+                sanctions data, vessel positions, ownership structures, port activity, and live news - and build
+                something that actually felt like a working intelligence workspace, not just a dashboard exercise.
+              </p>
             </div>
           </div>
           <aside className="about-route-visual" aria-label="Animated explanation of fragmented data becoming SEAM">

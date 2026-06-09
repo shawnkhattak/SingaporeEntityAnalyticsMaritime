@@ -4307,37 +4307,14 @@ button.metric:hover, a.metric:hover {
   font-size: 14px !important;
   line-height: 1.6 !important;
 }
-.about-beat-list {
-  display: grid;
-  gap: 9px;
-  margin-top: 16px;
+.about-personal-prose {
+  margin-top: 15px;
 }
-.about-beat {
-  padding: 12px 13px;
-  border: 1px solid rgba(58,127,184,.16);
-  border-left: 3px solid rgba(245,158,11,.62);
-  border-radius: 10px;
-  background: rgba(255,255,255,.68);
-}
-.about-beat span {
-  display: block;
-  color: #B7791F;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-.about-beat h3 {
-  margin: 4px 0 5px;
-  color: var(--navy-700);
-  font-size: 14px;
-  line-height: 1.28;
-}
-.about-beat p {
-  max-width: none;
-  font-size: 12.5px;
-  line-height: 1.55;
+.about-personal-prose p {
+  max-width: 780px;
+  color: var(--slate-500);
+  font-size: 13.5px;
+  line-height: 1.72;
 }
 .about-route-visual {
   display: grid;
