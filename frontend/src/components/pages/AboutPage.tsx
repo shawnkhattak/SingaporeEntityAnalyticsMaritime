@@ -52,13 +52,6 @@ const CAPABILITIES = [
   },
 ];
 
-const BUILD_BEATS = [
-  "First version: built quickly, then thrown out",
-  "Second version: rebuilt around real analyst workflow",
-  "Solo build: finished while moving houses",
-  "Deadline: complete before starting at EnerMech",
-];
-
 const DATA_LAYERS = [
   "AIS positions",
   "Ownership networks",
@@ -172,14 +165,6 @@ export function AboutPage() {
                   <span>Map, entities, sanctions, news, and evidence in one flow</span>
                 </div>
               </div>
-            </div>
-            <div className="about-build-track">
-              {BUILD_BEATS.map((item, index) => (
-                <div key={item} className="about-build-step" style={{ animationDelay: `${index * 120}ms` }}>
-                  <span>{index + 1}</span>
-                  <p>{item}</p>
-                </div>
-              ))}
             </div>
           </aside>
         </div>
